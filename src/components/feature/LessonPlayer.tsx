@@ -9,7 +9,6 @@ interface LessonPlayerProps {
 
 const AD_INTERVAL = 5; // segundos (TEMPORAL para pruebas — cambiar a 120 en producción)
 const AD_DURATION = 41;
-const AD_VIDEO_SRC = "https://iframe.videodelivery.net/02b22da00a68753980615a8df8f06e96";
 const FALLBACK_VIDEO = "https://www.w3schools.com/html/mov_bbb.mp4";
 
 const LessonPlayer = ({ videoSrc, isPremium }: LessonPlayerProps) => {
@@ -54,12 +53,6 @@ const LessonPlayer = ({ videoSrc, isPremium }: LessonPlayerProps) => {
     setLastAdPlayedAt(lastAdPlayedAt + AD_INTERVAL);
   };
 
-  // Countdown del anuncio con timer (el iframe no dispara eventos de video)
-  const handleAdTimeUpdate = () => {}; // Mantenido por compatibilidad
-
-  // Timer automático para cerrar el anuncio
-  const [adTimer, setAdTimer] = useState<ReturnType<typeof setInterval> | null>(null);
-
   const startAdTimer = () => {
     setAdTimeLeft(AD_DURATION);
     const timer = setInterval(() => {
@@ -72,7 +65,6 @@ const LessonPlayer = ({ videoSrc, isPremium }: LessonPlayerProps) => {
         return prev - 1;
       });
     }, 1000);
-    setAdTimer(timer);
   };
 
   const toggleMute = () => {
