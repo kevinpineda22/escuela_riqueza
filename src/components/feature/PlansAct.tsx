@@ -1,5 +1,5 @@
 import { Check } from "lucide-react";
-import { motion } from "motion/react";
+import { motion, type Variants } from "motion/react";
 import { Button } from "@/components/ui/button";
 
 const plans = [
