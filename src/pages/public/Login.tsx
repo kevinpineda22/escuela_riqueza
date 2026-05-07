@@ -9,7 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api/client";
 import { USER_ROLES } from "@/types/user";
 
-const formVariants = {
+const formVariants: Variants = {
   hidden: { opacity: 0, y: 20 },
   visible: { 
     opacity: 1, 
@@ -22,7 +22,7 @@ const formVariants = {
   }
 };
 
-const itemVariants = {
+const itemVariants: Variants = {
   hidden: { opacity: 0, y: 10 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.4 } }
 };

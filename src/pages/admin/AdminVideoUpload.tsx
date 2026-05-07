@@ -25,7 +25,7 @@ interface FormState {
 
 const INITIAL_FORM: FormState = { title: "", description: "", module: "" };
 
-const contentVariants = {
+const contentVariants: Variants = {
   hidden: { opacity: 0, y: 20 },
   visible: {
     opacity: 1,
@@ -34,7 +34,7 @@ const contentVariants = {
   },
 };
 
-const itemVariants = {
+const itemVariants: Variants = {
   hidden: { opacity: 0, y: 10 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.4 } },
 };
