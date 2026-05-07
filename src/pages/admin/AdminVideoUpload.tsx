@@ -1,16 +1,18 @@
 import { useState, useRef, type ChangeEvent, type DragEvent, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   UploadCloud,
   FileVideo,
   CheckCircle,
   Loader2,
-  LogOut,
-  LayoutDashboard,
-  Video,
-  Users,
-  Settings,
 } from "lucide-react";
+import { motion } from "motion/react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 type UploadStatus = "idle" | "uploading" | "success";
@@ -23,16 +25,33 @@ interface FormState {
 
 const INITIAL_FORM: FormState = { title: "", description: "", module: "" };
 
+const contentVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.6, ease: "easeOut", staggerChildren: 0.1 },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 10 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.4 } },
+};
+
 const AdminVideoUpload = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const navigate = useNavigate();
   const [formData, setFormData] = useState<FormState>(INITIAL_FORM);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [status, setStatus] = useState<UploadStatus>("idle");
   const [isDragging, setIsDragging] = useState(false);
 
-  const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+  const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleSelectChange = (value: string) => {
+    setFormData({ ...formData, module: value });
   };
 
   const handleFile = (file: File | undefined | null) => {
@@ -50,17 +69,13 @@ const AdminVideoUpload = () => {
     handleFile(e.dataTransfer.files[0]);
   };
 
-  const handleLogout = () => {
-    navigate("/login");
-  };
-
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!videoFile || !formData.title || !formData.module) return;
 
     setStatus("uploading");
 
-    // Mock — se reemplaza por upload directo a Cloudflare Stream cuando el back esté listo.
+    // Mock — se reemplaza por upload directo a Cloudflare Stream
     setTimeout(() => {
       setStatus("success");
       setTimeout(() => {
@@ -72,243 +87,164 @@ const AdminVideoUpload = () => {
   };
 
   return (
-    <div className="min-h-screen bg-darker flex flex-col md:flex-row text-textMain font-sans">
-      {/* Sidebar */}
-      <aside className="w-full md:w-64 bg-black/50 border-r border-white/5 flex-col pt-6 md:min-h-screen shrink-0 relative z-10 hidden md:flex">
-        <div className="px-6 mb-10 flex items-center justify-center">
-          <img src="https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/18dc9190-6625-4b89-8f1e-3f221e96b500/public" alt="Logo Admin" className="h-12 object-contain" />
-        </div>
+    <motion.div variants={contentVariants} initial="hidden" animate="visible" className="max-w-6xl mx-auto -mt-2">
+      <motion.header variants={itemVariants} className="mb-6">
+        <h1 className="text-3xl md:text-4xl font-extrabold text-white mb-1 tracking-tight">Cargar Contenido</h1>
+        <p className="text-textMuted text-base">Añade la próxima masterclass al ecosistema.</p>
+      </motion.header>
 
-        <nav className="flex-1 px-4 space-y-2">
-          <button
-            type="button"
-            className="flex items-center gap-3 w-full px-4 py-3 bg-gold text-darker font-bold rounded-xl shadow-[0_0_10px_rgba(204,164,59,0.3)]"
-          >
-            <UploadCloud size={20} /> Cargar Lección
-          </button>
-          <button
-            type="button"
-            className="flex items-center gap-3 w-full px-4 py-3 text-textMuted hover:text-white hover:bg-white/5 font-medium rounded-xl transition-all"
-          >
-            <LayoutDashboard size={20} /> Métricas
-          </button>
-          <button
-            type="button"
-            className="flex items-center gap-3 w-full px-4 py-3 text-textMuted hover:text-white hover:bg-white/5 font-medium rounded-xl transition-all"
-          >
-            <Video size={20} /> Gestor de Contenido
-          </button>
-          <button
-            type="button"
-            className="flex items-center gap-3 w-full px-4 py-3 text-textMuted hover:text-white hover:bg-white/5 font-medium rounded-xl transition-all"
-          >
-            <Users size={20} /> Usuarios
-          </button>
-          <button
-            type="button"
-            className="flex items-center gap-3 w-full px-4 py-3 text-textMuted hover:text-white hover:bg-white/5 font-medium rounded-xl transition-all"
-          >
-            <Settings size={20} /> Ajustes
-          </button>
-        </nav>
+      <motion.div variants={itemVariants} className="bg-darker/40 border border-white/[0.08] backdrop-blur-2xl rounded-[2rem] p-5 sm:p-8 shadow-[0_8px_40px_rgba(0,0,0,0.4)] relative">
+        {/* Brillo superior */}
+        <div className="absolute top-0 left-10 right-10 h-px bg-gradient-to-r from-transparent via-gold/30 to-transparent" />
 
-        <div className="p-4 mt-auto border-t border-white/5">
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="flex items-center gap-3 w-full px-4 py-3 text-red-400 hover:bg-red-500/10 font-medium rounded-xl transition-all"
-          >
-            <LogOut size={20} /> Cerrar Sesión
-          </button>
-        </div>
-      </aside>
-
-      {/* Main */}
-      <main className="flex-1 p-6 md:p-10 lg:p-16 relative overflow-y-auto">
-        <div className="absolute top-0 right-0 -z-10 m-auto h-[400px] w-[400px] rounded-full bg-gold opacity-[0.03] blur-[100px]"></div>
-
-        <header className="mb-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">Cargar Contenido</h1>
-            <p className="text-textMuted">Rellena los detalles y sube el archivo .mp4 de la nueva masterclass.</p>
-          </div>
-          <div className="flex items-center gap-3 px-4 py-2 bg-white/5 rounded-full border border-white/10 shrink-0">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-gold to-yellow-600 border border-gold flex items-center justify-center text-xs font-bold text-darker">
-              AD
-            </div>
-            <div className="text-sm">
-              <p className="font-bold text-white leading-none">Administrador VIP</p>
-              <p className="text-xs text-gold">admin@escuela.com</p>
-            </div>
-          </div>
-        </header>
-
-        <div className="bg-white/[0.02] border border-white/[0.05] backdrop-blur-xl rounded-3xl p-6 lg:p-10 shadow-2xl">
-          <form onSubmit={handleSubmit} className="flex flex-col lg:flex-row gap-10">
-            {/* Datos del Video */}
-            <div className="flex-1 space-y-6">
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-textMuted uppercase tracking-wider">
-                  Título de la Lección
-                </label>
-                <input
-                  type="text"
-                  name="title"
-                  value={formData.title}
-                  onChange={handleInputChange}
-                  placeholder="Ej: Estrategias de Retención Exponencial"
-                  className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder:text-white/20 focus:outline-none focus:border-gold focus:ring-1 focus:ring-gold transition-all"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-textMuted uppercase tracking-wider">
-                  Módulo Perteneciente
-                </label>
-                <div className="relative">
-                  <select
-                    name="module"
-                    value={formData.module}
-                    onChange={handleInputChange}
-                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3.5 text-white appearance-none focus:outline-none focus:border-gold transition-all"
-                    required
-                  >
-                    <option value="" disabled className="bg-darker">
-                      Selecciona un Módulo Oficial
-                    </option>
-                    <option value="aprendizaje" className="bg-darker">
-                      Inteligencia del aprendizaje
-                    </option>
-                    <option value="riqueza" className="bg-darker">
-                      Inteligencia de la riqueza
-                    </option>
-                    <option value="emocional" className="bg-darker">
-                      Inteligencia emocional
-                    </option>
-                    <option value="comercial" className="bg-darker">
-                      Inteligencia Comercial y Negociadora
-                    </option>
-                    <option value="estrategica" className="bg-darker">
-                      Inteligencia Estratégica
-                    </option>
-                    <option value="espiritual" className="bg-darker">
-                      Inteligencia Espiritual
-                    </option>
-                  </select>
-                  <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 border-l-4 border-r-4 border-t-4 border-transparent border-t-white/30"></div>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-textMuted uppercase tracking-wider">
-                  Descripción y Notas Resumen
-                </label>
-                <textarea
-                  name="description"
-                  value={formData.description}
-                  onChange={handleInputChange}
-                  placeholder="Se mostrará debajo del reproductor de video..."
-                  rows={5}
-                  className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder:text-white/20 focus:outline-none focus:border-gold focus:ring-1 focus:ring-gold transition-all resize-none"
-                ></textarea>
-              </div>
-            </div>
-
-            {/* Subida del Archivo */}
-            <div className="w-full lg:w-[400px] shrink-0">
-              <label className="text-sm font-semibold text-textMuted uppercase tracking-wider block mb-2">
-                Archivo Multimedia (.MP4)
+        <form onSubmit={handleSubmit} className="flex flex-col lg:flex-row gap-8 xl:gap-12">
+          {/* Form Fields */}
+          <div className="flex-1 space-y-5">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-white/70 uppercase tracking-widest ml-1">
+                Título de la Lección
               </label>
+              <input
+                type="text"
+                name="title"
+                value={formData.title}
+                onChange={handleInputChange}
+                placeholder="Ej: Estrategias de Retención Exponencial"
+                className="w-full bg-black/40 border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder:text-white/20 focus:outline-none focus:border-gold/50 focus:ring-1 focus:ring-gold/50 focus:bg-black/60 transition-all shadow-inner text-base"
+                required
+              />
+            </div>
 
-              <div
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setIsDragging(true);
-                }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={handleDrop}
-                onClick={() => !videoFile && fileInputRef.current?.click()}
-                className={cn(
-                  "relative w-full h-[300px] border-2 border-dashed rounded-2xl flex flex-col items-center justify-center transition-all",
-                  isDragging ? "border-gold bg-gold/10" : "border-white/10 bg-black/30 hover:bg-black/50",
-                  !videoFile && "cursor-pointer"
-                )}
-              >
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={(e) => handleFile(e.target.files?.[0])}
-                  accept="video/mp4"
-                  className="hidden"
-                />
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-white/70 uppercase tracking-widest ml-1">
+                Módulo Perteneciente
+              </label>
+              <Select value={formData.module} onValueChange={handleSelectChange} required>
+                <SelectTrigger className="w-full bg-black/40 border border-white/10 rounded-2xl px-4 py-6 text-white focus:ring-1 focus:ring-gold/50 focus:bg-black/60 transition-all shadow-inner text-base data-[state=open]:border-gold/50">
+                  <SelectValue placeholder="Selecciona el módulo oficial" />
+                </SelectTrigger>
+                <SelectContent className="bg-darker border border-white/10 rounded-xl shadow-2xl">
+                  <SelectItem value="aprendizaje" className="text-white hover:bg-white/5 focus:bg-white/10 focus:text-gold cursor-pointer transition-colors py-2.5">Inteligencia del aprendizaje</SelectItem>
+                  <SelectItem value="riqueza" className="text-white hover:bg-white/5 focus:bg-white/10 focus:text-gold cursor-pointer transition-colors py-2.5">Inteligencia de la riqueza</SelectItem>
+                  <SelectItem value="emocional" className="text-white hover:bg-white/5 focus:bg-white/10 focus:text-gold cursor-pointer transition-colors py-2.5">Inteligencia emocional</SelectItem>
+                  <SelectItem value="comercial" className="text-white hover:bg-white/5 focus:bg-white/10 focus:text-gold cursor-pointer transition-colors py-2.5">Inteligencia Comercial y Negociadora</SelectItem>
+                  <SelectItem value="estrategica" className="text-white hover:bg-white/5 focus:bg-white/10 focus:text-gold cursor-pointer transition-colors py-2.5">Inteligencia Estratégica</SelectItem>
+                  <SelectItem value="espiritual" className="text-white hover:bg-white/5 focus:bg-white/10 focus:text-gold cursor-pointer transition-colors py-2.5">Inteligencia Espiritual</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-                {videoFile ? (
-                  <div className="flex flex-col items-center justify-center text-center p-6">
-                    <div className="w-16 h-16 bg-gold/20 text-gold rounded-full flex items-center justify-center mb-4 relative">
-                      <FileVideo size={30} />
-                      {status === "success" && (
-                        <CheckCircle
-                          className="absolute -bottom-1 -right-1 text-green-500 bg-darker rounded-full"
-                          size={20}
-                        />
-                      )}
-                    </div>
-                    <p className="font-bold text-white text-lg line-clamp-1 w-full max-w-[200px]">{videoFile.name}</p>
-                    <p className="text-sm text-textMuted mt-1">{(videoFile.size / (1024 * 1024)).toFixed(2)} MB</p>
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-white/70 uppercase tracking-widest ml-1">
+                Descripción y Notas Resumen
+              </label>
+              <textarea
+                name="description"
+                value={formData.description}
+                onChange={handleInputChange}
+                placeholder="Se mostrará debajo del reproductor de video..."
+                rows={3}
+                className="w-full bg-black/40 border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder:text-white/20 focus:outline-none focus:border-gold/50 focus:ring-1 focus:ring-gold/50 focus:bg-black/60 transition-all resize-none shadow-inner text-base"
+              ></textarea>
+            </div>
+          </div>
 
-                    {status === "idle" && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setVideoFile(null);
-                        }}
-                        className="mt-4 text-xs font-semibold px-4 py-2 bg-white/10 hover:bg-red-500/20 hover:text-red-400 rounded-lg transition-colors"
-                      >
-                        Reemplazar Archivo
-                      </button>
+          {/* Upload Zone */}
+          <div className="w-full lg:w-[400px] shrink-0 flex flex-col">
+            <label className="text-xs font-bold text-white/70 uppercase tracking-widest mb-1.5 ml-1">
+              Archivo Multimedia (.MP4)
+            </label>
+
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragging(true);
+              }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={handleDrop}
+              onClick={() => !videoFile && fileInputRef.current?.click()}
+              className={cn(
+                "relative w-full flex-1 min-h-[260px] border-2 border-dashed rounded-[1.5rem] flex flex-col items-center justify-center transition-all duration-300 overflow-hidden",
+                isDragging ? "border-gold bg-gold/10 scale-[1.02]" : "border-white/15 bg-black/30 hover:bg-black/50 hover:border-white/30",
+                !videoFile && "cursor-pointer group"
+              )}
+            >
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={(e) => handleFile(e.target.files?.[0])}
+                accept="video/mp4"
+                className="hidden"
+              />
+
+              {videoFile ? (
+                <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex flex-col items-center justify-center text-center p-6 z-10">
+                  <div className="w-16 h-16 bg-gradient-to-br from-gold/20 to-amber-600/20 border border-gold/30 text-gold rounded-full flex items-center justify-center mb-4 relative shadow-[0_0_30px_rgba(204,164,59,0.2)]">
+                    <FileVideo size={30} />
+                    {status === "success" && (
+                      <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="absolute -bottom-1 -right-1 text-green-400 bg-darker rounded-full border-2 border-darker">
+                        <CheckCircle size={20} />
+                      </motion.div>
                     )}
                   </div>
-                ) : (
-                  <div className="text-center p-6">
-                    <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-4 text-white/50 group-hover:text-gold transition-colors">
-                      <UploadCloud size={40} />
-                    </div>
-                    <p className="text-white font-bold text-lg">Arrastra tu video MP4 aquí</p>
-                    <p className="text-sm text-textMuted mt-2 px-4">
-                      El tamaño máximo recomendado por Cloudflare Stream es de 5GB por archivo.
-                    </p>
-                  </div>
-                )}
+                  <p className="font-bold text-white text-lg line-clamp-1 w-full max-w-[200px]">{videoFile.name}</p>
+                  <p className="text-sm font-mono text-gold/70 mt-1">{(videoFile.size / (1024 * 1024)).toFixed(2)} MB</p>
 
-                {status === "uploading" && (
-                  <div className="absolute inset-0 z-10 bg-darker/80 backdrop-blur-sm rounded-2xl flex flex-col items-center justify-center">
-                    <Loader2 size={40} className="text-gold animate-spin mb-4" />
-                    <p className="font-bold text-white animate-pulse">Subiendo y Procesando...</p>
-                    <p className="text-xs text-textMuted mt-2">No cierres esta pestaña</p>
+                  {status === "idle" && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setVideoFile(null);
+                      }}
+                      className="mt-5 text-sm font-bold px-4 py-2 bg-white/5 hover:bg-red-500/20 text-white/70 hover:text-red-400 rounded-xl transition-all"
+                    >
+                      Reemplazar Archivo
+                    </button>
+                  )}
+                </motion.div>
+              ) : (
+                <div className="text-center p-6 z-10 flex flex-col items-center">
+                  <div className="w-20 h-20 rounded-full bg-white/[0.03] border border-white/5 flex items-center justify-center mb-4 text-white/30 group-hover:text-gold group-hover:bg-gold/10 group-hover:scale-110 transition-all duration-500">
+                    <UploadCloud size={40} />
                   </div>
-                )}
-              </div>
+                  <p className="text-white font-extrabold text-xl tracking-tight mb-2">Arrastra tu video aquí</p>
+                  <p className="text-sm text-textMuted max-w-[220px] leading-relaxed">
+                    Formato MP4. Máximo 5GB soportado por Cloudflare Stream.
+                  </p>
+                </div>
+              )}
 
-              <button
-                type="submit"
-                disabled={!videoFile || !formData.title || !formData.module || status === "uploading"}
-                className="w-full mt-6 py-4 bg-gold hover:bg-goldHover disabled:opacity-50 disabled:hover:bg-gold disabled:cursor-not-allowed text-darker font-extrabold text-lg rounded-xl transition-all flex items-center justify-center gap-3 shadow-[0_0_20px_rgba(204,164,59,0.3)] disabled:shadow-none"
-              >
-                {status === "idle" && "Publicar Masterclass"}
-                {status === "uploading" && "Codificando..."}
-                {status === "success" && (
-                  <>
-                    <CheckCircle size={20} /> ¡Publicado con éxito!
-                  </>
-                )}
-              </button>
+              {/* Capa de Loading */}
+              {status === "uploading" && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 z-20 bg-darker/90 backdrop-blur-md flex flex-col items-center justify-center">
+                  <Loader2 size={40} className="text-gold animate-spin mb-4 drop-shadow-[0_0_10px_rgba(204,164,59,0.5)]" />
+                  <p className="font-extrabold text-white text-lg animate-pulse">Codificando en la Nube...</p>
+                  <p className="text-xs text-gold mt-2 font-medium">Por favor no cierres esta pestaña</p>
+                </motion.div>
+              )}
             </div>
-          </form>
-        </div>
-      </main>
-    </div>
+
+            <button
+              type="submit"
+              disabled={!videoFile || !formData.title || !formData.module || status === "uploading"}
+              className="w-full mt-5 py-3.5 bg-gold hover:bg-goldHover disabled:opacity-50 disabled:bg-white/10 disabled:text-white/40 text-darker font-extrabold text-base rounded-2xl transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(204,164,59,0.3)] disabled:shadow-none overflow-hidden relative group"
+            >
+              {status === "idle" && !(!videoFile || !formData.title || !formData.module) && (
+                 <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]" />
+              )}
+              {status === "idle" && <span className="relative z-10">Publicar Masterclass</span>}
+              {status === "uploading" && <span className="relative z-10">Procesando...</span>}
+              {status === "success" && (
+                <span className="relative z-10 flex items-center gap-2">
+                  <CheckCircle size={20} /> ¡Publicado!
+                </span>
+              )}
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </motion.div>
   );
 };
 
