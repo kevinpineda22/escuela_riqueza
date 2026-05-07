@@ -7,9 +7,9 @@ interface LessonPlayerProps {
   isPremium: boolean;
 }
 
-const AD_INTERVAL = 120; // segundos
+const AD_INTERVAL = 5; // segundos (TEMPORAL para pruebas — cambiar a 120 en producción)
 const AD_DURATION = 41;
-const AD_VIDEO_SRC = "/publicidad.mp4";
+const AD_VIDEO_SRC = "https://iframe.videodelivery.net/02b22da00a68753980615a8df8f06e96";
 const FALLBACK_VIDEO = "https://www.w3schools.com/html/mov_bbb.mp4";
 
 const LessonPlayer = ({ videoSrc, isPremium }: LessonPlayerProps) => {
@@ -45,7 +45,7 @@ const LessonPlayer = ({ videoSrc, isPremium }: LessonPlayerProps) => {
       videoRef.current.pause();
       setIsPlaying(false);
       setShowAd(true);
-      setAdTimeLeft(AD_DURATION);
+      startAdTimer();
     }
   };
 
@@ -54,10 +54,25 @@ const LessonPlayer = ({ videoSrc, isPremium }: LessonPlayerProps) => {
     setLastAdPlayedAt(lastAdPlayedAt + AD_INTERVAL);
   };
 
-  const handleAdTimeUpdate = () => {
-    if (!adRef.current) return;
-    const remaining = AD_DURATION - Math.floor(adRef.current.currentTime);
-    setAdTimeLeft(remaining > 0 ? remaining : 0);
+  // Countdown del anuncio con timer (el iframe no dispara eventos de video)
+  const handleAdTimeUpdate = () => {}; // Mantenido por compatibilidad
+
+  // Timer automático para cerrar el anuncio
+  const [adTimer, setAdTimer] = useState<ReturnType<typeof setInterval> | null>(null);
+
+  const startAdTimer = () => {
+    setAdTimeLeft(AD_DURATION);
+    const timer = setInterval(() => {
+      setAdTimeLeft(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          handleAdEnd();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    setAdTimer(timer);
   };
 
   const toggleMute = () => {
@@ -112,13 +127,14 @@ const LessonPlayer = ({ videoSrc, isPremium }: LessonPlayerProps) => {
               Publicidad de Aliado
             </div>
 
-            <video
-              ref={adRef}
-              src={AD_VIDEO_SRC}
-              autoPlay
-              className="w-full h-full object-contain pointer-events-none"
-              onTimeUpdate={handleAdTimeUpdate}
-              onEnded={handleAdEnd}
+            <iframe
+              src={`https://iframe.videodelivery.net/02b22da00a68753980615a8df8f06e96?autoplay=true`}
+              className="w-full h-full"
+              allow="autoplay; fullscreen; picture-in-picture"
+              style={{ border: 'none' }}
+              onLoad={() => {
+                // El countdown maneja el cierre automático
+              }}
             />
 
             <div className="absolute bottom-6 right-6 z-30 flex flex-col items-end gap-2">
@@ -139,8 +155,7 @@ const LessonPlayer = ({ videoSrc, isPremium }: LessonPlayerProps) => {
         {isPodcastMode && isPremium && (
           <div className="absolute inset-0 z-10 bg-gradient-to-br from-darker to-[#1a1a1a] flex flex-col items-center justify-center pointer-events-none">
             <img
-              src="/LOGO-ESCUELA.webp"
-              alt="Modo Podcast"
+              src="https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/18dc9190-6625-4b89-8f1e-3f221e96b500/public"
               className="h-24 md:h-32 object-contain mb-6 opacity-80 animate-pulse drop-shadow-[0_0_15px_rgba(204,164,59,0.3)]"
             />
             <div className="flex items-center gap-3">

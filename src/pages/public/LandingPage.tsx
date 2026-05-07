@@ -72,7 +72,7 @@ const LandingPage = () => {
         <div className="w-full md:w-1/2 flex justify-center items-center mt-16 md:mt-0 relative">
           <div className="absolute inset-0 bg-gradient-to-t from-darker via-transparent opacity-80 z-10"></div>
           <img
-            src="/ivan.webp"
+            src="https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/0f50233e-863f-4032-5ccf-e57fa0254f00/public"
             alt="Iván Mazo"
             className="w-[90%] md:w-full max-w-lg lg:max-w-xl xl:max-w-2xl object-contain relative z-0 mix-blend-lighten filter drop-shadow-[0_0_30px_rgba(204,164,59,0.2)] hover:scale-105 transition-transform duration-700"
           />

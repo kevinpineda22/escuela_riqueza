@@ -51,7 +51,7 @@ const Login = () => {
         <div className="text-center mb-10">
           <Link to="/">
             <img
-              src="/LOGO-ESCUELA.webp"
+              src="https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/18dc9190-6625-4b89-8f1e-3f221e96b500/public"
               alt="Logo Escuela de la Riqueza"
               className="h-20 mx-auto mb-6 object-contain drop-shadow-md hover:scale-105 transition-transform"
             />

@@ -76,7 +76,7 @@ const AdminVideoUpload = () => {
       {/* Sidebar */}
       <aside className="w-full md:w-64 bg-black/50 border-r border-white/5 flex-col pt-6 md:min-h-screen shrink-0 relative z-10 hidden md:flex">
         <div className="px-6 mb-10 flex items-center justify-center">
-          <img src="/LOGO-ESCUELA.webp" alt="Logo Admin" className="h-12 object-contain" />
+          <img src="https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/18dc9190-6625-4b89-8f1e-3f221e96b500/public" alt="Logo Admin" className="h-12 object-contain" />
         </div>
 
         <nav className="flex-1 px-4 space-y-2">

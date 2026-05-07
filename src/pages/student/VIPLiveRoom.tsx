@@ -33,7 +33,7 @@ const VIPLiveRoom = () => {
         {/* Cabecera */}
         <div className="absolute top-0 left-0 w-full p-4 md:p-6 z-10 flex justify-between items-center bg-gradient-to-b from-darker/90 to-transparent">
           <div className="flex items-center gap-3">
-            <img src="/LOGO-ESCUELA.webp" alt="Logo" className="h-10 object-contain drop-shadow-md" />
+            <img src="https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/18dc9190-6625-4b89-8f1e-3f221e96b500/public" alt="Logo" className="h-10 object-contain drop-shadow-md" />
             <div>
               <h1 className="font-bold text-lg leading-tight shadow-black drop-shadow-md text-white">
                 Escuela de la Riqueza
@@ -54,7 +54,7 @@ const VIPLiveRoom = () => {
           {!isLive && (
             <div
               className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat transition-all duration-1000"
-              style={{ backgroundImage: "url('/escuela_ivan.jpeg')" }}
+              style={{ backgroundImage: "url('https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/1f8c5d3a-402d-4729-0e17-f179f416f900/public')" }}
             >
               <div className="absolute inset-0 bg-darker/50"></div>
             </div>

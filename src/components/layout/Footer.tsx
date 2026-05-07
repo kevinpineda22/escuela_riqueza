@@ -8,9 +8,9 @@ const Footer = () => {
         <div className="col-span-1 md:col-span-2">
           <Link to="/" className="inline-block mb-4">
             <img
-              src="/LOGO-ESCUELA.webp"
+              src="https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/18dc9190-6625-4b89-8f1e-3f221e96b500/public"
               alt="Logo Escuela de la Riqueza"
-              className="h-16 md:h-20 object-contain opacity-90 hover:opacity-100 transition-opacity drop-shadow-md"
+              className="h-16 w-auto object-contain opacity-90 hover:opacity-100 transition-opacity drop-shadow-md"
             />
           </Link>
           <p className="text-textMuted text-sm max-w-sm mt-2">

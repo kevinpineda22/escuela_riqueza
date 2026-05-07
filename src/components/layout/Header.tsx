@@ -7,9 +7,9 @@ const Header = () => {
         {/* Logo */}
         <Link to="/" className="flex items-center gap-3">
           <img
-            src="/LOGO-ESCUELA.webp"
+            src="https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/18dc9190-6625-4b89-8f1e-3f221e96b500/public"
             alt="Logo Escuela de la Riqueza"
-            className="h-16 md:h-20 object-contain drop-shadow-md"
+            className="h-12 md:h-14 w-auto object-contain drop-shadow-md"
           />
         </Link>
 

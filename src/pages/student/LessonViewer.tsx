@@ -19,7 +19,7 @@ const upcomingLessons: UpcomingLesson[] = [
   { id: 5, title: "Hábitos atómicos para CEOs", duration: "25:30 min", locked: true },
 ];
 
-const VIDEO_FILENAME = "/clase1.mp4";
+const VIDEO_FILENAME = "https://www.w3schools.com/html/mov_bbb.mp4"; // Placeholder hasta conectar Cloudflare Stream
 
 const LessonViewer = () => {
   const isUserPremium = false;
@@ -72,7 +72,7 @@ const LessonViewer = () => {
           <div className="group flex gap-4 p-3 rounded-2xl bg-white/10 border border-gold/30 cursor-pointer overflow-hidden relative">
             <div className="w-32 h-20 bg-black rounded-xl overflow-hidden shrink-0 relative">
               <img
-                src="/LOGO-ESCUELA.webp"
+              src="https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/18dc9190-6625-4b89-8f1e-3f221e96b500/public"
                 className="w-full h-full object-cover opacity-50 blur-sm scale-150"
                 alt="thumb"
               />
@@ -100,7 +100,7 @@ const LessonViewer = () => {
             >
               <div className="w-32 h-20 bg-black rounded-xl overflow-hidden shrink-0 relative">
                 <img
-                  src="/LOGO-ESCUELA.webp"
+                  src="https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/18dc9190-6625-4b89-8f1e-3f221e96b500/public"
                   className="w-full h-full object-cover opacity-20 blur-sm scale-150"
                   alt="thumb"
                 />
