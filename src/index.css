@@ -4,8 +4,10 @@
 @config "../tailwind.config.js";
 
 @layer base {
+  /* No usamos scroll-behavior: smooth — Lenis maneja smooth scroll en desktop.
+     Mobile usa scroll nativo (momentum). */
   html {
-    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
   }
 
   body {
