@@ -37,7 +37,7 @@ const Login = () => {
       if (err instanceof ApiError) {
         setSubmitError(err.message);
       } else {
-        setSubmitError("No pudimos iniciar sesión. Probá de nuevo.");
+        setSubmitError("No pudimos iniciar sesión. Inténtalo de nuevo.");
       }
     }
   };

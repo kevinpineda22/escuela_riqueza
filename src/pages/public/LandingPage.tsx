@@ -4,10 +4,11 @@ import Footer from "@/components/layout/Footer";
 import { HeroCinematic } from "@/components/feature/HeroCinematic";
 import { AwakeningAct } from "@/components/feature/AwakeningAct";
 import { IntelligencesAct } from "@/components/feature/IntelligencesAct";
+import { PathAct } from "@/components/feature/PathAct";
 
 const LandingPage = () => {
   return (
-    <div className="min-h-screen relative overflow-x-hidden bg-darker selection:bg-gold/30 font-sans text-textMain">
+    <div className="min-h-screen relative bg-darker selection:bg-gold/30 font-sans text-textMain">
       {/* Background grid sutil — fixed para sensación de profundidad cinematic */}
       <div
         aria-hidden
@@ -27,6 +28,8 @@ const LandingPage = () => {
         <AwakeningAct />
 
         <IntelligencesAct />
+
+        <PathAct />
 
         {/* Planes (placeholder pre-Acto 6) */}
         <section id="planes" className="relative z-10 max-w-7xl mx-auto px-6 py-24 border-t border-white/5">
