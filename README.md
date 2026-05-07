@@ -1,16 +1,58 @@
-# React + Vite
+# Escuela de la Riqueza
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Plataforma educativa de Iván Mazo con planes Free / Individual / VIP, lives en vivo y panel admin self-service.
 
-Currently, two official plugins are available:
+## Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **Vite + React 19 + TypeScript** (frontend SPA)
+- **Tailwind CSS 4** (estilos, paleta gold/dark)
+- **React Router 7** (routing)
+- **Supabase** (auth, Postgres + RLS, Realtime, Storage chico)
+- **Cloudflare Stream** (VOD + lives) + **R2** (recursos)
+- **Stripe** (suscripciones)
+- **Vercel Serverless Functions** (`/api/*.ts`) para firmar URLs y webhooks
+- **Vercel** (deploy)
 
-## React Compiler
+> Documentación completa para colaboradores y agentes IA: ver [`CLAUDE.md`](./CLAUDE.md).
+> Detalles de arquitectura y flujos: ver [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Inicio rápido
 
-## Expanding the ESLint configuration
+Requiere Node 20+.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```bash
+npm install
+cp env.example .env.local    # Completar con credenciales de Supabase, Stripe, Cloudflare
+npm run dev                  # http://localhost:5173
+```
+
+## Comandos
+
+| Comando | Qué hace |
+|---|---|
+| `npm run dev` | Servidor de desarrollo con HMR |
+| `npm run build` | Build de producción a `dist/` |
+| `npm run preview` | Sirve el build local |
+| `npm run lint` | ESLint |
+
+## Variables de entorno
+
+Ver [`env.example`](./env.example) para la lista completa con descripción.
+
+## Estructura
+
+```
+api/         # Vercel Serverless Functions (firma de URLs, webhooks)
+src/         # Aplicación React
+docs/        # Documentación técnica
+public/      # Assets estáticos
+```
+
+## Despliegue
+
+Push a `master` → Vercel deploya automáticamente.
+Branches feature → preview deployments por PR.
+
+## Licencia
+
+Propietario — Iván Mazo / Escuela de la Riqueza. Todos los derechos reservados.
