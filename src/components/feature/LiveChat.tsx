@@ -1,22 +1,33 @@
-import React, { useState } from 'react';
+import { useState, type FormEvent } from "react";
+import { cn } from "@/lib/utils";
+
+interface ChatMessage {
+  id: number;
+  user: string;
+  text: string;
+  isSystem: boolean;
+}
 
 const LiveChat = () => {
-  const [messages, setMessages] = useState([
-    { id: 1, user: 'Soporte', text: '¡Bienvenidos al evento VIP! Empezaremos en breve.', isSystem: true },
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    { id: 1, user: "Soporte", text: "¡Bienvenidos al evento VIP! Empezaremos en breve.", isSystem: true },
   ]);
-  const [newMessage, setNewMessage] = useState('');
+  const [newMessage, setNewMessage] = useState("");
 
-  const handleSendMessage = (e) => {
+  const handleSendMessage = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!newMessage.trim()) return;
-    
-    setMessages([...messages, { 
-      id: Date.now(), 
-      user: 'Tú', // En un caso real vendría del auth
-      text: newMessage,
-      isSystem: false
-    }]);
-    setNewMessage('');
+
+    setMessages([
+      ...messages,
+      {
+        id: Date.now(),
+        user: "Tú",
+        text: newMessage,
+        isSystem: false,
+      },
+    ]);
+    setNewMessage("");
   };
 
   return (
@@ -28,12 +39,21 @@ const LiveChat = () => {
 
       <div className="flex-1 p-4 overflow-y-auto space-y-4">
         {messages.map((msg) => (
-          <div key={msg.id} className={`flex flex-col ${msg.user === 'Tú' ? 'items-end' : 'items-start'}`}>
+          <div
+            key={msg.id}
+            className={cn("flex flex-col", msg.user === "Tú" ? "items-end" : "items-start")}
+          >
             <span className="text-xs text-textMuted mb-1">{msg.user}</span>
-            <div className={`px-3 py-2 rounded-lg max-w-[85%] text-sm ${
-              msg.isSystem ? 'bg-gold/10 text-gold border border-gold/30' :
-              msg.user === 'Tú' ? 'bg-gold text-darker font-medium' : 'bg-dark text-textMain border border-white/5'
-            }`}>
+            <div
+              className={cn(
+                "px-3 py-2 rounded-lg max-w-[85%] text-sm",
+                msg.isSystem
+                  ? "bg-gold/10 text-gold border border-gold/30"
+                  : msg.user === "Tú"
+                    ? "bg-gold text-darker font-medium"
+                    : "bg-dark text-textMain border border-white/5"
+              )}
+            >
               {msg.text}
             </div>
           </div>
@@ -49,7 +69,7 @@ const LiveChat = () => {
             placeholder="Escribe un mensaje..."
             className="flex-1 bg-dark border border-white/10 text-textMain rounded-lg px-4 py-2 focus:outline-none focus:border-gold focus:ring-1 focus:ring-gold transition-colors"
           />
-          <button 
+          <button
             type="submit"
             className="bg-gold hover:bg-goldHover text-darker px-4 py-2 rounded-lg transition-colors font-bold"
           >
