@@ -1,19 +1,9 @@
 import { Link } from "react-router-dom";
 import { motion, useScroll, useTransform } from "motion/react";
-import { Menu } from "lucide-react";
-import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
-
-const navLinks = [
-  { label: "Historia", href: "#historia" },
-  { label: "Módulos", href: "#modulos" },
-  { label: "Planes", href: "#planes" },
-];
 
 const Header = () => {
   const { scrollY } = useScroll();
-  const [isOpen, setIsOpen] = useState(false);
   
   // Transición de transparente a glassmorphism oscuro
   const backgroundColor = useTransform(
@@ -54,57 +44,11 @@ const Header = () => {
           />
         </Link>
 
-        {/* Desktop Navigation */}
-        <nav className="hidden md:flex flex-1 justify-center gap-10">
-          {navLinks.map((link) => (
-            <a
-              key={link.label}
-              href={link.href}
-              className="text-base lg:text-lg font-medium text-textMuted hover:text-gold transition-colors"
-            >
-              {link.label}
-            </a>
-          ))}
-        </nav>
-
-        {/* Desktop CTA */}
-        <div className="hidden md:flex items-center gap-4">
-          <Button asChild variant="primary" size="md" className="rounded-full px-8 text-base">
+        {/* Action / CTA */}
+        <div className="flex items-center gap-4">
+          <Button asChild variant="primary" size="md" className="rounded-full px-6 md:px-8 text-sm md:text-base">
             <Link to="/login">Ingresar</Link>
           </Button>
-        </div>
-
-        {/* Mobile Navigation (Sheet) */}
-        <div className="md:hidden flex items-center">
-          <Sheet open={isOpen} onOpenChange={setIsOpen}>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="text-white" aria-label="Abrir menú">
-                <Menu size={28} />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="right" className="w-[300px] bg-darker/95 backdrop-blur-xl border-white/10 pt-16">
-              <SheetTitle className="sr-only">Menú de Navegación</SheetTitle>
-              <SheetDescription className="sr-only">
-                Enlaces a las secciones principales de la página y acceso a la plataforma.
-              </SheetDescription>
-              <nav className="flex flex-col gap-6 items-center">
-                {navLinks.map((link) => (
-                  <a
-                    key={link.label}
-                    href={link.href}
-                    onClick={() => setIsOpen(false)}
-                    className="text-xl font-medium text-white hover:text-gold transition-colors"
-                  >
-                    {link.label}
-                  </a>
-                ))}
-                <div className="w-full h-px bg-white/10 my-4" />
-                <Button asChild variant="primary" size="lg" className="w-full rounded-full text-lg" onClick={() => setIsOpen(false)}>
-                  <Link to="/login">Ingresar</Link>
-                </Button>
-              </nav>
-            </SheetContent>
-          </Sheet>
         </div>
       </div>
     </motion.header>
