@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { motion } from "motion/react";
+import { motion, type Variants } from "motion/react";
 import {
   UploadCloud,
   LogOut,

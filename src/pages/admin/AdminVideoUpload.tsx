@@ -5,7 +5,7 @@ import {
   CheckCircle,
   Loader2,
 } from "lucide-react";
-import { motion } from "motion/react";
+import { motion, type Variants } from "motion/react";
 import {
   Select,
   SelectContent,
