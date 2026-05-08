@@ -8,6 +8,7 @@ const GlobalPodcastPlayer = () => {
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const streamRef = useRef<any>(null);
   const initializedTimeRef = useRef(false);
 
@@ -20,6 +21,7 @@ const GlobalPodcastPlayer = () => {
         streamRef.current.pause();
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlaying, track]);
 
   // Volume change

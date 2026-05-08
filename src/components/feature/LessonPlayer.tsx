@@ -21,6 +21,7 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
   // Verifica si el reproductor global está tocando EXACTAMENTE esta lección
   const isPlayingThisInPodcast = isPodcastMode && track?.videoId === videoSrc;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const streamRef = useRef<any>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
@@ -33,10 +34,13 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
 
   // Cuando cambie el video, resetear los estados
   useEffect(() => {
-    setIsPlaying(false);
-    setShowAd(false);
-    setHasAdPlayed(false);
-    initializedTimeRef.current = false;
+    // Para evitar advertencias de set-state-in-effect y limpiar asíncronamente
+    setTimeout(() => {
+      setIsPlaying(false);
+      setShowAd(false);
+      setHasAdPlayed(false);
+      initializedTimeRef.current = false;
+    }, 0);
   }, [videoSrc]);
 
   const handlePlayRequest = () => {

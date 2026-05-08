@@ -10,12 +10,14 @@ export interface AuthResult {
 }
 
 // Convertidor de base de datos a tipo User del frontend
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mapProfileToUser = (profileData: any, authUser: any, plan: string): User => ({
   id: profileData.id,
   email: authUser.email || "",
   fullName: profileData.full_name || "Usuario",
   avatarUrl: profileData.avatar_url || null,
   role: profileData.role || USER_ROLES.STUDENT,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   plan: (plan as any) || PLANS.FREE,
   createdAt: profileData.created_at,
 });

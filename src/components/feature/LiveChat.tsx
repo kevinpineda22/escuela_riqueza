@@ -38,6 +38,7 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000" }: { liveId?
 
   // Cargar mensajes iniciales y suscribirse a nuevos
   useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let channel: any;
 
     const initChat = async () => {
@@ -54,7 +55,7 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000" }: { liveId?
       if (msgsData && !error) {
         // Obtener perfiles de los usuarios que comentaron
         const userIds = [...new Set(msgsData.map((m) => m.user_id))];
-        let profilesMap: Record<string, string> = {};
+        const profilesMap: Record<string, string> = {};
         
         if (userIds.length > 0) {
           const { data: profilesData } = await supabase
@@ -69,6 +70,7 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000" }: { liveId?
           }
         }
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const history: ChatMessage[] = msgsData.map((msg: any) => ({
           id: msg.id,
           user_id: msg.user_id,

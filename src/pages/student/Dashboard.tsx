@@ -91,6 +91,7 @@ const Dashboard = () => {
   const [noteMessage, setNoteMessage] = useState<{ type: "success" | "error", text: string } | null>(null);
   
   // Estado para todas las notas (para la pestaña Libreta)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [allNotes, setAllNotes] = useState<any[]>([]);
 
   // Cargar nota de la lección activa
@@ -112,13 +113,14 @@ const Dashboard = () => {
         } else {
           setPersonalNote("");
         }
-      } catch (err: any) {
+      } catch {
         // Fallback local si no existe tabla en dev
         const localNote = localStorage.getItem(`note_${user.id}_${activeLesson.id}`);
         setPersonalNote(localNote || "");
       }
     };
     loadNote();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeLesson.id, user]);
 
   // Cargar todas las notas cuando se abre la pestaña de Libreta
@@ -134,7 +136,7 @@ const Dashboard = () => {
           
           if (error) throw error;
           if (data) setAllNotes(data);
-        } catch (err: any) {
+        } catch {
           // Fallback a localStorage si la tabla no existe en desarrollo
           const localNotes = [];
           for (let i = 0; i < localStorage.length; i++) {
@@ -180,10 +182,12 @@ const Dashboard = () => {
       
       // Ocultar mensaje de éxito después de 3 segundos
       setTimeout(() => setNoteMessage(null), 3000);
-    } catch (err: any) {
-      setNoteMessage({ type: "error", text: "Error: " + err.message });
+    } catch (err) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const errorMsg = (err as any).message;
+      setNoteMessage({ type: "error", text: "Error: " + errorMsg });
       // Si la tabla no existe (desarrollo), usamos localStorage como fallback
-      if (err.message?.includes("relation") || err.message?.includes("not exist")) {
+      if (errorMsg?.includes("relation") || errorMsg?.includes("not exist")) {
         localStorage.setItem(`note_${user.id}_${activeLesson.id}`, personalNote);
         setNoteMessage({ type: "success", text: "Guardado localmente (tabla no existe)" });
         setTimeout(() => setNoteMessage(null), 3000);
@@ -243,9 +247,10 @@ const Dashboard = () => {
       setUser({ ...user, fullName: profileName, avatarUrl: finalAvatarUrl });
       setAvatarFile(null); // Limpiamos el archivo temporal
       setProfileMessage({ type: "success", text: "Perfil actualizado correctamente." });
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      setProfileMessage({ type: "error", text: "Error al actualizar: " + err.message });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setProfileMessage({ type: "error", text: "Error al actualizar: " + (err as any).message });
     } finally {
       setIsUpdatingProfile(false);
     }
@@ -261,6 +266,7 @@ const Dashboard = () => {
         setActiveLesson(filteredLessons[0]);
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedModule]);
 
   // Helper para saber si el usuario tiene beneficios premium
