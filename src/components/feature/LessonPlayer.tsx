@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Headphones, ShieldAlert, MonitorPlay } from "lucide-react";
+import { Play, Headphones, ShieldAlert, MonitorPlay } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player.store";
 import { Stream } from "@cloudflare/stream-react";
@@ -11,9 +11,7 @@ interface LessonPlayerProps {
   moduleTitle?: string;
 }
 
-// 0 significa que aparecerá el anuncio justo antes de iniciar (Pre-roll)
 // Esta es la mejor práctica para no interrumpir el aprendizaje en medio del video.
-const AD_INTERVAL = 0; 
 const AD_DURATION = 41; // 41 segundos de duración del anuncio
 const AD_VIDEO_ID = "02b22da00a68753980615a8df8f06e96"; // ID del video de publicidad aliado
 
@@ -23,9 +21,7 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
   // Verifica si el reproductor global está tocando EXACTAMENTE esta lección
   const isPlayingThisInPodcast = isPodcastMode && track?.videoId === videoSrc;
 
-  const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<any>(null);
-  const adRef = useRef<HTMLVideoElement>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const initializedTimeRef = useRef(false);

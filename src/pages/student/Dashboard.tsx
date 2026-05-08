@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, type ReactNode } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   BookOpen,
@@ -16,8 +16,7 @@ import {
   User as UserIcon,
   Camera,
   Loader2,
-  CheckCircle2,
-  Lock
+  CheckCircle2
 } from "lucide-react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";

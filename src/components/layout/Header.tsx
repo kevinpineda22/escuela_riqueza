@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { LogOut, User } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { useAuthStore } from "@/stores/auth.store";
 import { supabase } from "@/lib/supabase";
 

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Play, Pause, X, Volume2, VolumeX, Maximize2, SkipBack, SkipForward, Headphones } from "lucide-react";
+import { Play, Pause, X, Volume2, VolumeX, SkipBack, SkipForward, Headphones } from "lucide-react";
 import { usePlayerStore } from "@/stores/player.store";
-import { cn } from "@/lib/utils";
 import { Stream } from "@cloudflare/stream-react";
 
 const GlobalPodcastPlayer = () => {
