@@ -1,56 +1,62 @@
-import { useState, useRef } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Headphones, ShieldAlert } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Headphones, ShieldAlert, MonitorPlay } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { usePlayerStore } from "@/stores/player.store";
+import { Stream } from "@cloudflare/stream-react";
 
 interface LessonPlayerProps {
-  videoSrc?: string;
+  videoSrc?: string; // Ahora esperamos el Cloudflare Video ID, ej: 595f2bfac6285d604cf136e049c37b08
   isPremium: boolean;
+  lesson?: { id: number; titulo: string; modId: number };
+  moduleTitle?: string;
 }
 
-const AD_INTERVAL = 5; // segundos (TEMPORAL para pruebas — cambiar a 120 en producción)
-const AD_DURATION = 41;
-const FALLBACK_VIDEO = "https://www.w3schools.com/html/mov_bbb.mp4";
+// 0 significa que aparecerá el anuncio justo antes de iniciar (Pre-roll)
+// Esta es la mejor práctica para no interrumpir el aprendizaje en medio del video.
+const AD_INTERVAL = 0; 
+const AD_DURATION = 41; // 41 segundos de duración del anuncio
+const AD_VIDEO_ID = "02b22da00a68753980615a8df8f06e96"; // ID del video de publicidad aliado
 
-const LessonPlayer = ({ videoSrc, isPremium }: LessonPlayerProps) => {
+const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayerProps) => {
+  const { playTrack, isPodcastMode, closePlayer, track, lastKnownTime, setLastKnownTime } = usePlayerStore();
+
+  // Verifica si el reproductor global está tocando EXACTAMENTE esta lección
+  const isPlayingThisInPodcast = isPodcastMode && track?.videoId === videoSrc;
+
   const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<any>(null);
   const adRef = useRef<HTMLVideoElement>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isPodcastMode, setIsPodcastMode] = useState(false);
+  const initializedTimeRef = useRef(false);
 
   // Lógica de Anuncios
   const [showAd, setShowAd] = useState(false);
-  const [lastAdPlayedAt, setLastAdPlayedAt] = useState(0);
+  const [hasAdPlayed, setHasAdPlayed] = useState(false);
   const [adTimeLeft, setAdTimeLeft] = useState(AD_DURATION);
 
-  const togglePlay = () => {
-    if (showAd || !videoRef.current) return;
-    if (videoRef.current.paused) {
-      void videoRef.current.play();
-      setIsPlaying(true);
-    } else {
-      videoRef.current.pause();
-      setIsPlaying(false);
-    }
-  };
+  // Cuando cambie el video, resetear los estados
+  useEffect(() => {
+    setIsPlaying(false);
+    setShowAd(false);
+    setHasAdPlayed(false);
+    initializedTimeRef.current = false;
+  }, [videoSrc]);
 
-  const handleTimeUpdate = () => {
-    if (isPremium || !videoRef.current) return;
-
-    const currentTime = videoRef.current.currentTime;
-
-    if (currentTime >= lastAdPlayedAt + AD_INTERVAL && !showAd) {
-      videoRef.current.pause();
-      setIsPlaying(false);
+  const handlePlayRequest = () => {
+    // Si no es premium y no ha visto el anuncio, mostrar el anuncio (Pre-roll)
+    if (!isPremium && !hasAdPlayed) {
       setShowAd(true);
       startAdTimer();
+    } else {
+      setIsPlaying(true);
     }
   };
 
   const handleAdEnd = () => {
     setShowAd(false);
-    setLastAdPlayedAt(lastAdPlayedAt + AD_INTERVAL);
+    setHasAdPlayed(true);
+    setIsPlaying(true); // Reproducir el video principal tras terminar el anuncio
   };
 
   const startAdTimer = () => {
@@ -67,18 +73,22 @@ const LessonPlayer = ({ videoSrc, isPremium }: LessonPlayerProps) => {
     }, 1000);
   };
 
-  const toggleMute = () => {
-    if (showAd && adRef.current) {
-      adRef.current.muted = !isMuted;
-    } else if (videoRef.current) {
-      videoRef.current.muted = !isMuted;
-    }
-    setIsMuted(!isMuted);
-  };
-
-  const requestFullscreen = () => {
-    if (videoRef.current?.requestFullscreen) {
-      void videoRef.current.requestFullscreen();
+  const handlePodcastToggle = () => {
+    if (isPlayingThisInPodcast) {
+      closePlayer(); // Al cerrar, el player global ya actualizó lastKnownTime
+      setIsPlaying(true);
+      initializedTimeRef.current = false; // Forzar que el Stream local haga seek al tiempo guardado
+    } else if (videoSrc && lesson && moduleTitle) {
+      if (streamRef.current) {
+        setLastKnownTime(streamRef.current.currentTime);
+      }
+      setIsPlaying(false); // Pausamos el video visual para no tener audio doble
+      playTrack({
+        id: lesson.id,
+        title: lesson.titulo,
+        moduleTitle: moduleTitle,
+        videoId: videoSrc
+      }, lastKnownTime);
     }
   };
 
@@ -98,29 +108,56 @@ const LessonPlayer = ({ videoSrc, isPremium }: LessonPlayerProps) => {
 
         {isPremium && (
           <button
-            onClick={() => setIsPodcastMode(!isPodcastMode)}
+            onClick={handlePodcastToggle}
             className={cn(
               "flex items-center gap-2 px-4 py-1.5 rounded-lg font-medium transition-all",
-              isPodcastMode ? "bg-gold text-darker" : "bg-transparent border border-gold hover:bg-gold/10"
+              isPlayingThisInPodcast ? "bg-gold text-darker shadow-[0_0_15px_rgba(204,164,59,0.3)]" : "bg-transparent border border-gold hover:bg-gold/10 text-gold"
             )}
           >
-            <Headphones size={18} /> Modo Podcast {isPodcastMode ? "ON" : "OFF"}
+            <Headphones size={18} /> Modo Podcast {isPlayingThisInPodcast ? "ON" : "OFF"}
           </button>
         )}
       </div>
 
       {/* Contenedor de Video Principal */}
-      <div className="relative aspect-video bg-black rounded-2xl overflow-hidden border border-white/10 shadow-2xl group">
+      <div className="relative aspect-video bg-black rounded-2xl overflow-hidden border border-white/10 shadow-2xl group transition-all duration-500 ease-in-out">
+        {/* Pseudo-Podcast Mode Layer (Se pone encima y cubre el video visualmente) */}
+        <div 
+          className={cn(
+            "absolute inset-0 z-30 bg-gradient-to-br from-darker to-[#1a1a1a] flex flex-col items-center justify-center transition-all duration-500 ease-in-out",
+            isPlayingThisInPodcast && !showAd ? "opacity-100 visible" : "opacity-0 invisible pointer-events-none"
+          )}
+        >
+          <img
+            src="https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/18dc9190-6625-4b89-8f1e-3f221e96b500/public"
+            className="h-24 md:h-32 object-contain mb-6 opacity-80 animate-pulse drop-shadow-[0_0_15px_rgba(204,164,59,0.3)]"
+          />
+          <div className="flex items-center gap-3">
+            <Headphones size={24} className="text-gold animate-bounce" />
+            <h3 className="text-2xl font-bold text-white">Modo Podcast Activado</h3>
+          </div>
+          <p className="text-sm text-textMuted mt-2 mb-6">Reproduciéndose en segundo plano.</p>
+          
+          {/* Controles simples superpuestos en modo podcast */}
+          <button 
+            onClick={handlePodcastToggle}
+            className="px-6 py-2.5 bg-white/10 hover:bg-white/20 border border-white/20 rounded-full flex items-center justify-center transition-all gap-2 text-sm font-bold text-white pointer-events-auto"
+          >
+            <MonitorPlay size={18} />
+            Volver a Video
+          </button>
+        </div>
+
         {/* Layer del Anuncio en Video Real */}
         {showAd && (
-          <div className="absolute inset-0 z-20 bg-black flex flex-col items-center justify-center">
-            <div className="absolute top-4 left-4 z-30 bg-black/60 backdrop-blur-md px-4 py-2 border border-white/10 text-sm font-bold text-white uppercase tracking-widest rounded-lg flex items-center gap-2">
+          <div className="absolute inset-0 z-40 bg-black flex flex-col items-center justify-center">
+            <div className="absolute top-4 left-4 z-50 bg-black/60 backdrop-blur-md px-4 py-2 border border-white/10 text-sm font-bold text-white uppercase tracking-widest rounded-lg flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-gold animate-pulse"></span>
               Publicidad de Aliado
             </div>
 
             <iframe
-              src={`https://iframe.videodelivery.net/02b22da00a68753980615a8df8f06e96?autoplay=true`}
+              src={`https://iframe.videodelivery.net/${AD_VIDEO_ID}?autoplay=true`}
               className="w-full h-full"
               allow="autoplay; fullscreen; picture-in-picture"
               style={{ border: 'none' }}
@@ -129,7 +166,7 @@ const LessonPlayer = ({ videoSrc, isPremium }: LessonPlayerProps) => {
               }}
             />
 
-            <div className="absolute bottom-6 right-6 z-30 flex flex-col items-end gap-2">
+            <div className="absolute bottom-6 right-6 z-50 flex flex-col items-end gap-2">
               <div className="bg-black/60 backdrop-blur-md px-4 py-2 border border-white/10 text-xs font-medium text-white rounded-lg">
                 El video se reanudará en {adTimeLeft}s...
               </div>
@@ -143,47 +180,37 @@ const LessonPlayer = ({ videoSrc, isPremium }: LessonPlayerProps) => {
           </div>
         )}
 
-        {/* Pseudo-Podcast Mode Layer */}
-        {isPodcastMode && isPremium && (
-          <div className="absolute inset-0 z-10 bg-gradient-to-br from-darker to-[#1a1a1a] flex flex-col items-center justify-center pointer-events-none">
-            <img
-              src="https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/18dc9190-6625-4b89-8f1e-3f221e96b500/public"
-              className="h-24 md:h-32 object-contain mb-6 opacity-80 animate-pulse drop-shadow-[0_0_15px_rgba(204,164,59,0.3)]"
-            />
-            <div className="flex items-center gap-3">
-              <Headphones size={24} className="text-gold" />
-              <h3 className="text-2xl font-bold text-white">Escuchando en Modo Podcast</h3>
-            </div>
-            <p className="text-sm text-textMuted mt-2">Ahorrando datos y batería</p>
+        {/* Portada Inicial si no está reproduciendo ni mostrando anuncio */}
+        {!isPlaying && !showAd && (
+          <div className="absolute inset-0 z-20 bg-darker flex items-center justify-center">
+            <button 
+              onClick={handlePlayRequest}
+              className="w-20 h-20 bg-gold hover:bg-goldHover rounded-full flex items-center justify-center transition-transform hover:scale-105 shadow-[0_0_30px_rgba(204,164,59,0.4)]"
+            >
+              <Play size={40} className="text-darker ml-2" />
+            </button>
           </div>
         )}
 
-        {/* Video Element */}
-        <video
-          ref={videoRef}
-          src={videoSrc ?? FALLBACK_VIDEO}
-          className={cn("w-full h-full object-contain", isPodcastMode && isPremium ? "opacity-0" : "opacity-100")}
-          onTimeUpdate={handleTimeUpdate}
-          onEnded={() => setIsPlaying(false)}
-        />
-
-        {/* Custom Controls */}
-        {!showAd && (
-          <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-4 z-10">
-            <button onClick={togglePlay} className="text-white hover:text-gold transition-colors" type="button">
-              {isPlaying ? <Pause size={24} /> : <Play size={24} />}
-            </button>
-
-            <button onClick={toggleMute} className="text-white hover:text-gold transition-colors" type="button">
-              {isMuted ? <VolumeX size={24} /> : <Volume2 size={24} />}
-            </button>
-
-            <div className="flex-1"></div>
-
-            <button onClick={requestFullscreen} className="text-white hover:text-gold transition-colors" type="button">
-              <Maximize size={24} />
-            </button>
-          </div>
+        {/* Reproductor de Cloudflare Principal */}
+        {isPlaying && !isPlayingThisInPodcast && videoSrc && (
+          <Stream
+            streamRef={streamRef}
+            src={videoSrc}
+            controls
+            autoplay
+            className={cn("w-full h-full object-contain relative z-10 border-none")}
+            onTimeUpdate={() => {
+              if (streamRef.current) {
+                // Sincronización en la primera carga si venimos del modo podcast
+                if (!initializedTimeRef.current && streamRef.current.duration > 0 && lastKnownTime > 0) {
+                  streamRef.current.currentTime = lastKnownTime;
+                  initializedTimeRef.current = true;
+                }
+                setLastKnownTime(streamRef.current.currentTime);
+              }
+            }}
+          />
         )}
       </div>
     </div>

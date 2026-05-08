@@ -80,9 +80,9 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000" }: { liveId?
       }
 
       // 2. Suscribirse a nuevos mensajes (Realtime)
-      channel = supabase
-        .channel(`live_messages_${liveId}`)
-        .on(
+      const newChannel = supabase.channel(`live_messages_${liveId}`);
+      
+      newChannel.on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "live_messages", filter: `live_id=eq.${liveId}` },
         async (payload) => {
@@ -105,8 +105,10 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000" }: { liveId?
 
           setMessages((prev) => [...prev, incomingMessage]);
         }
-      )
-      .subscribe();
+      );
+      
+      newChannel.subscribe();
+      channel = newChannel;
     };
 
     initChat();
@@ -139,13 +141,13 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000" }: { liveId?
   };
 
   return (
-    <div className="flex flex-col h-full bg-darker border-l border-white/10">
-      <div className="p-4 border-b border-white/10 bg-darker/50">
+    <div className="flex flex-col w-full h-full bg-darker overflow-hidden">
+      <div className="p-4 border-b border-white/10 bg-darker/50 shrink-0">
         <h3 className="text-lg font-semibold text-gold">Chat en Vivo VIP</h3>
         <p className="text-xs text-green-400">● Conectado</p>
       </div>
 
-      <div className="flex-1 p-4 overflow-y-auto space-y-4">
+      <div className="flex-1 min-h-0 p-4 overflow-y-auto space-y-4 scroll-smooth">
         {messages.map((msg) => (
           <div
             key={msg.id}
@@ -169,7 +171,7 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000" }: { liveId?
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="p-4 border-t border-white/10 bg-darker">
+      <div className="p-4 border-t border-white/10 bg-darker shrink-0">
         <form onSubmit={handleSendMessage} className="flex gap-2">
           <input
             type="text"

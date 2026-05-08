@@ -2,8 +2,10 @@ import type { ReactNode } from "react";
 import { useRef } from "react";
 import { motion, useScroll, useTransform } from "motion/react";
 import { Link } from "react-router-dom";
-import { BookOpen, Briefcase, Heart, Lightbulb, Map, Target, ArrowRight } from "lucide-react";
+import { BookOpen, Briefcase, Heart, Lightbulb, Map, Target, ArrowRight, Lock, PlayCircle } from "lucide-react";
 import { useIsDesktop } from "@/hooks/useMediaQuery";
+import { useAuthStore } from "@/stores/auth.store";
+import { PLANS } from "@/types/user";
 
 interface Intelligence {
   id: number;
@@ -61,9 +63,13 @@ interface CardProps {
 }
 
 const IntelligenceCard = ({ intelligence, index, total }: CardProps) => {
+  const { user } = useAuthStore();
+  const isPremium = user?.plan === PLANS.INDIVIDUAL || user?.plan === PLANS.VIP;
+  const linkTo = user ? "/dashboard?tab=modulos" : "/leccion";
+
   return (
     <Link
-      to="/leccion"
+      to={linkTo}
       className="group relative shrink-0 w-[80vw] sm:w-[55vw] md:w-[42vw] lg:w-[34vw] xl:w-[28vw] h-[60vh] md:h-[68vh] rounded-3xl bg-gradient-to-br from-white/[0.04] to-white/[0.01] border border-white/[0.08] backdrop-blur-md p-8 md:p-10 flex flex-col justify-between overflow-hidden transition-colors duration-300 hover:border-gold/40"
     >
       <div
@@ -92,8 +98,19 @@ const IntelligenceCard = ({ intelligence, index, total }: CardProps) => {
         </p>
       </div>
 
-      <div className="relative z-10 flex items-center gap-2 text-sm font-semibold text-gold group-hover:gap-4 transition-all">
-        Explorar lecciones <ArrowRight size={18} />
+      <div className="relative z-10 flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm font-semibold text-gold group-hover:gap-4 transition-all">
+          {user ? "Ir a clases" : "Explorar lecciones"} <ArrowRight size={18} />
+        </div>
+        {user && isPremium ? (
+          <div className="flex items-center gap-1 text-xs font-bold bg-gold/10 text-gold px-2 py-1 rounded-full border border-gold/20">
+            <PlayCircle size={12} /> Acceso Total
+          </div>
+        ) : user ? (
+          <div className="flex items-center gap-1 text-xs font-bold bg-white/5 text-white/50 px-2 py-1 rounded-full border border-white/10">
+            <Lock size={12} /> Plan Free (Con anuncios)
+          </div>
+        ) : null}
       </div>
     </Link>
   );

@@ -45,9 +45,18 @@ const VIPLiveRoom = () => {
             </div>
           </div>
           {isLive && (
-            <div className="flex items-center gap-2 bg-red-600/90 text-white px-3 py-1 rounded-full text-sm font-bold animate-pulse shadow-[0_0_10px_rgba(220,38,38,0.5)]">
-              <span className="w-2 h-2 bg-white rounded-full"></span>
-              EN VIVO
+            <div className="flex items-center gap-4">
+              <button 
+                onClick={() => setIsLive(false)}
+                className="text-xs text-white/40 hover:text-white underline transition-colors"
+                title="Volver al contador (solo desarrollo)"
+              >
+                Volver al contador
+              </button>
+              <div className="flex items-center gap-2 bg-red-600/90 text-white px-3 py-1 rounded-full text-sm font-bold animate-pulse shadow-[0_0_10px_rgba(220,38,38,0.5)]">
+                <span className="w-2 h-2 bg-white rounded-full"></span>
+                EN VIVO
+              </div>
             </div>
           )}
         </div>
@@ -128,7 +137,7 @@ const VIPLiveRoom = () => {
         </div>
       </div>
 
-      <div className="w-full md:w-80 lg:w-96 h-[40vh] md:h-screen border-t md:border-t-0 md:border-l border-white/10 bg-darker shrink-0 z-20">
+      <div className="w-full md:w-80 lg:w-96 h-[40vh] md:h-screen border-t md:border-t-0 md:border-l border-white/10 bg-darker shrink-0 z-20 overflow-hidden">
         <LiveChat />
       </div>
     </div>

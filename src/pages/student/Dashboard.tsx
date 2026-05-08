@@ -15,7 +15,9 @@ import {
   Video,
   User as UserIcon,
   Camera,
-  Loader2
+  Loader2,
+  CheckCircle2,
+  Lock
 } from "lucide-react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
@@ -49,9 +51,10 @@ const modulosData: ModuloItem[] = [
 ];
 
 const lecciones: Leccion[] = [
-  { id: 1, titulo: "El camino a la libertad financiera", duracion: "45 min", modId: 2, video: "/clase1.mp4" },
-  { id: 2, titulo: "Estrategias de inversión acelerada", duracion: "1h 15 min", modId: 2, video: "/clase1.mp4" },
-  { id: 3, titulo: "Gestión de caja y presupuestos", duracion: "50 min", modId: 2, video: "/clase1.mp4" },
+  { id: 1, titulo: "El camino a la libertad financiera", duracion: "45 min", modId: 2, video: "595f2bfac6285d604cf136e049c37b08" },
+  { id: 2, titulo: "Estrategias de inversión acelerada", duracion: "1h 15 min", modId: 2, video: "595f2bfac6285d604cf136e049c37b08" },
+  { id: 3, titulo: "Gestión de caja y presupuestos", duracion: "50 min", modId: 2, video: "595f2bfac6285d604cf136e049c37b08" },
+  { id: 4, titulo: "Inteligencia Mental Básica", duracion: "30 min", modId: 1, video: "595f2bfac6285d604cf136e049c37b08" },
 ];
 
 type TabId = "modulos" | "notas" | "certificados" | "comunidad" | "live" | "perfil";
@@ -81,8 +84,115 @@ const Dashboard = () => {
     }
   }, [location.search]);
   const [selectedModule, setSelectedModule] = useState<number>(2);
-  const [activeLesson] = useState<Leccion>(lecciones[0]!);
+  const [activeLesson, setActiveLesson] = useState<Leccion>(lecciones[0]!);
+  
+  // Estado para Notas
   const [personalNote, setPersonalNote] = useState("");
+  const [isSavingNote, setIsSavingNote] = useState(false);
+  const [noteMessage, setNoteMessage] = useState<{ type: "success" | "error", text: string } | null>(null);
+  
+  // Estado para todas las notas (para la pestaña Libreta)
+  const [allNotes, setAllNotes] = useState<any[]>([]);
+
+  // Cargar nota de la lección activa
+  useEffect(() => {
+    const loadNote = async () => {
+      if (!user || !activeLesson) return;
+      setNoteMessage(null);
+      try {
+        const { data, error } = await supabase
+          .from("lesson_notes")
+          .select("content")
+          .eq("user_id", user.id)
+          .eq("lesson_id", activeLesson.id)
+          .single();
+
+        if (error) throw error;
+        if (data) {
+          setPersonalNote(data.content || "");
+        } else {
+          setPersonalNote("");
+        }
+      } catch (err: any) {
+        // Fallback local si no existe tabla en dev
+        const localNote = localStorage.getItem(`note_${user.id}_${activeLesson.id}`);
+        setPersonalNote(localNote || "");
+      }
+    };
+    loadNote();
+  }, [activeLesson.id, user]);
+
+  // Cargar todas las notas cuando se abre la pestaña de Libreta
+  useEffect(() => {
+    if (activeTab === "notas" && user) {
+      const loadAllNotes = async () => {
+        try {
+          const { data, error } = await supabase
+            .from("lesson_notes")
+            .select("lesson_id, content, updated_at")
+            .eq("user_id", user.id)
+            .order("updated_at", { ascending: false });
+          
+          if (error) throw error;
+          if (data) setAllNotes(data);
+        } catch (err: any) {
+          // Fallback a localStorage si la tabla no existe en desarrollo
+          const localNotes = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key?.startsWith(`note_${user.id}_`)) {
+              const lessonId = parseInt(key.split("_")[2] || "0");
+              const content = localStorage.getItem(key);
+              if (content) {
+                localNotes.push({
+                  lesson_id: lessonId,
+                  content,
+                  updated_at: new Date().toISOString()
+                });
+              }
+            }
+          }
+          setAllNotes(localNotes);
+        }
+      };
+      loadAllNotes();
+    }
+  }, [activeTab, user]);
+
+  const handleSaveNote = async () => {
+    if (!user || !activeLesson) return;
+    setIsSavingNote(true);
+    setNoteMessage(null);
+    try {
+      const { error } = await supabase
+        .from("lesson_notes")
+        .upsert(
+          { 
+            user_id: user.id, 
+            lesson_id: activeLesson.id, 
+            content: personalNote,
+            updated_at: new Date().toISOString()
+          },
+          { onConflict: 'user_id,lesson_id' }
+        );
+
+      if (error) throw error;
+      setNoteMessage({ type: "success", text: "Nota guardada correctamente" });
+      
+      // Ocultar mensaje de éxito después de 3 segundos
+      setTimeout(() => setNoteMessage(null), 3000);
+    } catch (err: any) {
+      setNoteMessage({ type: "error", text: "Error: " + err.message });
+      // Si la tabla no existe (desarrollo), usamos localStorage como fallback
+      if (err.message?.includes("relation") || err.message?.includes("not exist")) {
+        localStorage.setItem(`note_${user.id}_${activeLesson.id}`, personalNote);
+        setNoteMessage({ type: "success", text: "Guardado localmente (tabla no existe)" });
+        setTimeout(() => setNoteMessage(null), 3000);
+      }
+    } finally {
+      setIsSavingNote(false);
+    }
+  };
 
   // Estado para el panel de perfil
   const [profileName, setProfileName] = useState(user?.fullName || "");
@@ -144,11 +254,24 @@ const Dashboard = () => {
 
   const filteredLessons = lecciones.filter((l) => l.modId === selectedModule);
 
+  // Al cambiar de módulo, seleccionar la primera lección por defecto
+  useEffect(() => {
+    if (filteredLessons.length > 0) {
+      // Solo cambiar si la lección actual no pertenece al módulo seleccionado
+      if (activeLesson.modId !== selectedModule) {
+        setActiveLesson(filteredLessons[0]);
+      }
+    }
+  }, [selectedModule]);
+
   // Helper para saber si el usuario tiene beneficios premium
   const isPremium = user?.plan === PLANS.INDIVIDUAL || user?.plan === PLANS.VIP;
 
+  // Detectar si estamos en modo podcast general (no importamos el componente, solo chequeamos estado para el padding)
+  const isPodcastMode = localStorage.getItem("podcast_active") === "true"; // o sacarlo del store si se importa
+
   return (
-    <div className="min-h-screen bg-darker selection:bg-gold/30 font-sans text-textMain flex flex-col">
+    <div className={cn("min-h-screen bg-darker selection:bg-gold/30 font-sans text-textMain flex flex-col", isPodcastMode ? "pb-24 md:pb-28" : "")}>
       <Header />
 
       <main className="flex-1 w-full max-w-7xl mx-auto px-6 py-10 grid grid-cols-1 lg:grid-cols-4 gap-8">
@@ -270,46 +393,140 @@ const Dashboard = () => {
               </div>
 
               {filteredLessons.length > 0 ? (
-                <>
-                  <div className="mb-6 flex justify-between items-end">
-                    <div>
-                      <h2 className="text-3xl font-bold text-white mb-2">{activeLesson.titulo}</h2>
-                      {isPremium ? (
-                        <span className="text-textMuted flex items-center gap-2 text-sm">
-                          <Trophy size={16} className="text-gold" /> Módulo actualizado. Tú eres Premium.
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  {/* Zona de Video y Notas (Ocupa 2 de las 3 columnas en desktop) */}
+                  <div className="lg:col-span-2">
+                    <div className="mb-6 flex justify-between items-end">
+                      <div>
+                        <span className="text-gold text-sm font-semibold tracking-wider flex items-center gap-2 uppercase mb-2">
+                          {modulosData.find((m) => m.id === selectedModule)?.titulo} <div className="w-1 h-1 rounded-full bg-white/50"></div> Lección {filteredLessons.findIndex(l => l.id === activeLesson.id) + 1}
                         </span>
-                      ) : (
-                        <span className="text-textMuted flex items-center gap-2 text-sm">
-                          <PlayCircle size={16} className="text-gray-400" /> Viendo versión gratuita con anuncios.
-                        </span>
-                      )}
+                        <h2 className="text-3xl font-bold text-white mb-2">{activeLesson.titulo}</h2>
+                        {isPremium ? (
+                          <span className="text-textMuted flex items-center gap-2 text-sm">
+                            <Trophy size={16} className="text-gold" /> Módulo actualizado. Tú eres Premium.
+                          </span>
+                        ) : (
+                          <span className="text-textMuted flex items-center gap-2 text-sm">
+                            <PlayCircle size={16} className="text-gray-400" /> Viendo versión gratuita con anuncios.
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <LessonPlayer 
+                      videoSrc={activeLesson.video} 
+                      isPremium={isPremium} 
+                      lesson={{
+                        id: activeLesson.id,
+                        titulo: activeLesson.titulo,
+                        modId: activeLesson.modId
+                      }}
+                      moduleTitle={modulosData.find(m => m.id === activeLesson.modId)?.titulo || ""}
+                    />
+
+                    <div className="mt-8 bg-black/30 border border-white/10 rounded-2xl p-6">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-white font-medium flex items-center gap-2">
+                          <Edit3 size={18} /> Apuntes Rápidos
+                        </h4>
+                        {noteMessage && (
+                          <span className={cn("text-xs font-semibold px-2 py-1 rounded", noteMessage.type === "success" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400")}>
+                            {noteMessage.text}
+                          </span>
+                        )}
+                      </div>
+                      <textarea
+                        value={personalNote}
+                        onChange={(e) => setPersonalNote(e.target.value)}
+                        disabled={!isPremium || isSavingNote}
+                        placeholder={isPremium ? "Escribe tus reflexiones de esta lección sin pausar el video..." : "El plan Free no incluye toma de notas. ¡Mejora tu plan!"}
+                        className="w-full bg-white/5 border border-white/5 rounded-xl p-4 text-white text-sm focus:outline-none focus:border-gold resize-none h-24 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      ></textarea>
+                      <div className="flex justify-end mt-3">
+                        <button
+                          type="button"
+                          onClick={handleSaveNote}
+                          disabled={!isPremium || isSavingNote || !personalNote.trim()}
+                          className="px-5 py-2 text-sm bg-white/10 hover:bg-gold hover:text-darker border border-white/10 text-white font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                          {isSavingNote ? <Loader2 size={16} className="animate-spin" /> : null}
+                          Guardar Notas
+                        </button>
+                      </div>
                     </div>
                   </div>
 
-                  <LessonPlayer videoSrc={activeLesson.video} isPremium={isPremium} />
-
-                  <div className="mt-8 bg-black/30 border border-white/10 rounded-2xl p-6">
-                    <h4 className="text-white font-medium mb-3 flex items-center gap-2">
-                      <Edit3 size={18} /> Apuntes Rápidos
-                    </h4>
-                    <textarea
-                      value={personalNote}
-                      onChange={(e) => setPersonalNote(e.target.value)}
-                      disabled={!isPremium}
-                      placeholder={isPremium ? "Escribe tus reflexiones de esta lección sin pausar el video..." : "El plan Free no incluye toma de notas. ¡Mejora tu plan!"}
-                      className="w-full bg-white/5 border border-white/5 rounded-xl p-4 text-white text-sm focus:outline-none focus:border-gold resize-none h-24 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    ></textarea>
-                    <div className="flex justify-end mt-3">
-                      <button
-                        type="button"
-                        disabled={!isPremium}
-                        className="px-5 py-2 text-sm bg-white/10 hover:bg-gold hover:text-darker border border-white/10 text-white font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        Guardar Notas
-                      </button>
+                  {/* Zona de Lista de Lecciones (Ocupa 1 de las 3 columnas en desktop) */}
+                  <div className="lg:col-span-1">
+                    <div className="bg-black/30 border border-white/10 rounded-2xl overflow-hidden flex flex-col h-full max-h-[600px]">
+                      <div className="p-4 border-b border-white/10 bg-white/5">
+                        <h3 className="font-bold text-white flex items-center justify-between">
+                          Contenido del Módulo
+                          <span className="text-xs font-normal text-textMuted bg-black/50 px-2 py-1 rounded">
+                            {filteredLessons.findIndex(l => l.id === activeLesson.id) + 1} / {filteredLessons.length}
+                          </span>
+                        </h3>
+                      </div>
+                      
+                      <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+                        {filteredLessons.map((lesson, index) => {
+                          const isActive = activeLesson.id === lesson.id;
+                          const isCompleted = index === 0; // Mock: La primera lección está completada
+                          
+                          return (
+                            <button
+                              key={lesson.id}
+                              onClick={() => setActiveLesson(lesson)}
+                              className={cn(
+                                "w-full text-left p-3 rounded-xl transition-all flex gap-3 group",
+                                isActive 
+                                  ? "bg-gold/10 border border-gold/30" 
+                                  : "bg-transparent border border-transparent hover:bg-white/5"
+                              )}
+                            >
+                              <div className="shrink-0 pt-1">
+                                {isActive ? (
+                                  <div className="w-6 h-6 rounded-full bg-gold text-darker flex items-center justify-center">
+                                    <PlayCircle size={14} className="ml-0.5" />
+                                  </div>
+                                ) : isCompleted ? (
+                                  <div className="w-6 h-6 rounded-full bg-green-500/20 text-green-400 flex items-center justify-center border border-green-500/30">
+                                    <CheckCircle2 size={14} />
+                                  </div>
+                                ) : (
+                                  <div className="w-6 h-6 rounded-full bg-white/5 text-textMuted flex items-center justify-center border border-white/10 group-hover:border-white/30">
+                                    <span className="text-[10px] font-bold">{index + 1}</span>
+                                  </div>
+                                )}
+                              </div>
+                              
+                              <div className="flex-1 min-w-0">
+                                <h4 className={cn(
+                                  "text-sm font-medium leading-tight mb-1 line-clamp-2 transition-colors",
+                                  isActive ? "text-gold font-bold" : "text-white/80 group-hover:text-white"
+                                )}>
+                                  {lesson.titulo}
+                                </h4>
+                                <div className="flex items-center gap-2 text-[11px]">
+                                  <span className={isActive ? "text-gold/70" : "text-textMuted"}>
+                                    {lesson.duracion}
+                                  </span>
+                                  {isCompleted && !isActive && (
+                                    <>
+                                      <span className="text-white/20">•</span>
+                                      <span className="text-green-400/80">Completada</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
-                </>
+                </div>
               ) : (
                 <div className="p-12 text-center border border-white/10 rounded-3xl bg-white/5">
                   <PlayCircle size={48} className="mx-auto text-white/30 mb-4" />
@@ -321,10 +538,49 @@ const Dashboard = () => {
           )}
 
           {activeTab === "notas" && (
-            <div className="p-6 text-center border border-white/10 rounded-3xl bg-white/5 h-64 flex flex-col justify-center">
-              <Edit3 size={40} className="mx-auto text-gold mb-4" />
-              <h3 className="text-xl font-bold text-white">Libreta de Aprendizaje</h3>
-              <p className="text-textMuted mt-2">Aquí aparecerán todas tus notas divididas por módulo.</p>
+            <div className="space-y-6">
+              <div className="bg-white/5 border border-white/10 rounded-3xl p-8 mb-6 text-center">
+                <Edit3 size={40} className="mx-auto text-gold mb-4" />
+                <h2 className="text-2xl font-bold text-white">Libreta de Aprendizaje</h2>
+                <p className="text-textMuted mt-2 max-w-lg mx-auto">
+                  Aquí se guardan todos tus apuntes rápidos organizados por lección. Usa esta libreta para repasar los conceptos clave de tu proceso.
+                </p>
+              </div>
+
+              {allNotes.length === 0 ? (
+                <div className="text-center py-12 border border-white/5 bg-black/20 rounded-2xl">
+                  <p className="text-white/40">Aún no tienes notas guardadas.</p>
+                  <p className="text-white/30 text-sm mt-1">Ve a una lección y guarda tus primeros apuntes.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {allNotes.map((note, index) => {
+                    const leccion = lecciones.find(l => l.id === note.lesson_id);
+                    const modulo = modulosData.find(m => m.id === leccion?.modId);
+                    
+                    return (
+                      <div key={index} className="bg-black/40 border border-white/10 rounded-2xl p-6 flex flex-col hover:border-gold/30 transition-colors group">
+                        <div className="flex justify-between items-start mb-4 border-b border-white/5 pb-4">
+                          <div>
+                            <span className="text-xs font-bold text-gold uppercase tracking-wider block mb-1">
+                              {modulo?.titulo || "Módulo Desconocido"}
+                            </span>
+                            <h3 className="text-white font-medium line-clamp-1" title={leccion?.titulo}>
+                              {leccion?.titulo || `Lección ${note.lesson_id}`}
+                            </h3>
+                          </div>
+                          <span className="text-[10px] text-white/30 whitespace-nowrap bg-white/5 px-2 py-1 rounded">
+                            {new Date(note.updated_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <p className="text-white/80 text-sm flex-1 whitespace-pre-wrap leading-relaxed">
+                          {note.content}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
