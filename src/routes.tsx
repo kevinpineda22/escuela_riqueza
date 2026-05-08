@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import LandingPage from "@/pages/public/LandingPage";
 import Login from "@/pages/public/Login";
+import Signup from "@/pages/public/Signup";
 import LessonViewer from "@/pages/student/LessonViewer";
 import Dashboard from "@/pages/student/Dashboard";
 import VIPLiveRoom from "@/pages/student/VIPLiveRoom";
@@ -20,6 +21,7 @@ const AppRoutes = () => {
       <Route path="/" element={<LandingPage />} />
       <Route path="/leccion" element={<LessonViewer />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/registro" element={<Signup />} />
 
       {/* Estudiantes (cualquier plan logueado) */}
       <Route

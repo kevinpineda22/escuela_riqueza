@@ -61,8 +61,6 @@ const Login = () => {
       const user = await signIn(input);
       if (user.role === USER_ROLES.ADMIN) {
         navigate("/admin/upload");
-      } else if (user.plan === "vip") {
-        navigate("/vip-live");
       } else {
         navigate("/dashboard");
       }
@@ -226,8 +224,8 @@ const Login = () => {
           className="text-center text-textMuted text-sm mt-6"
         >
           ¿Aún no eres parte?{" "}
-          <Link to="/#planes" className="text-gold hover:text-goldHover font-semibold transition-colors">
-            Aplica a un plan
+          <Link to="/registro" className="text-gold hover:text-goldHover font-semibold transition-colors">
+            Crea tu cuenta aquí
           </Link>
         </motion.p>
       </div>

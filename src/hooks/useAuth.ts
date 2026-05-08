@@ -1,7 +1,7 @@
 import { useShallow } from "zustand/react/shallow";
-import { signIn as apiSignIn, signOut as apiSignOut } from "@/lib/api/auth";
+import { signIn as apiSignIn, signUp as apiSignUp, signOut as apiSignOut } from "@/lib/api/auth";
 import { useAuthStore } from "@/stores/auth.store";
-import type { LoginInput } from "@/schemas/auth.schema";
+import type { LoginInput, SignupInput } from "@/schemas/auth.schema";
 
 export function useAuth() {
   const { user, token, setSession, clearSession } = useAuthStore(
@@ -19,6 +19,12 @@ export function useAuth() {
     return result.user;
   };
 
+  const signUp = async (input: SignupInput) => {
+    const result = await apiSignUp(input);
+    setSession(result.user, result.token);
+    return result.user;
+  };
+
   const signOut = async () => {
     await apiSignOut();
     clearSession();
@@ -29,6 +35,7 @@ export function useAuth() {
     token,
     isAuthenticated: Boolean(user && token),
     signIn,
+    signUp,
     signOut,
   };
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import LiveChat from "@/components/feature/LiveChat";
+import { Stream } from "@cloudflare/stream-react";
 
 interface CountdownState {
   hours: number;
@@ -20,8 +21,10 @@ const VIPLiveRoom = () => {
         if (prev.seconds > 0) return { ...prev, seconds: prev.seconds - 1 };
         if (prev.minutes > 0) return { ...prev, minutes: prev.minutes - 1, seconds: 59 };
         if (prev.hours > 0) return { ...prev, hours: prev.hours - 1, minutes: 59, seconds: 59 };
+        
+        // Si todo llega a 0, activa el live
         setIsLive(true);
-        return prev;
+        return { hours: 0, minutes: 0, seconds: 0 };
       });
     }, 1000);
     return () => clearInterval(timer);
@@ -106,19 +109,20 @@ const VIPLiveRoom = () => {
               </button>
             </div>
           ) : (
-            <div className="w-full h-full z-10">
-              <div className="w-full h-full bg-darker flex flex-col justify-center items-center group relative">
-                <div className="absolute inset-0 bg-gradient-to-t from-darker via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-8">
-                  <div className="w-full h-2 bg-white/10 rounded-full mb-4 overflow-hidden">
-                    <div className="h-full bg-red-600 w-full shadow-[0_0_10px_rgba(220,38,38,1)]"></div>
-                  </div>
+            <div className="w-full h-full z-10 bg-black flex items-center justify-center relative">
+              {!import.meta.env.VITE_CLOUDFLARE_LIVE_INPUT_ID ? (
+                <div className="text-white text-center">
+                  <p className="text-red-500 mb-2">Error: Falta el ID del video.</p>
+                  <p className="text-sm text-gray-400">Por favor, reinicia el servidor de desarrollo (corta con Ctrl+C y vuelve a correr npm run dev) para que tome los cambios en el archivo .env.</p>
                 </div>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-white/20 text-2xl font-light">
-                    Embed de Reproductor (Cloudflare Stream) iría aquí
-                  </span>
-                </div>
-              </div>
+              ) : (
+                <Stream
+                  src={import.meta.env.VITE_CLOUDFLARE_LIVE_INPUT_ID}
+                  controls
+                  autoplay
+                  className="w-full h-full object-contain border-none"
+                />
+              )}
             </div>
           )}
         </div>
