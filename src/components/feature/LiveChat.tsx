@@ -87,7 +87,7 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000" }: { liveId?
       channel.on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "live_messages", filter: `live_id=eq.${liveId}` },
-        async (payload) => {
+        async (payload: any) => {
           // Necesitamos el nombre del usuario, así que hacemos una consulta rápida (o podríamos usar un trigger/view)
           const newMsg = payload.new;
           

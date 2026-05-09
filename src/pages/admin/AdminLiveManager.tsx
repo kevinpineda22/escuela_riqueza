@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Radio, Calendar, Image as ImageIcon, Settings2, PlayCircle, Save, Plus, Trash2, Edit2, StopCircle } from "lucide-react";
+import { Radio, Image as ImageIcon, Settings2, PlayCircle, Save, Plus, Trash2, Edit2, StopCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fetchLives, createLive, updateLive, deleteLive, type LiveEvent } from "@/lib/api/stream/lives";
 

@@ -525,11 +525,11 @@ const Dashboard = () => {
                                 )}>
                                   {lesson.title}
                                 </h4>
-                                <div className="flex items-center gap-2 text-[11px]">
-                                  <span className={isActive ? "text-gold/70" : "text-textMuted"}>
-                                    Plan {lesson.required_plan.toUpperCase()}
-                                  </span>
-                                  {isCompleted && !isActive && (
+                                  <div className="flex items-center gap-2 text-[11px]">
+                                    <span className={isActive ? "text-gold/70" : "text-textMuted"}>
+                                      Plan {lesson.allowed_plans?.[0]?.toUpperCase() || "FREE"}
+                                    </span>
+                                    {isCompleted && !isActive && (
                                     <>
                                       <span className="text-white/20">·</span>
                                       <span className="text-green-400/80">Completada</span>
