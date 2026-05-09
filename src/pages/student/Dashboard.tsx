@@ -1,12 +1,7 @@
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   BookOpen,
-  Target,
-  Heart,
-  Briefcase,
-  Map,
-  Lightbulb,
   PlayCircle,
   Trophy,
   Users,
@@ -16,7 +11,7 @@ import {
   User as UserIcon,
   Camera,
   Loader2,
-  CheckCircle2
+  CheckCircle2,
 } from "lucide-react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
@@ -25,36 +20,7 @@ import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth.store";
 import { PLANS } from "@/types/user";
 import { supabase } from "@/lib/supabase";
-
-interface ModuloItem {
-  id: number;
-  titulo: string;
-  icono: ReactNode;
-}
-
-interface Leccion {
-  id: number;
-  titulo: string;
-  duracion: string;
-  modId: number;
-  video: string;
-}
-
-const modulosData: ModuloItem[] = [
-  { id: 1, titulo: "Inteligencia del aprendizaje", icono: <BookOpen className="text-gold w-6 h-6" /> },
-  { id: 2, titulo: "Inteligencia de la riqueza", icono: <Target className="text-gold w-6 h-6" /> },
-  { id: 3, titulo: "Inteligencia emocional", icono: <Heart className="text-gold w-6 h-6" /> },
-  { id: 4, titulo: "Inteligencia Comercial y Negociadora", icono: <Briefcase className="text-gold w-6 h-6" /> },
-  { id: 5, titulo: "Inteligencia Estratégica", icono: <Map className="text-gold w-6 h-6" /> },
-  { id: 6, titulo: "Inteligencia Espiritual", icono: <Lightbulb className="text-gold w-6 h-6" /> },
-];
-
-const lecciones: Leccion[] = [
-  { id: 1, titulo: "El camino a la libertad financiera", duracion: "45 min", modId: 2, video: "595f2bfac6285d604cf136e049c37b08" },
-  { id: 2, titulo: "Estrategias de inversión acelerada", duracion: "1h 15 min", modId: 2, video: "595f2bfac6285d604cf136e049c37b08" },
-  { id: 3, titulo: "Gestión de caja y presupuestos", duracion: "50 min", modId: 2, video: "595f2bfac6285d604cf136e049c37b08" },
-  { id: 4, titulo: "Inteligencia Mental Básica", duracion: "30 min", modId: 1, video: "595f2bfac6285d604cf136e049c37b08" },
-];
+import { fetchModules, fetchLessons, type Module as DBModule, type Lesson as DBLesson } from "@/lib/api/stream/content";
 
 type TabId = "modulos" | "notas" | "certificados" | "comunidad" | "live" | "perfil";
 
@@ -82,8 +48,43 @@ const Dashboard = () => {
       setActiveTab("modulos");
     }
   }, [location.search]);
-  const [selectedModule, setSelectedModule] = useState<number>(2);
-  const [activeLesson, setActiveLesson] = useState<Leccion>(lecciones[0]!);
+  const [selectedModule, setSelectedModule] = useState<string | null>(null);
+  const [activeLesson, setActiveLesson] = useState<DBLesson | null>(null);
+  const [dbModules, setDbModules] = useState<DBModule[]>([]);
+  const [dbLessonsMap, setDbLessonsMap] = useState<Record<string, DBLesson[]>>({});
+  const [isLoadingContent, setIsLoadingContent] = useState(true);
+
+  // Load content from Supabase
+  useEffect(() => {
+    const loadContent = async () => {
+      try {
+        setIsLoadingContent(true);
+        const modules = await fetchModules();
+        const publishedModules = modules.filter(m => m.is_published);
+        setDbModules(publishedModules);
+        
+        const lessonsMap: Record<string, DBLesson[]> = {};
+        for (const mod of publishedModules) {
+          const lessons = await fetchLessons(mod.id);
+          lessonsMap[mod.id] = lessons.filter(l => l.is_published);
+        }
+        setDbLessonsMap(lessonsMap);
+
+        if (publishedModules.length > 0) {
+          const firstModId = publishedModules[0].id;
+          setSelectedModule(firstModId);
+          if (lessonsMap[firstModId]?.length > 0) {
+            setActiveLesson(lessonsMap[firstModId][0]);
+          }
+        }
+      } catch (error) {
+        console.error("Error loading content from DB:", error);
+      } finally {
+        setIsLoadingContent(false);
+      }
+    };
+    loadContent();
+  }, []);
   
   // Estado para Notas
   const [personalNote, setPersonalNote] = useState("");
@@ -105,7 +106,7 @@ const Dashboard = () => {
           .select("content")
           .eq("user_id", user.id)
           .eq("lesson_id", activeLesson.id)
-          .single();
+          .maybeSingle();
 
         if (error) throw error;
         if (data) {
@@ -121,7 +122,7 @@ const Dashboard = () => {
     };
     loadNote();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeLesson.id, user]);
+  }, [activeLesson?.id, user]);
 
   // Cargar todas las notas cuando se abre la pestaña de Libreta
   useEffect(() => {
@@ -142,7 +143,7 @@ const Dashboard = () => {
           for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
             if (key?.startsWith(`note_${user.id}_`)) {
-              const lessonId = parseInt(key.split("_")[2] || "0");
+              const lessonId = key.replace(`note_${user.id}_`, "");
               const content = localStorage.getItem(key);
               if (content) {
                 localNotes.push({
@@ -256,13 +257,13 @@ const Dashboard = () => {
     }
   };
 
-  const filteredLessons = lecciones.filter((l) => l.modId === selectedModule);
+  const filteredLessons = selectedModule ? (dbLessonsMap[selectedModule] || []) : [];
 
   // Al cambiar de módulo, seleccionar la primera lección por defecto
   useEffect(() => {
     if (filteredLessons.length > 0) {
       // Solo cambiar si la lección actual no pertenece al módulo seleccionado
-      if (activeLesson.modId !== selectedModule) {
+      if (!activeLesson || activeLesson.module_id !== selectedModule) {
         setActiveLesson(filteredLessons[0]);
       }
     }
@@ -380,33 +381,44 @@ const Dashboard = () => {
           {activeTab === "modulos" && (
             <>
               <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide mb-8">
-                {modulosData.map((mod) => (
-                  <button
-                    key={mod.id}
-                    type="button"
-                    onClick={() => setSelectedModule(mod.id)}
-                    className={cn(
-                      "flex-shrink-0 flex items-center gap-3 px-5 py-3 border rounded-full transition-all whitespace-nowrap",
-                      selectedModule === mod.id
-                        ? "bg-gold/10 border-gold shadow-[0_0_10px_rgba(204,164,59,0.3)] text-white font-bold"
-                        : "bg-white/5 border-white/10 text-textMuted hover:bg-white/10"
-                    )}
-                  >
-                    {mod.icono} <span className="text-sm">{mod.titulo}</span>
-                  </button>
-                ))}
+                {isLoadingContent ? (
+                  <div className="flex items-center justify-center py-4 w-full text-white/50">
+                    <Loader2 className="animate-spin w-5 h-5 mr-2" /> Cargando Módulos...
+                  </div>
+                ) : (
+                  dbModules.map((mod) => (
+                    <button
+                      key={mod.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedModule(mod.id);
+                        if (dbLessonsMap[mod.id]?.length > 0) {
+                          setActiveLesson(dbLessonsMap[mod.id][0]);
+                        }
+                      }}
+                      className={cn(
+                        "flex-shrink-0 flex items-center gap-3 px-5 py-3 border rounded-full transition-all whitespace-nowrap",
+                        selectedModule === mod.id
+                          ? "bg-gold/10 border-gold shadow-[0_0_10px_rgba(204,164,59,0.3)] text-white font-bold"
+                          : "bg-white/5 border-white/10 text-textMuted hover:bg-white/10"
+                      )}
+                    >
+                      <BookOpen className="text-gold w-5 h-5" /> <span className="text-sm">{mod.title}</span>
+                    </button>
+                  ))
+                )}
               </div>
 
-              {filteredLessons.length > 0 ? (
+              {selectedModule && dbLessonsMap[selectedModule]?.length > 0 && activeLesson ? (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                   {/* Zona de Video y Notas (Ocupa 2 de las 3 columnas en desktop) */}
                   <div className="lg:col-span-2">
                     <div className="mb-6 flex justify-between items-end">
                       <div>
                         <span className="text-gold text-sm font-semibold tracking-wider flex items-center gap-2 uppercase mb-2">
-                          {modulosData.find((m) => m.id === selectedModule)?.titulo} <div className="w-1 h-1 rounded-full bg-white/50"></div> Lección {filteredLessons.findIndex(l => l.id === activeLesson.id) + 1}
+                          {dbModules.find((m) => m.id === selectedModule)?.title} <div className="w-1 h-1 rounded-full bg-white/50"></div> Lección {dbLessonsMap[selectedModule].findIndex(l => l.id === activeLesson.id) + 1}
                         </span>
-                        <h2 className="text-3xl font-bold text-white mb-2">{activeLesson.titulo}</h2>
+                        <h2 className="text-3xl font-bold text-white mb-2">{activeLesson.title}</h2>
                         {isPremium ? (
                           <span className="text-textMuted flex items-center gap-2 text-sm">
                             <Trophy size={16} className="text-gold" /> Módulo actualizado. Tú eres Premium.
@@ -420,14 +432,14 @@ const Dashboard = () => {
                     </div>
 
                     <LessonPlayer 
-                      videoSrc={activeLesson.video} 
+                      videoSrc={activeLesson.stream_uid || ""} 
                       isPremium={isPremium} 
                       lesson={{
-                        id: activeLesson.id,
-                        titulo: activeLesson.titulo,
-                        modId: activeLesson.modId
+                        id: activeLesson.id as unknown as number, // Temp cast para no romper tipado de LessonPlayer
+                        titulo: activeLesson.title,
+                        modId: activeLesson.module_id as unknown as number
                       }}
-                      moduleTitle={modulosData.find(m => m.id === activeLesson.modId)?.titulo || ""}
+                      moduleTitle={dbModules.find(m => m.id === activeLesson.module_id)?.title || ""}
                     />
 
                     <div className="mt-8 bg-black/30 border border-white/10 rounded-2xl p-6">
@@ -469,15 +481,15 @@ const Dashboard = () => {
                         <h3 className="font-bold text-white flex items-center justify-between">
                           Contenido del Módulo
                           <span className="text-xs font-normal text-textMuted bg-black/50 px-2 py-1 rounded">
-                            {filteredLessons.findIndex(l => l.id === activeLesson.id) + 1} / {filteredLessons.length}
+                            {dbLessonsMap[selectedModule].findIndex(l => l.id === activeLesson.id) + 1} / {dbLessonsMap[selectedModule].length}
                           </span>
                         </h3>
                       </div>
                       
                       <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
-                        {filteredLessons.map((lesson, index) => {
+                        {dbLessonsMap[selectedModule].map((lesson, index) => {
                           const isActive = activeLesson.id === lesson.id;
-                          const isCompleted = index === 0; // Mock: La primera lección está completada
+                          const isCompleted = index === 0; // Mock temporal
                           
                           return (
                             <button
@@ -511,15 +523,15 @@ const Dashboard = () => {
                                   "text-sm font-medium leading-tight mb-1 line-clamp-2 transition-colors",
                                   isActive ? "text-gold font-bold" : "text-white/80 group-hover:text-white"
                                 )}>
-                                  {lesson.titulo}
+                                  {lesson.title}
                                 </h4>
                                 <div className="flex items-center gap-2 text-[11px]">
                                   <span className={isActive ? "text-gold/70" : "text-textMuted"}>
-                                    {lesson.duracion}
+                                    Plan {lesson.required_plan.toUpperCase()}
                                   </span>
                                   {isCompleted && !isActive && (
                                     <>
-                                      <span className="text-white/20">•</span>
+                                      <span className="text-white/20">·</span>
                                       <span className="text-green-400/80">Completada</span>
                                     </>
                                   )}
@@ -560,18 +572,29 @@ const Dashboard = () => {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {allNotes.map((note, index) => {
-                    const leccion = lecciones.find(l => l.id === note.lesson_id);
-                    const modulo = modulosData.find(m => m.id === leccion?.modId);
+                    let leccionTitle = "Lección Desconocida";
+                    let moduloTitle = "Módulo Desconocido";
+                    
+                    // Buscar la lección y módulo correspondientes en el estado cargado
+                    for (const modId in dbLessonsMap) {
+                      const lesson = dbLessonsMap[modId].find(l => l.id === note.lesson_id);
+                      if (lesson) {
+                        leccionTitle = lesson.title;
+                        const mod = dbModules.find(m => m.id === modId);
+                        if (mod) moduloTitle = mod.title;
+                        break;
+                      }
+                    }
                     
                     return (
                       <div key={index} className="bg-black/40 border border-white/10 rounded-2xl p-6 flex flex-col hover:border-gold/30 transition-colors group">
                         <div className="flex justify-between items-start mb-4 border-b border-white/5 pb-4">
                           <div>
                             <span className="text-xs font-bold text-gold uppercase tracking-wider block mb-1">
-                              {modulo?.titulo || "Módulo Desconocido"}
+                              {moduloTitle}
                             </span>
-                            <h3 className="text-white font-medium line-clamp-1" title={leccion?.titulo}>
-                              {leccion?.titulo || `Lección ${note.lesson_id}`}
+                            <h3 className="text-white font-medium line-clamp-1" title={leccionTitle}>
+                              {leccionTitle}
                             </h3>
                           </div>
                           <span className="text-[10px] text-white/30 whitespace-nowrap bg-white/5 px-2 py-1 rounded">

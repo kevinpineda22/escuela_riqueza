@@ -121,6 +121,14 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
 
       {/* Contenedor de Video Principal */}
       <div className="relative aspect-video bg-black rounded-2xl overflow-hidden border border-white/10 shadow-2xl group transition-all duration-500 ease-in-out">
+        {!videoSrc ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20">
+            <MonitorPlay size={48} className="text-white/20 mb-4" />
+            <h3 className="text-white font-bold text-lg">Video no disponible</h3>
+            <p className="text-textMuted text-sm">Esta lección aún no tiene un video asignado.</p>
+          </div>
+        ) : null}
+
         {/* Pseudo-Podcast Mode Layer (Se pone encima y cubre el video visualmente) */}
         <div 
           className={cn(
@@ -185,7 +193,8 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
           <div className="absolute inset-0 z-20 bg-darker flex items-center justify-center">
             <button 
               onClick={handlePlayRequest}
-              className="w-20 h-20 bg-gold hover:bg-goldHover rounded-full flex items-center justify-center transition-transform hover:scale-105 shadow-[0_0_30px_rgba(204,164,59,0.4)]"
+              disabled={!videoSrc}
+              className={cn("w-20 h-20 rounded-full flex items-center justify-center transition-transform hover:scale-105 shadow-[0_0_30px_rgba(204,164,59,0.4)]", videoSrc ? "bg-gold hover:bg-goldHover" : "bg-gray-600 cursor-not-allowed")}
             >
               <Play size={40} className="text-darker ml-2" />
             </button>

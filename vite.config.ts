@@ -11,4 +11,12 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000', // Asumimos que correremos vercel dev en este puerto
+        changeOrigin: true,
+      }
+    }
+  }
 });

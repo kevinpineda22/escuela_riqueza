@@ -5,7 +5,6 @@ import Signup from "@/pages/public/Signup";
 import LessonViewer from "@/pages/student/LessonViewer";
 import Dashboard from "@/pages/student/Dashboard";
 import VIPLiveRoom from "@/pages/student/VIPLiveRoom";
-import AdminVideoUpload from "@/pages/admin/AdminVideoUpload";
 import AdminMetrics from "@/pages/admin/AdminMetrics";
 import AdminContentManager from "@/pages/admin/AdminContentManager";
 import AdminUsers from "@/pages/admin/AdminUsers";
@@ -52,8 +51,7 @@ const AppRoutes = () => {
           </RequireAuth>
         }
       >
-        <Route index element={<Navigate to="/admin/upload" replace />} />
-        <Route path="upload" element={<AdminVideoUpload />} />
+        <Route index element={<Navigate to="/admin/content" replace />} />
         <Route path="metrics" element={<AdminMetrics />} />
         <Route path="content" element={<AdminContentManager />} />
         <Route path="users" element={<AdminUsers />} />

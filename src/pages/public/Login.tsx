@@ -60,7 +60,7 @@ const Login = () => {
     try {
       const user = await signIn(input);
       if (user.role === USER_ROLES.ADMIN) {
-        navigate("/admin/upload");
+        navigate("/admin/content");
       } else {
         navigate("/dashboard");
       }

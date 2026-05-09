@@ -26,7 +26,8 @@ const RequireAuth = ({ children, role, minPlan }: RequireAuthProps) => {
     return <Navigate to="/" replace />;
   }
 
-  if (minPlan && PLAN_RANK[user.plan] < PLAN_RANK[minPlan]) {
+  // Admin bypasses plan restrictions
+  if (user.role !== "admin" && minPlan && PLAN_RANK[user.plan] < PLAN_RANK[minPlan]) {
     return <Navigate to="/dashboard" replace />;
   }
 

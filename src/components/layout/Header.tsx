@@ -52,6 +52,16 @@ const Header = () => {
                   Mi Panel
                 </span>
               </Link>
+              
+              {user.role === "admin" && (
+                <Link
+                  to="/admin/content"
+                  className="hidden sm:flex text-sm font-bold text-darker bg-gold hover:bg-goldHover px-4 py-1.5 rounded-full items-center gap-2 transition-all shadow-[0_0_10px_rgba(204,164,59,0.3)]"
+                >
+                  Vista Admin
+                </Link>
+              )}
+
               <button
                 onClick={handleLogout}
                 className="text-sm font-medium text-white/50 hover:text-red-400 transition-colors flex items-center gap-2 ml-2"

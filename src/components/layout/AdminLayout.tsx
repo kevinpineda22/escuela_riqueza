@@ -2,17 +2,18 @@ import { useState, useEffect } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { motion, type Variants } from "motion/react";
 import {
-  UploadCloud,
   LogOut,
   LayoutDashboard,
   Video,
   Users,
   Settings,
   Menu,
+  Crown,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
 
 const sidebarVariants: Variants = {
   hidden: { x: -20, opacity: 0 },
@@ -21,7 +22,6 @@ const sidebarVariants: Variants = {
 
 const navItems = [
   { icon: LayoutDashboard, label: "Métricas", path: "/admin/metrics" },
-  { icon: UploadCloud, label: "Cargar Lección", path: "/admin/upload" },
   { icon: Video, label: "Gestor de Contenido", path: "/admin/content" },
   { icon: Users, label: "Usuarios", path: "/admin/users" },
   { icon: Settings, label: "Ajustes", path: "/admin/settings" },
@@ -29,10 +29,11 @@ const navItems = [
 
 const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
   const navigate = useNavigate();
+  const { user, signOut } = useAuth();
 
-  const handleLogout = () => {
-    // Aquí iría la lógica de logout real
+  const handleLogout = async () => {
     if (onNavigate) onNavigate();
+    await signOut();
     navigate("/login");
   };
 
@@ -75,14 +76,33 @@ const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
       </nav>
 
       <div className="p-4 mt-auto border-t border-white/5 space-y-4">
+        <button
+          onClick={() => {
+            if (onNavigate) onNavigate();
+            navigate("/dashboard");
+          }}
+          className="group relative flex items-center w-full px-4 py-3.5 text-textMuted hover:text-gold font-semibold rounded-2xl transition-all overflow-hidden border border-transparent hover:border-gold/20 hover:bg-gold/5 hover:shadow-[0_0_15px_rgba(204,164,59,0.1)]"
+        >
+          <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-gold/10 to-transparent -translate-x-full group-hover:animate-[shimmer_2s_infinite]" />
+          <LayoutDashboard size={18} className="relative z-10 mr-3 transition-transform group-hover:scale-110" />
+          <span className="relative z-10">Vista de Alumno</span>
+        </button>
+
         {/* User Profile Indicator */}
         <div className="flex items-center gap-3 px-4 py-3 bg-white/[0.02] rounded-2xl border border-white/5">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-gold to-amber-600 border-2 border-darker flex items-center justify-center text-sm font-extrabold text-darker shadow-[0_0_15px_rgba(204,164,59,0.4)] shrink-0">
-            AD
-          </div>
-          <div className="overflow-hidden">
-            <p className="font-bold text-white leading-tight truncate text-sm">Administrador VIP</p>
-            <p className="text-[11px] text-gold font-mono truncate">admin@escuela.com</p>
+          {user?.avatarUrl ? (
+            <img src={user.avatarUrl} alt={user.fullName} className="w-10 h-10 rounded-full border-2 border-gold shadow-[0_0_15px_rgba(204,164,59,0.4)] shrink-0 object-cover" />
+          ) : (
+            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-gold to-amber-600 border-2 border-darker flex items-center justify-center text-sm font-extrabold text-darker shadow-[0_0_15px_rgba(204,164,59,0.4)] shrink-0">
+              {user?.fullName?.substring(0, 2).toUpperCase() || "AD"}
+            </div>
+          )}
+          <div className="overflow-hidden flex-1">
+            <div className="flex items-center gap-1.5">
+              <p className="font-bold text-white leading-tight truncate text-sm">{user?.fullName || "Administrador VIP"}</p>
+              <Crown size={14} className="text-gold shrink-0" />
+            </div>
+            <p className="text-[11px] text-gold font-mono truncate">{user?.email || "admin@escuela.com"}</p>
           </div>
         </div>
 
@@ -156,7 +176,7 @@ const AdminLayout = () => {
       </div>
 
       {/* Main Content Area */}
-      <main className="flex-1 p-4 sm:p-6 md:p-8 lg:p-12 relative z-10 overflow-y-auto h-[calc(100dvh-65px)] md:h-screen w-full flex flex-col">
+      <main data-lenis-prevent className="flex-1 p-4 sm:p-6 md:p-8 lg:p-12 relative z-10 overflow-y-auto h-[calc(100dvh-65px)] md:h-screen w-full flex flex-col">
         {/* Orbe flotante en el main (compartido por todas las vistas admin) */}
         <motion.div
           animate={{ y: [0, -20, 0], scale: [1, 1.05, 1], opacity: [0.1, 0.15, 0.1] }}
