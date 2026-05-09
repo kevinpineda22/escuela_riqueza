@@ -9,6 +9,7 @@ import {
   Settings,
   Menu,
   Crown,
+  Radio
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ const sidebarVariants: Variants = {
 const navItems = [
   { icon: LayoutDashboard, label: "Métricas", path: "/admin/metrics" },
   { icon: Video, label: "Gestor de Contenido", path: "/admin/content" },
+  { icon: Radio, label: "Eventos en Vivo", path: "/admin/lives" },
   { icon: Users, label: "Usuarios", path: "/admin/users" },
   { icon: Settings, label: "Ajustes", path: "/admin/settings" },
 ];

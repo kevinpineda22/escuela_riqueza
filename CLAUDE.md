@@ -229,23 +229,23 @@ for select using (
 
 ---
 
-## 10. Estado del proyecto
+## 10. Estado del proyecto (Actualizado)
 
-**Lo heredado (mock)**:
-- Landing con módulos, planes, hero (estética muy buena, conservar 1:1).
-- Páginas: Login, Dashboard, LessonViewer, AdminVideoUpload, VIPLiveRoom.
-- Componentes: Header, Footer, LessonPlayer (con lógica de ads cada 120s), LiveChat.
-- TODO es mock: login con credenciales hardcodeadas, upload con `setTimeout`, chat con `useState`.
+**Implementado recientemente (Real Supabase + Cloudflare)**:
+- **Gestión de Contenido (Admin)**: `AdminContentManager.tsx` migrado a CRUD real con Supabase. Soporta creación, edición, eliminación de Módulos y Lecciones.
+- **Upload a Cloudflare Stream**: Implementado mediante Vercel Serverless Functions (`/api/stream/upload-url.ts`) para firmar la URL de subida y hacer fetch con FormData desde el cliente de manera segura sin exponer tokens.
+- **Lógica de Planes (Arrays)**: Se migró la columna `required_plan` (string) a `allowed_plans` (array de strings) en las tablas `modules`, `lessons` y `lives` para soportar acceso múltiple a un mismo contenido usando checkboxes.
+- **Filtrado para Alumnos**: `Dashboard.tsx` ahora filtra estrictamente los módulos y lecciones comparando `user.plan` contra el array `allowed_plans`. Usuarios *Free* no ven contenido *VIP* o *Individual*.
+- **Publicidad Nativa (Plan Free)**: `LessonPlayer.tsx` reescrito con lógica profesional de pre-roll. Usa el componente nativo `<Stream>` de Cloudflare bloqueando controles y clics (pointer-events-none), cuenta con *pillarboxing* real (objectFit contain), botón de omitir a los 30s, e inicia la lección *solo* tras omitir/terminar el anuncio para cumplir con reglas de autoplay del navegador.
+- **Gestor de Eventos en Vivo (Admin)**: `AdminLiveManager.tsx` convertido a CRUD funcional. Soporta listar, crear y eliminar salas. Permite asignar accesos (allowed_plans) e incluye un botón maestro "Forzar EN VIVO" que controla la columna `is_active` (forzando apagado en las demás salas).
+- **Flujo de Lives**: Preparado para Cloudflare Live Inputs. El admin pega el *Live Input ID* y usa OBS Studio (vía RTMP+Key) para transmitir.
 
 **Próximos pasos sugeridos** (en orden):
-1. Migración a TypeScript + alias `@/` + estructura de carpetas.
-2. Setup Supabase: proyecto, schema (`profiles`, `subscriptions`, `modules`, `lessons`, `lives`, `live_messages`), RLS.
-3. Auth real: reemplazar `Login.jsx` mock con `supabase.auth.signInWithPassword`.
-4. Setup shadcn/ui + react-hook-form + zod.
-5. Vercel Function `upload-url` + integración con admin de cursos.
-6. Stripe Subscriptions + webhook.
-7. Cloudflare Stream Live + chat realtime.
-8. Prerender de la landing.
+1. Auth real: reemplazar `Login.jsx` mock con `supabase.auth.signInWithPassword`. (Pendiente)
+2. Setup shadcn/ui + react-hook-form + zod. (Pendiente)
+3. Reproducción protegida (`/api/stream/playback-token.ts`) para evitar descargas o compartición de URLs en los planes premium.
+4. Stripe Subscriptions + webhook `/api/stripe/webhook.ts` para cambiar el rol/plan automáticamente al pagar.
+5. Prerender de la landing.
 
 ---
 

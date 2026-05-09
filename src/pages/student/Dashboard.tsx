@@ -60,13 +60,13 @@ const Dashboard = () => {
       try {
         setIsLoadingContent(true);
         const modules = await fetchModules();
-        const publishedModules = modules.filter(m => m.is_published);
+        const publishedModules = modules.filter(m => m.is_published && (!m.allowed_plans || m.allowed_plans.includes(user?.plan as any)));
         setDbModules(publishedModules);
-        
+
         const lessonsMap: Record<string, DBLesson[]> = {};
         for (const mod of publishedModules) {
           const lessons = await fetchLessons(mod.id);
-          lessonsMap[mod.id] = lessons.filter(l => l.is_published);
+          lessonsMap[mod.id] = lessons.filter(l => l.is_published && (!l.allowed_plans || l.allowed_plans.includes(user?.plan as any)));
         }
         setDbLessonsMap(lessonsMap);
 

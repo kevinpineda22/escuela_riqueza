@@ -24,65 +24,51 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const streamRef = useRef<any>(null);
 
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [playRequested, setPlayRequested] = useState(false);
   const initializedTimeRef = useRef(false);
 
   // Lógica de Anuncios
   const [showAd, setShowAd] = useState(false);
   const [hasAdPlayed, setHasAdPlayed] = useState(false);
-  const [adTimeLeft, setAdTimeLeft] = useState(AD_DURATION);
+  const [adCurrentTime, setAdCurrentTime] = useState(0);
+  const adStreamRef = useRef<any>(null);
 
   // Cuando cambie el video, resetear los estados
   useEffect(() => {
-    // Para evitar advertencias de set-state-in-effect y limpiar asíncronamente
+    // Para evitar advertencias de set-state-in-effect y limpiar asincrónicamente
     setTimeout(() => {
-      setIsPlaying(false);
+      setPlayRequested(false);
       setShowAd(false);
       setHasAdPlayed(false);
+      setAdCurrentTime(0);
       initializedTimeRef.current = false;
     }, 0);
   }, [videoSrc]);
 
   const handlePlayRequest = () => {
+    setPlayRequested(true);
     // Si no es premium y no ha visto el anuncio, mostrar el anuncio (Pre-roll)
     if (!isPremium && !hasAdPlayed) {
       setShowAd(true);
-      startAdTimer();
-    } else {
-      setIsPlaying(true);
+      setAdCurrentTime(0);
     }
   };
 
   const handleAdEnd = () => {
     setShowAd(false);
     setHasAdPlayed(true);
-    setIsPlaying(true); // Reproducir el video principal tras terminar el anuncio
-  };
-
-  const startAdTimer = () => {
-    setAdTimeLeft(AD_DURATION);
-    const timer = setInterval(() => {
-      setAdTimeLeft(prev => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          handleAdEnd();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
   };
 
   const handlePodcastToggle = () => {
     if (isPlayingThisInPodcast) {
       closePlayer(); // Al cerrar, el player global ya actualizó lastKnownTime
-      setIsPlaying(true);
+      setPlayRequested(true);
       initializedTimeRef.current = false; // Forzar que el Stream local haga seek al tiempo guardado
     } else if (videoSrc && lesson && moduleTitle) {
       if (streamRef.current) {
         setLastKnownTime(streamRef.current.currentTime);
       }
-      setIsPlaying(false); // Pausamos el video visual para no tener audio doble
+      setPlayRequested(false); // Pausamos el video visual para no tener audio doble
       playTrack({
         id: lesson.id,
         title: lesson.titulo,
@@ -159,29 +145,47 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
         {/* Layer del Anuncio en Video Real */}
         {showAd && (
           <div className="absolute inset-0 z-40 bg-black flex flex-col items-center justify-center">
-            <div className="absolute top-4 left-4 z-50 bg-black/60 backdrop-blur-md px-4 py-2 border border-white/10 text-sm font-bold text-white uppercase tracking-widest rounded-lg flex items-center gap-2">
+            <div className="absolute top-4 left-4 z-50 bg-black/60 backdrop-blur-md px-4 py-2 border border-white/10 text-sm font-bold text-white uppercase tracking-widest rounded-lg flex items-center gap-2 pointer-events-none">
               <span className="w-2 h-2 rounded-full bg-gold animate-pulse"></span>
               Publicidad de Aliado
             </div>
 
-            <iframe
-              src={`https://iframe.videodelivery.net/${AD_VIDEO_ID}?autoplay=true`}
-              className="w-full h-full"
-              allow="autoplay; fullscreen; picture-in-picture"
-              style={{ border: 'none' }}
-              onLoad={() => {
-                // El countdown maneja el cierre automático
-              }}
-            />
+            {/* Reproductor del anuncio sin controles y sin pointer-events para evitar interacción */}
+            <div className="absolute inset-0 w-full h-full pointer-events-none flex items-center justify-center bg-black">
+              <Stream
+                streamRef={adStreamRef}
+                src={AD_VIDEO_ID}
+                controls={false}
+                autoplay
+                preload="auto"
+                letterboxColor="transparent"
+                className="w-full h-full [&>iframe]:w-full [&>iframe]:h-full [&>iframe]:object-contain"
+                onTimeUpdate={() => {
+                  if (adStreamRef.current) {
+                    setAdCurrentTime(adStreamRef.current.currentTime);
+                  }
+                }}
+                onEnded={handleAdEnd}
+              />
+            </div>
 
             <div className="absolute bottom-6 right-6 z-50 flex flex-col items-end gap-2">
-              <div className="bg-black/60 backdrop-blur-md px-4 py-2 border border-white/10 text-xs font-medium text-white rounded-lg">
-                El video se reanudará en {adTimeLeft}s...
-              </div>
-              <div className="w-32 h-1.5 bg-black/50 rounded-full overflow-hidden border border-white/5">
+              {adCurrentTime >= 30 ? (
+                <button 
+                  onClick={handleAdEnd}
+                  className="bg-gold hover:bg-goldHover text-darker font-bold px-6 py-2 rounded-lg transition-all shadow-[0_0_15px_rgba(204,164,59,0.5)] animate-in fade-in zoom-in duration-300"
+                >
+                  Omitir Anuncio ⏭
+                </button>
+              ) : (
+                <div className="bg-black/60 backdrop-blur-md px-4 py-2 border border-white/10 text-xs font-medium text-white rounded-lg">
+                  Podrás omitir en {Math.max(0, Math.ceil(30 - adCurrentTime))}s...
+                </div>
+              )}
+              <div className="w-48 h-1.5 bg-black/50 rounded-full overflow-hidden border border-white/5">
                 <div
-                  className="h-full bg-gold transition-all duration-300"
-                  style={{ width: `${((AD_DURATION - adTimeLeft) / AD_DURATION) * 100}%` }}
+                  className="h-full bg-white/40 transition-all duration-300"
+                  style={{ width: `${Math.min((adCurrentTime / AD_DURATION) * 100, 100)}%` }}
                 ></div>
               </div>
             </div>
@@ -189,7 +193,7 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
         )}
 
         {/* Portada Inicial si no está reproduciendo ni mostrando anuncio */}
-        {!isPlaying && !showAd && (
+        {!playRequested && !showAd && (
           <div className="absolute inset-0 z-20 bg-darker flex items-center justify-center">
             <button 
               onClick={handlePlayRequest}
@@ -202,24 +206,32 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
         )}
 
         {/* Reproductor de Cloudflare Principal */}
-        {isPlaying && !isPlayingThisInPodcast && videoSrc && (
-          <Stream
-            streamRef={streamRef}
-            src={videoSrc}
-            controls
-            autoplay
-            className={cn("w-full h-full object-contain relative z-10 border-none")}
-            onTimeUpdate={() => {
+        {playRequested && !showAd && !isPlayingThisInPodcast && videoSrc && (
+          <div className="w-full h-full absolute inset-0 z-10 bg-black">
+            <Stream
+              streamRef={streamRef}
+              src={videoSrc}
+              controls
+              autoplay
+              preload="auto"
+              className="w-full h-full border-none"
+              onTimeUpdate={() => {
               if (streamRef.current) {
                 // Sincronización en la primera carga si venimos del modo podcast
                 if (!initializedTimeRef.current && streamRef.current.duration > 0 && lastKnownTime > 0) {
                   streamRef.current.currentTime = lastKnownTime;
                   initializedTimeRef.current = true;
                 }
-                setLastKnownTime(streamRef.current.currentTime);
+                // Reducir la frecuencia de actualización de estado para evitar lag visual
+                // Solo actualizamos el store cada ~1 segundo en lugar de cada milisegundo
+                const currentTime = streamRef.current.currentTime;
+                if (Math.abs(currentTime - lastKnownTime) > 1) {
+                  setLastKnownTime(currentTime);
+                }
               }
             }}
           />
+        </div>
         )}
       </div>
     </div>

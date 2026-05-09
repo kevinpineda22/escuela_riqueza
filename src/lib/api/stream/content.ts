@@ -5,6 +5,7 @@ export interface Module {
   title: string;
   description: string | null;
   order_index: number;
+  allowed_plans: ("free" | "individual" | "vip")[];
   is_published: boolean;
   created_at: string;
 }
@@ -16,7 +17,7 @@ export interface Lesson {
   description: string | null;
   order_index: number;
   stream_uid: string | null;
-  required_plan: "free" | "individual" | "vip";
+  allowed_plans: ("free" | "individual" | "vip")[];
   is_published: boolean;
   created_at: string;
 }
@@ -33,13 +34,13 @@ export async function fetchModules(): Promise<Module[]> {
   return data || [];
 }
 
-export async function createModule(title: string, description: string = ""): Promise<Module> {
+export async function createModule(title: string, description: string = "", allowed_plans: ("free" | "individual" | "vip")[] = ["free", "individual", "vip"]): Promise<Module> {
   const { data: countData } = await supabase.from("modules").select("id", { count: "exact" });
   const count = countData ? countData.length : 0;
 
   const { data, error } = await supabase
     .from("modules")
-    .insert([{ title, description, order_index: count }])
+    .insert([{ title, description, allowed_plans, order_index: count }])
     .select()
     .single();
 

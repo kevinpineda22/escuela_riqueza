@@ -15,18 +15,19 @@ const AdminContentManager = () => {
 
   const [newModuleTitle, setNewModuleTitle] = useState("");
   const [newModuleDescription, setNewModuleDescription] = useState("");
+  const [newModuleAllowedPlans, setNewModuleAllowedPlans] = useState<("free" | "individual" | "vip")[]>(["free", "individual", "vip"]);
   const [isCreatingModule, setIsCreatingModule] = useState(false);
   const [addingToModule, setAddingToModule] = useState<string | null>(null);
   
   const [lessonForm, setLessonForm] = useState<{
     title: string;
     description: string;
-    required_plan: "free" | "individual" | "vip";
+    allowed_plans: ("free" | "individual" | "vip")[];
     file: File | null;
   }>({
     title: "",
     description: "",
-    required_plan: "free",
+    allowed_plans: ["free", "individual", "vip"],
     file: null,
   });
   const [editingModule, setEditingModule] = useState<Module | null>(null);
@@ -45,11 +46,17 @@ const AdminContentManager = () => {
       setModules(mods);
       
       const newLessonsMap: Record<string, Lesson[]> = {};
-      for (const m of mods) {
+      
+      // Optimizamos la carga de lecciones obteniéndolas todas en paralelo
+      await Promise.all(mods.map(async (m) => {
         newLessonsMap[m.id] = await fetchLessons(m.id);
-        // Expandir por defecto si es el primer módulo
-        if (m === mods[0]) setExpandedModules(prev => ({ ...prev, [m.id]: true }));
+      }));
+
+      // Expandir por defecto si es el primer módulo
+      if (mods.length > 0) {
+        setExpandedModules(prev => ({ ...prev, [mods[0].id]: true }));
       }
+      
       setLessonsMap(newLessonsMap);
     } catch (err) {
       console.error("Error loading content:", err);
@@ -66,12 +73,13 @@ const AdminContentManager = () => {
   const handleCreateModule = async () => {
     if (!newModuleTitle.trim()) return;
     try {
-      const newMod = await createModule(newModuleTitle, newModuleDescription);
+      const newMod = await createModule(newModuleTitle, newModuleDescription, newModuleAllowedPlans);
       setModules([...modules, newMod]);
       setLessonsMap(prev => ({ ...prev, [newMod.id]: [] }));
       setExpandedModules(prev => ({ ...prev, [newMod.id]: true }));
       setNewModuleTitle("");
       setNewModuleDescription("");
+      setNewModuleAllowedPlans(["free", "individual", "vip"]);
       setIsCreatingModule(false);
     } catch (err) {
       console.error(err);
@@ -85,7 +93,8 @@ const AdminContentManager = () => {
     try {
       const updated = await updateModule(editingModule.id, { 
         title: editingModule.title,
-        description: editingModule.description
+        description: editingModule.description,
+        allowed_plans: editingModule.allowed_plans
       });
       setModules(modules.map(m => m.id === updated.id ? updated : m));
       setEditingModule(null);
@@ -149,7 +158,7 @@ const AdminContentManager = () => {
         module_id: moduleId,
         title: lessonForm.title,
         description: lessonForm.description,
-        required_plan: lessonForm.required_plan,
+        allowed_plans: lessonForm.allowed_plans,
         stream_uid,
         is_published: true,
       });
@@ -160,7 +169,8 @@ const AdminContentManager = () => {
       }));
 
       setAddingToModule(null);
-      setLessonForm({ title: "", description: "", required_plan: "free", file: null });
+      setLessonForm({ title: "", description: "", allowed_plans: ["free", "individual", "vip"], file: null });
+      alert("¡Lección creada y video subido correctamente! ✅");
     } catch (err) {
       console.error(err);
       alert("Error al crear lección. Verifica los permisos RLS en Supabase.");
@@ -212,7 +222,7 @@ const AdminContentManager = () => {
       const updated = await updateLesson(editingLesson.id, {
         title: editingLesson.title,
         description: editingLesson.description,
-        required_plan: editingLesson.required_plan,
+        allowed_plans: editingLesson.allowed_plans,
         stream_uid: stream_uid
       });
       setLessonsMap(prev => ({
@@ -220,6 +230,7 @@ const AdminContentManager = () => {
         [updated.module_id]: prev[updated.module_id].map(l => l.id === updated.id ? updated : l)
       }));
       setEditingLesson(null);
+      alert("¡Lección actualizada con éxito! ✅");
     } catch (err) {
       alert("Error actualizando lección");
     } finally {
@@ -276,6 +287,26 @@ const AdminContentManager = () => {
                 placeholder="Descripción (opcional)..."
                 className="bg-black/50 text-white px-3 py-2 rounded-lg outline-none text-sm w-full border border-white/10 focus:border-gold resize-none h-20"
               />
+              <div className="flex gap-2 items-center bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
+                <span className="text-white/60 text-xs mr-1">Planes:</span>
+                {["free", "individual", "vip"].map((plan) => (
+                  <label key={plan} className="flex items-center gap-1 cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={newModuleAllowedPlans.includes(plan as any)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setNewModuleAllowedPlans([...newModuleAllowedPlans, plan as any]);
+                        } else {
+                          setNewModuleAllowedPlans(newModuleAllowedPlans.filter(p => p !== plan));
+                        }
+                      }}
+                      className="accent-gold bg-black/50 border-white/20 rounded w-3 h-3"
+                    />
+                    <span className="capitalize text-xs">{plan}</span>
+                  </label>
+                ))}
+              </div>
               <div className="flex gap-2 justify-end">
                 <button 
                   onClick={() => setIsCreatingModule(false)}
@@ -345,6 +376,29 @@ const AdminContentManager = () => {
                       placeholder="Descripción del módulo"
                       className="w-full bg-black/50 border border-white/20 rounded-md px-3 py-1.5 text-sm text-white outline-none focus:border-gold resize-none h-16"
                     />
+                    <div className="flex gap-2 items-center bg-black/50 border border-white/20 rounded-md px-3 py-1.5 text-sm">
+                      <span className="text-white/60 text-xs">Planes:</span>
+                      {["free", "individual", "vip"].map((plan) => (
+                        <label key={plan} className="flex items-center gap-1 text-white/80 cursor-pointer">
+                          <input 
+                            type="checkbox" 
+                            checked={editingModule?.allowed_plans?.includes(plan as any)}
+                            onChange={(e) => {
+                              if (editingModule) {
+                                const plans = editingModule.allowed_plans || [];
+                                if (e.target.checked) {
+                                  setEditingModule({...editingModule, allowed_plans: [...plans, plan as any]});
+                                } else {
+                                  setEditingModule({...editingModule, allowed_plans: plans.filter(p => p !== plan)});
+                                }
+                              }
+                            }}
+                            className="accent-gold bg-black/50 border-white/20 rounded"
+                          />
+                          <span className="capitalize text-xs">{plan}</span>
+                        </label>
+                      ))}
+                    </div>
                   </form>
                 </div>
               ) : (
@@ -461,15 +515,26 @@ const AdminContentManager = () => {
                               </div>
 
                               <div className="flex gap-2">
-                                <select 
-                                  value={editingLesson.required_plan} 
-                                  onChange={e => setEditingLesson({...editingLesson, required_plan: e.target.value as "free" | "individual" | "vip"})}
-                                  className="flex-1 bg-black/50 border border-white/20 rounded-md px-3 py-1.5 text-sm text-white outline-none"
-                                >
-                                  <option value="free">Free</option>
-                                  <option value="individual">Individual</option>
-                                  <option value="vip">VIP</option>
-                                </select>
+                                <div className="flex-1 flex gap-2 items-center bg-black/50 border border-white/20 rounded-md px-3 py-1.5 text-sm">
+                                  {["free", "individual", "vip"].map((plan) => (
+                                    <label key={plan} className="flex items-center gap-1 text-white/80 cursor-pointer">
+                                      <input 
+                                        type="checkbox" 
+                                        checked={editingLesson.allowed_plans?.includes(plan as any)}
+                                        onChange={(e) => {
+                                          const plans = editingLesson.allowed_plans || [];
+                                          if (e.target.checked) {
+                                            setEditingLesson({...editingLesson, allowed_plans: [...plans, plan as any]});
+                                          } else {
+                                            setEditingLesson({...editingLesson, allowed_plans: plans.filter(p => p !== plan)});
+                                          }
+                                        }}
+                                        className="accent-gold bg-black/50 border-white/20 rounded"
+                                      />
+                                      <span className="capitalize text-xs">{plan}</span>
+                                    </label>
+                                  ))}
+                                </div>
                                 <button type="submit" disabled={uploading} className="bg-gold hover:bg-goldHover text-darker px-4 py-1.5 rounded-md text-sm font-bold disabled:opacity-50 flex items-center gap-2">
                                   {uploading ? "Subiendo..." : "Guardar"}
                                 </button>
@@ -485,15 +550,17 @@ const AdminContentManager = () => {
                                   {lesson.title}
                                   {!lesson.is_published && <span className="text-[10px] bg-white/10 text-white/60 px-1.5 py-0.5 rounded font-normal">Oculta</span>}
                                 </p>
-                                <div className="flex gap-2 items-center mt-1">
-                                  <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${
-                                    lesson.required_plan === 'free' ? 'bg-green-500/10 text-green-400' : 
-                                    lesson.required_plan === 'individual' ? 'bg-blue-500/10 text-blue-400' : 
-                                    'bg-purple-500/10 text-purple-400'
-                                  }`}>
-                                    {lesson.required_plan}
-                                  </span>
-                                  {lesson.stream_uid && <span className="text-[10px] text-white/30 flex items-center gap-1"><CheckCircle2 size={10}/> Video Subido</span>}
+                                <div className="flex gap-1 items-center mt-1">
+                                  {lesson.allowed_plans?.map(plan => (
+                                    <span key={plan} className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded ${
+                                      plan === 'free' ? 'bg-green-500/10 text-green-400' : 
+                                      plan === 'individual' ? 'bg-blue-500/10 text-blue-400' : 
+                                      'bg-purple-500/10 text-purple-400'
+                                    }`}>
+                                      {plan}
+                                    </span>
+                                  ))}
+                                  {lesson.stream_uid && <span className="text-[10px] text-white/30 flex items-center gap-1 ml-1"><CheckCircle2 size={10}/> Video Subido</span>}
                                 </div>
                               </div>
                             </div>
@@ -543,14 +610,27 @@ const AdminContentManager = () => {
                                   className="w-full bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-gold outline-none resize-none h-20"
                                 />
                               </div>
-                              <select 
-                                value={lessonForm.required_plan} onChange={e => setLessonForm({...lessonForm, required_plan: e.target.value as "free" | "individual" | "vip"})}
-                                className="bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-gold outline-none cursor-pointer"
-                              >
-                                <option value="free">Plan Free</option>
-                                <option value="individual">Plan Individual</option>
-                                <option value="vip">Plan VIP</option>
-                              </select>
+                              <div className="md:col-span-2 flex items-center gap-4 bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
+                                <span className="text-white/60">Planes permitidos:</span>
+                                {["free", "individual", "vip"].map((plan) => (
+                                  <label key={plan} className="flex items-center gap-1.5 cursor-pointer">
+                                    <input 
+                                      type="checkbox" 
+                                      checked={lessonForm.allowed_plans.includes(plan as any)}
+                                      onChange={(e) => {
+                                        const plans = lessonForm.allowed_plans;
+                                        if (e.target.checked) {
+                                          setLessonForm({...lessonForm, allowed_plans: [...plans, plan as any]});
+                                        } else {
+                                          setLessonForm({...lessonForm, allowed_plans: plans.filter(p => p !== plan)});
+                                        }
+                                      }}
+                                      className="accent-gold bg-black/50 border-white/20 rounded"
+                                    />
+                                    <span className="capitalize">{plan}</span>
+                                  </label>
+                                ))}
+                              </div>
                               
                               <div className="md:col-span-2">
                                 <div 
@@ -615,7 +695,7 @@ const AdminContentManager = () => {
                         <button 
                           onClick={() => {
                             setAddingToModule(mod.id);
-                            setLessonForm({ title: "", description: "", required_plan: "free", file: null });
+                            setLessonForm({ title: "", description: "", allowed_plans: ["free", "individual", "vip"], file: null });
                           }}
                           className="w-full flex items-center justify-center gap-2 py-3 border border-dashed border-white/20 rounded-xl text-white/40 hover:text-gold hover:border-gold/50 hover:bg-gold/5 transition-all text-sm font-semibold mt-2 cursor-pointer"
                         >

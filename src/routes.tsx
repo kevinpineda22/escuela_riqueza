@@ -9,6 +9,7 @@ import AdminMetrics from "@/pages/admin/AdminMetrics";
 import AdminContentManager from "@/pages/admin/AdminContentManager";
 import AdminUsers from "@/pages/admin/AdminUsers";
 import AdminSettings from "@/pages/admin/AdminSettings";
+import AdminLiveManager from "@/pages/admin/AdminLiveManager";
 import RequireAuth from "@/components/layout/RequireAuth";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { PLANS, USER_ROLES } from "@/types/user";
@@ -54,6 +55,7 @@ const AppRoutes = () => {
         <Route index element={<Navigate to="/admin/content" replace />} />
         <Route path="metrics" element={<AdminMetrics />} />
         <Route path="content" element={<AdminContentManager />} />
+        <Route path="lives" element={<AdminLiveManager />} />
         <Route path="users" element={<AdminUsers />} />
         <Route path="settings" element={<AdminSettings />} />
       </Route>

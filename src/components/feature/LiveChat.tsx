@@ -82,9 +82,9 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000" }: { liveId?
       }
 
       // 2. Suscribirse a nuevos mensajes (Realtime)
-      const newChannel = supabase.channel(`live_messages_${liveId}`);
+      channel = supabase.channel(`live_messages_${liveId}`);
       
-      newChannel.on(
+      channel.on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "live_messages", filter: `live_id=eq.${liveId}` },
         async (payload) => {
@@ -95,7 +95,7 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000" }: { liveId?
             .from("profiles")
             .select("full_name")
             .eq("id", newMsg.user_id)
-            .single();
+            .maybeSingle();
 
           const incomingMessage: ChatMessage = {
             id: newMsg.id,
@@ -107,14 +107,12 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000" }: { liveId?
 
           setMessages((prev) => [...prev, incomingMessage]);
         }
-      );
-      
-      newChannel.subscribe();
-      channel = newChannel;
+      ).subscribe();
     };
 
     initChat();
 
+    // Cleanup de la suscripción al desmontar
     return () => {
       if (channel) {
         supabase.removeChannel(channel);
@@ -149,7 +147,10 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000" }: { liveId?
         <p className="text-xs text-green-400">● Conectado</p>
       </div>
 
-      <div className="flex-1 min-h-0 p-4 overflow-y-auto space-y-4 scroll-smooth">
+      <div 
+        className="flex-1 min-h-0 p-4 overflow-y-auto space-y-4 scroll-smooth"
+        data-lenis-prevent="true"
+      >
         {messages.map((msg) => (
           <div
             key={msg.id}
