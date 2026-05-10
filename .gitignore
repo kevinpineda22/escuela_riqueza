@@ -22,6 +22,7 @@ dist-ssr
 supabase/.branches
 supabase/.temp
 
+
 # Vercel
 .vercel
 
