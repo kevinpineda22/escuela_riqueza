@@ -35,7 +35,7 @@ export const HeroCinematic = () => {
   return (
     <section
       id="historia"
-      className="relative min-h-[100svh] w-full flex items-center pt-24 pb-24 md:pt-20 md:pb-20 overflow-hidden"
+      className="relative min-h-[calc(100svh-4rem)] w-full flex items-center pt-10 pb-24 md:pt-12 md:pb-20 overflow-hidden"
     >
       <div className="relative max-w-7xl mx-auto px-6 w-full grid grid-cols-1 md:grid-cols-12 gap-8 lg:gap-12 items-center">
         <div className="md:col-span-7 z-20 flex flex-col items-start text-left order-2 md:order-1">

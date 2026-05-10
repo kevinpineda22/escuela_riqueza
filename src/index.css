@@ -47,3 +47,16 @@
     text-wrap: pretty;
   }
 }
+
+/* Cuando el toggle global de animaciones está apagado, neutralizamos todas las
+   transitions y keyframes CSS. Framer Motion y Lenis ya están apagados desde
+   MotionProvider; esto cubre el resto. */
+html[data-reduce-motion="true"] *,
+html[data-reduce-motion="true"] *::before,
+html[data-reduce-motion="true"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+

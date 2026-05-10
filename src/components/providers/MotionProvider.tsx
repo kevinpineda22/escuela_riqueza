@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from "react";
 import Lenis from "lenis";
 import { MotionConfig } from "motion/react";
 import { useIsDesktop, usePrefersReducedMotion } from "@/hooks/useMediaQuery";
+import { usePreferencesStore } from "@/stores/preferences.store";
 
 interface MotionProviderProps {
   children: ReactNode;
@@ -10,11 +11,14 @@ interface MotionProviderProps {
 const MotionProvider = ({ children }: MotionProviderProps) => {
   const isDesktop = useIsDesktop();
   const prefersReducedMotion = usePrefersReducedMotion();
+  const animationsEnabled = usePreferencesStore((s) => s.animationsEnabled);
+
+  // El usuario ganó: si apaga animaciones desde el toggle, o el SO pide reduce,
+  // entramos en modo "reducido". Esto apaga Framer Motion y Lenis.
+  const reduce = prefersReducedMotion || !animationsEnabled;
 
   useEffect(() => {
-    // Lenis solo en desktop y solo si el usuario no pidió reducir motion.
-    // En mobile rompe el scroll nativo (momentum, sticky, etc.).
-    if (!isDesktop || prefersReducedMotion) return;
+    if (!isDesktop || reduce) return;
 
     const lenis = new Lenis({
       duration: 1.1,
@@ -34,10 +38,17 @@ const MotionProvider = ({ children }: MotionProviderProps) => {
       cancelAnimationFrame(rafId);
       lenis.destroy();
     };
-  }, [isDesktop, prefersReducedMotion]);
+  }, [isDesktop, reduce]);
+
+  // Reflejamos la preferencia en <html data-reduce-motion> para que CSS pueda
+  // apagar animaciones puramente CSS (transitions, keyframes) si hace falta.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.documentElement.dataset.reduceMotion = reduce ? "true" : "false";
+  }, [reduce]);
 
   return (
-    <MotionConfig reducedMotion={prefersReducedMotion ? "always" : "never"}>{children}</MotionConfig>
+    <MotionConfig reducedMotion={reduce ? "always" : "never"}>{children}</MotionConfig>
   );
 };
 
