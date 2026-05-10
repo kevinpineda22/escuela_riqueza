@@ -42,7 +42,9 @@ const ResetPassword = () => {
     };
     checkSession();
 
-    const { data: subscription } = supabase.auth.onAuthStateChange((event) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
       if (!mounted) return;
       if (event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") {
         setHasRecoverySession(true);
@@ -51,7 +53,7 @@ const ResetPassword = () => {
 
     return () => {
       mounted = false;
-      subscription.subscription.unsubscribe();
+      subscription.unsubscribe();
     };
   }, []);
 

@@ -141,14 +141,11 @@ export async function updatePassword(newPassword: string): Promise<void> {
 }
 
 export async function getCurrentUser(): Promise<User | null> {
-  console.log("[getCurrentUser] Awaiting getSession...");
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) {
-    console.log("[getCurrentUser] No session user");
     return null;
   }
 
-  console.log("[getCurrentUser] Awaiting profiles...");
   const { data: profileData, error: profileError } = await supabase
     .from("profiles")
     .select("*")
@@ -159,7 +156,6 @@ export async function getCurrentUser(): Promise<User | null> {
     console.warn("[getCurrentUser] profileError:", profileError);
   }
 
-  console.log("[getCurrentUser] Awaiting subscriptions...");
   const { data: subData, error: subError } = await supabase
     .from("subscriptions")
     .select("plan")
@@ -173,7 +169,6 @@ export async function getCurrentUser(): Promise<User | null> {
     console.warn("[getCurrentUser] subError:", subError);
   }
 
-  console.log("[getCurrentUser] Mapping profile...");
   return mapProfileToUser(
     profileData || { id: session.user.id, role: USER_ROLES.STUDENT },
     session.user,
