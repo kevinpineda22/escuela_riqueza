@@ -1,9 +1,10 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import LandingPage from "@/pages/public/LandingPage";
-import Login from "@/pages/public/Login";
-import Signup from "@/pages/public/Signup";
+import AuthPage from "@/pages/public/AuthPage";
+import ResetPassword from "@/pages/public/ResetPassword";
+import NotFound from "@/pages/public/NotFound";
 import LessonViewer from "@/pages/student/LessonViewer";
-import Dashboard from "@/pages/student/Dashboard";
+import StudentDashboard from "@/pages/student/StudentDashboard";
 import VIPLiveRoom from "@/pages/student/VIPLiveRoom";
 import AdminMetrics from "@/pages/admin/AdminMetrics";
 import AdminContentManager from "@/pages/admin/AdminContentManager";
@@ -20,15 +21,17 @@ const AppRoutes = () => {
       {/* Públicas */}
       <Route path="/" element={<LandingPage />} />
       <Route path="/leccion" element={<LessonViewer />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/registro" element={<Signup />} />
+      <Route path="/login" element={<AuthPage initialMode="signin" />} />
+      <Route path="/registro" element={<AuthPage initialMode="signup" />} />
+      <Route path="/recuperar-contrasena" element={<AuthPage initialMode="forgot" />} />
+      <Route path="/restablecer-contrasena" element={<ResetPassword />} />
 
       {/* Estudiantes (cualquier plan logueado) */}
       <Route
         path="/dashboard"
         element={
           <RequireAuth>
-            <Dashboard />
+            <StudentDashboard />
           </RequireAuth>
         }
       />
@@ -59,6 +62,9 @@ const AppRoutes = () => {
         <Route path="users" element={<AdminUsers />} />
         <Route path="settings" element={<AdminSettings />} />
       </Route>
+
+      {/* 404 catch-all */}
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 };

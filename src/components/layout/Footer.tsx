@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import AnimationToggle from "@/components/feature/AnimationToggle";
 
 const Footer = () => {
   return (
@@ -65,8 +66,11 @@ const Footer = () => {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 mt-12 pt-8 border-t border-white/5 text-center text-xs text-textMuted">
-        © {new Date().getFullYear()} Escuela de la Riqueza. Todos los derechos reservados.
+      <div className="max-w-7xl mx-auto px-6 mt-12 pt-8 border-t border-white/5 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-textMuted">
+        <span className="text-center md:text-left">
+          © {new Date().getFullYear()} Escuela de la Riqueza. Todos los derechos reservados.
+        </span>
+        <AnimationToggle variant="labeled" />
       </div>
     </footer>
   );

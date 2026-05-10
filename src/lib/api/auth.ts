@@ -114,24 +114,60 @@ export async function signOut(): Promise<void> {
   await supabase.auth.signOut();
 }
 
+export async function requestPasswordReset(email: string): Promise<void> {
+  const redirectTo = `${window.location.origin}/restablecer-contrasena`;
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo,
+  });
+
+  if (error) {
+    throw new ApiError("reset_email_error", error.message, 400);
+  }
+}
+
+export async function updatePassword(newPassword: string): Promise<void> {
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+
+  if (error) {
+    if (error.message.toLowerCase().includes("session")) {
+      throw new ApiError(
+        "no_recovery_session",
+        "El enlace expiró o ya fue utilizado. Solicita uno nuevo.",
+        401
+      );
+    }
+    throw new ApiError("update_password_error", error.message, 400);
+  }
+}
+
 export async function getCurrentUser(): Promise<User | null> {
   const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user) return null;
+  if (!session?.user) {
+    return null;
+  }
 
-  const { data: profileData } = await supabase
+  const { data: profileData, error: profileError } = await supabase
     .from("profiles")
     .select("*")
     .eq("id", session.user.id)
-    .single();
+    .maybeSingle(); // Changed from .single() to maybeSingle() to avoid throw if not found
 
-  const { data: subData } = await supabase
+  if (profileError) {
+    console.warn("[getCurrentUser] profileError:", profileError);
+  }
+
+  const { data: subData, error: subError } = await supabase
     .from("subscriptions")
     .select("plan")
     .eq("user_id", session.user.id)
     .eq("status", "active")
     .order("updated_at", { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle(); // Changed from .single() to maybeSingle()
+
+  if (subError) {
+    console.warn("[getCurrentUser] subError:", subError);
+  }
 
   return mapProfileToUser(
     profileData || { id: session.user.id, role: USER_ROLES.STUDENT },

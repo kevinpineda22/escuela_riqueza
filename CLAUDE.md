@@ -27,22 +27,23 @@
 |---|---|---|
 | Build / dev | Vite 8 | ✅ instalado |
 | UI | React 19 | ✅ instalado |
-| Lenguaje | TypeScript | ❌ pendiente migración |
+| Lenguaje | TypeScript | ✅ migrado (todos los `.tsx`) |
 | Routing | React Router DOM 7 | ✅ instalado |
 | Estilos | Tailwind CSS 4 (`@tailwindcss/vite`) | ✅ instalado |
-| UI primitives | shadcn/ui | ❌ pendiente |
+| UI primitives | shadcn/ui (Radix + button, sheet, select, dropdown, accordion, tooltip) | ✅ instalado |
+| Animaciones | motion (Framer Motion v12) + Lenis (smooth scroll desktop) | ✅ instalado |
 | Iconos | lucide-react | ✅ instalado |
-| Forms + validación | react-hook-form + zod | ❌ pendiente |
-| State cliente | zustand (mínimo) | ❌ pendiente |
-| Server state | @tanstack/react-query | ❌ pendiente |
-| Auth + DB + Realtime + Storage | Supabase | ❌ pendiente |
-| VOD + Live | Cloudflare Stream | ❌ pendiente |
+| Forms + validación | react-hook-form + zod (v4) | ✅ instalado |
+| State cliente | zustand (auth.store, preferences.store) | ✅ instalado |
+| Server state | @tanstack/react-query | ✅ instalado |
+| Auth + DB + Realtime + Storage | Supabase | ✅ integrado (auth real, RLS, realtime chat) |
+| VOD + Live | Cloudflare Stream | ✅ integrado (upload directo + Live Inputs) |
 | Storage de recursos (PDFs) | Cloudflare R2 | ❌ pendiente |
-| Pagos | Stripe (Subscriptions) | ❌ pendiente |
-| Backend mínimo | Vercel Serverless Functions (`/api/*.ts`) | ❌ pendiente |
+| Pagos | Stripe (Subscriptions) | ❌ pendiente (mock plan en perfil) |
+| Backend mínimo | Vercel Serverless Functions (`/api/*.ts`) | 🟡 parcial (`/api/stream/upload-url.ts`) |
 | SEO landing | vite-prerender-plugin | ❌ pendiente |
-| Tests | Vitest + @testing-library/react | ❌ pendiente |
-| Deploy | Vercel | ❌ pendiente |
+| Tests | Vitest + @testing-library/react | ✅ configurado (sin cobertura aún) |
+| Deploy | Vercel | ✅ deployando |
 
 > **No hay backend Express standalone.** El "backend" es: Supabase (auth/DB/realtime) + Cloudflare (video/storage) + Stripe (pagos) + un puñado de Vercel Functions para firmar URLs y recibir webhooks.
 
@@ -229,23 +230,124 @@ for select using (
 
 ---
 
-## 10. Estado del proyecto (Actualizado)
+## 10. Estado del proyecto (Actualizado 2026-05-10)
 
-**Implementado recientemente (Real Supabase + Cloudflare)**:
-- **Gestión de Contenido (Admin)**: `AdminContentManager.tsx` migrado a CRUD real con Supabase. Soporta creación, edición, eliminación de Módulos y Lecciones.
-- **Upload a Cloudflare Stream**: Implementado mediante Vercel Serverless Functions (`/api/stream/upload-url.ts`) para firmar la URL de subida y hacer fetch con FormData desde el cliente de manera segura sin exponer tokens.
-- **Lógica de Planes (Arrays)**: Se migró la columna `required_plan` (string) a `allowed_plans` (array de strings) en las tablas `modules`, `lessons` y `lives` para soportar acceso múltiple a un mismo contenido usando checkboxes.
-- **Filtrado para Alumnos**: `Dashboard.tsx` ahora filtra estrictamente los módulos y lecciones comparando `user.plan` contra el array `allowed_plans`. Usuarios *Free* no ven contenido *VIP* o *Individual*.
-- **Publicidad Nativa (Plan Free)**: `LessonPlayer.tsx` reescrito con lógica profesional de pre-roll. Usa el componente nativo `<Stream>` de Cloudflare bloqueando controles y clics (pointer-events-none), cuenta con *pillarboxing* real (objectFit contain), botón de omitir a los 30s, e inicia la lección *solo* tras omitir/terminar el anuncio para cumplir con reglas de autoplay del navegador.
-- **Gestor de Eventos en Vivo (Admin)**: `AdminLiveManager.tsx` convertido a CRUD funcional. Soporta listar, crear y eliminar salas. Permite asignar accesos (allowed_plans) e incluye un botón maestro "Forzar EN VIVO" que controla la columna `is_active` (forzando apagado en las demás salas).
-- **Flujo de Lives**: Preparado para Cloudflare Live Inputs. El admin pega el *Live Input ID* y usa OBS Studio (vía RTMP+Key) para transmitir.
+### 10.1 Funcionalidad implementada
 
-**Próximos pasos sugeridos** (en orden):
-1. Auth real: reemplazar `Login.jsx` mock con `supabase.auth.signInWithPassword`. (Pendiente)
-2. Setup shadcn/ui + react-hook-form + zod. (Pendiente)
-3. Reproducción protegida (`/api/stream/playback-token.ts`) para evitar descargas o compartición de URLs en los planes premium.
-4. Stripe Subscriptions + webhook `/api/stripe/webhook.ts` para cambiar el rol/plan automáticamente al pagar.
-5. Prerender de la landing.
+**Auth (real, Supabase)**
+- `AuthPage.tsx` unificado: 3 modos en la misma shell — `signin` / `signup` / `forgot`. Sin navegar entre rutas.
+- Mecánica desktop: card 860×560 con dos formularios siempre montados + overlay dorado deslizante con Framer Motion. Mobile: tabs + crossfade.
+- `forgot` se trata como `signin` para el overlay (queda a la derecha). El submit muestra estado "Revisa tu correo".
+- Rutas: `/login`, `/registro`, `/recuperar-contrasena`, `/restablecer-contrasena` (esta última sigue como `ResetPassword.tsx` standalone para honrar el deep-link del email).
+- Supabase Auth + RLS por plan. `useAuth` hook + `useAuthStore` (zustand).
+
+**Contenido y reproducción**
+- `AdminContentManager.tsx`: CRUD real de módulos y lecciones contra Supabase.
+- `AdminVideoUpload.tsx`: drag & drop a Cloudflare Stream vía `/api/stream/upload-url.ts` (Vercel Function que firma el upload directo).
+- `LessonPlayer.tsx`: pre-roll con `<Stream>` de Cloudflare, pillarboxing real, skip a los 30s, autoplay-friendly.
+- `LessonViewer.tsx`: modo podcast + notas + playlist por módulo.
+- Lógica de planes: columna `allowed_plans` (array) en `modules`, `lessons`, `lives`. Filtrado estricto en `StudentDashboard.tsx` por `user.plan`.
+
+**Lives**
+- `AdminLiveManager.tsx`: CRUD de salas, asignación de planes, botón "Forzar EN VIVO" (mutex en columna `is_active`).
+- `VIPLiveRoom.tsx`: countdown + reproductor + chat realtime (Supabase Realtime channel `live:{liveId}`).
+- `LiveChat.tsx`: chat funcional con scroll y broadcast en tiempo real.
+
+**Admin shell**
+- `AdminLayout.tsx`: sidebar premium con shimmer en item activo, profile card, mouse-tracking glow, animated orbs en fondo. Sheet en mobile.
+
+**Animación / preferencias**
+- `MotionProvider.tsx`: envuelve la app en `MotionConfig`, controla Lenis en desktop, respeta `prefers-reduced-motion` y el toggle global del usuario.
+- `AnimationToggle.tsx`: control persistido en `preferences.store` (zustand).
+
+### 10.2 Funcionalidad pendiente (la trabaja el compañero de equipo)
+- `/api/stream/playback-token.ts` — token firmado para reproducir VOD premium sin que se filtre la URL.
+- `/api/stripe/checkout.ts` + `/api/stripe/webhook.ts` — sincronización de plan vía suscripciones.
+- Tabla `subscriptions` real (hoy el plan vive en `users.plan` mock).
+- Generación de tipos `src/types/database.ts` con `supabase gen types`.
+- Cloudflare R2 para PDFs / recursos descargables.
+- Métricas / users / settings en admin (hoy son placeholders "coming soon").
+
+### 10.3 Estado visual por panel (100% frontend — owner del proyecto)
+
+**🟢 PREMIUM (no requieren trabajo de estilo)**
+- `LandingPage.tsx` y todos sus actos (`HeroCinematic`, `AwakeningAct`, `IntelligencesAct`, `PathAct`, `PlansAct`).
+- `AuthPage.tsx` (signin/signup/forgot) y `ResetPassword.tsx`.
+- `NotFound.tsx` (404 cinemático), `ErrorBoundary` (UI premium con retry), `AuthSplash` (logo halo + ring).
+- `AdminLayout.tsx` y `AdminVideoUpload.tsx`.
+- `AdminMetrics.tsx`, `AdminUsers.tsx`, `AdminSettings.tsx` (Fase 3 completada con recharts y mocks).
+- `StudentDashboard.tsx` (Fase 4 parcial: rediseño UX mobile-first, grid de módulos, drill-down, transiciones AnimatePresence).
+
+**🟡 DECENT (gold/dark aplicado pero falta polish)**
+- `VIPLiveRoom.tsx` — falta: transición cinemática countdown → live, parallax bg, chat con diseño.
+- `Header.tsx` — falta: menú mobile funcional (botón existe pero no abre nada).
+- `Footer.tsx` — falta: gradient sutil, separador animado, vida visual.
+- `AdminContentManager.tsx` — falta: skeleton, focus-state animado, depth en upload zone.
+- `AdminLiveManager.tsx` — falta: fade-in en preview imagen, depth en form, skeleton.
+- `LessonPlayer.tsx` — falta: skeleton al cargar metadata, skin custom sobre `<Stream>`.
+- `GlobalPodcastPlayer.tsx` — falta: thumb del slider custom, pulse en barras, expand/collapse mobile.
+
+**🔴 BASIC / MISSING (placeholder o sin identidad)**
+- `LessonViewer.tsx` — playlist sin animación, modal upgrade plano, sin empty states.
+- `LiveChat.tsx` — mensajes sin entrance, input plano, sin skeleton, sin "está escribiendo".
+
+**⚫ Pantallas que aún no existen**
+- "Cuenta verificada / Email confirmado" post-signup (Supabase email link).
+- Detalle de usuario en admin (drill-down desde `AdminUsers`).
+- Página pública `/planes` (hoy solo el acto del landing).
+
+### 10.4 Sistemas transversales
+
+**✅ Construidos (Fase 1 + Fase 2)**
+- **Toaster global** — `src/components/ui/toaster.tsx` (sonner + brand). API: `import { toast } from "@/components/ui/toaster"`.
+- **Skeleton primitives** — `src/components/ui/skeleton.tsx` con variantes `rect` / `circle` / `text` + `SkeletonText` (multiline) + `SkeletonCard` (compose). Shimmer dorado.
+- **EmptyState** — `src/components/ui/empty-state.tsx` con icono lucide, halo gold, float infinito, action slot.
+- **AuthSplash** — `src/components/feature/AuthSplash.tsx` (logo + halo + ring + mensaje).
+- **AuthBootstrap provider** — `src/components/providers/AuthBootstrap.tsx`. En boot revalida sesión Supabase y refresca el store (loop fixeado usando `onAuthStateChange`).
+- **ErrorBoundary** — `src/components/layout/ErrorBoundary.tsx` (clase + fallback default premium o custom).
+- **404 catch-all** — ruta `path="*"` → `NotFound.tsx`.
+- **Tests** — 11 (Skeleton + EmptyState) + 4 (ErrorBoundary) = 15/15 ✅.
+
+**❌ Pendientes**
+1. **Page transitions** — wrapper con `AnimatePresence` por route para fade/slide entre pantallas (Fase Cierre).
+2. **Custom Stream player skin** — wrapper sobre `<Stream>` con controles dorados (Fase 5).
+3. **Modal/Dialog premium** — backdrop blur + scale-in en lugar de radix defaults (Fase Cierre).
+
+### 10.5 Plan de fases de estilo
+
+**✅ Fase 1 — Foundation (transversal)**
+- Toaster + Skeleton + EmptyState + tests.
+
+**✅ Fase 2 — Pantallas globales**
+- NotFound 404 + ErrorBoundary + AuthSplash + AuthBootstrap provider + tests.
+
+**✅ Fase 3 — Admin pages desde cero (Completada)**
+- `AdminMetrics.tsx`: KPIs cards, gráfico áreas (recharts), top módulos. Mock data.
+- `AdminUsers.tsx`: tabla con search + filtros plan/rol + paginación. Mock data.
+- `AdminSettings.tsx`: secciones agrupadas (Marca, Pagos, Notificaciones, Integraciones). Forms premium.
+
+**🔜 Fase 4 — Polish DECENT pages**
+- ✅ `StudentDashboard.tsx`: Rediseño UX mobile-first, sticky nav, drill-down (grid -> player), `AnimatePresence` en tabs, Skeletons implementados, global toaster.
+- ⏳ `VIPLiveRoom.tsx` + `LiveChat.tsx`: transición cinemática countdown → live, parallax bg, rediseñar LiveChat.
+- ⏳ `LessonViewer.tsx`: playlist animada, modal upgrade premium, empty states con `<EmptyState/>`.
+- ⏳ `Header.tsx`: menú mobile funcional usando `<Sheet>` ya disponible.
+- ⏳ `Footer.tsx`: gradient sutil + separador animado.
+
+**🔜 Fase 5 — Player + Admin polish**
+- Custom skin sobre `<Stream>` (Cloudflare) con controles dorados — para `LessonPlayer` y `VIPLiveRoom`.
+- Pulir `GlobalPodcastPlayer` (thumb slider custom, pulse en barras durante playback, expand/collapse mobile).
+- Pulir `AdminContentManager` y `AdminLiveManager` (skeleton, focus animado, depth en upload zones, fade-in preview imagen).
+
+**🔜 Fase Cierre — Transitions globales + Modal premium**
+- Wrapper con `AnimatePresence` en `routes.tsx` para fade/slide entre rutas.
+- Wrapper sobre `Dialog` (radix) con backdrop blur + scale-in para reemplazar los defaults en toda la app.
+
+### 10.6 Reglas operativas para retomar
+- Después de cada módulo terminado: correr `npm run typecheck` + `npx vitest run <files>` antes de cerrar la tarea.
+- Mantener el inventario de tareas vivo (`TaskCreate`/`TaskUpdate`) en cada sesión nueva.
+- Cualquier nuevo primitivo va a `src/components/ui/` con un test al lado (`*.test.tsx`).
+- No volver a meter keyframes CSS en `tailwind.config.js`: las animaciones se hacen con Framer Motion.
+- Toda toast del proyecto entra por `import { toast } from "@/components/ui/toaster"` — NO importar sonner directo.
 
 ---
 
