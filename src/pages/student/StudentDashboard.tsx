@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   BookOpen,
   PlayCircle,
-  Trophy,
   Users,
   Edit3,
   Award,
@@ -19,7 +18,7 @@ import {
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import LessonPlayer from "@/components/feature/LessonPlayer";
-import { SkeletonCard, SkeletonText } from "@/components/ui/skeleton";
+import { SkeletonCard } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { toast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";

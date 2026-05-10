@@ -7,7 +7,6 @@ import {
   TrendingUp, 
   ArrowUpRight, 
   ArrowDownRight,
-  Calendar,
   Filter
 } from "lucide-react";
 import { 
@@ -17,9 +16,7 @@ import {
   YAxis, 
   CartesianGrid, 
   Tooltip as RechartsTooltip, 
-  ResponsiveContainer,
-  BarChart,
-  Bar
+  ResponsiveContainer
 } from "recharts";
 import { cn } from "@/lib/utils";
 
@@ -182,7 +179,7 @@ const AdminMetrics = () => {
                 <RechartsTooltip 
                   contentStyle={{ backgroundColor: '#0a0a0a', borderColor: '#ffffff20', borderRadius: '12px' }}
                   itemStyle={{ color: '#fff' }}
-                  formatter={(value: number) => [`$${value}`, undefined]}
+                  formatter={(value) => [`$${value ?? 0}`, ""]}
                 />
                 <Area 
                   type="monotone" 
