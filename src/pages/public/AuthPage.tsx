@@ -15,6 +15,8 @@ import {
   Sparkles,
   ArrowLeft,
   CheckCircle2,
+  CreditCard,
+  Crown
 } from "lucide-react";
 import {
   loginSchema,
@@ -239,43 +241,159 @@ interface SignUpFormProps {
   compact?: boolean;
 }
 
+type SignupStep = "form" | "plans" | "payment";
+
 const SignUpForm = ({ onSuccess, onSwitch, compact = false }: SignUpFormProps) => {
   const { signUp } = useAuth();
+  const [step, setStep] = useState<SignupStep>("form");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [savedInput, setSavedInput] = useState<SignupInput | null>(null);
+  
+  // Extraer el plan inicial de la URL si existe
+  const searchParams = new URLSearchParams(window.location.search);
+  const initialPlan = searchParams.get("plan") as "free" | "individual" | "vip" || "free";
+  const [selectedPlan, setSelectedPlan] = useState<"free" | "individual" | "vip">(initialPlan);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting },
+    formState: { errors },
   } = useForm<SignupInput>({
     resolver: zodResolver(signupSchema),
     defaultValues: { fullName: "", email: "", password: "", confirmPassword: "" },
   });
 
-  const onSubmit = async (input: SignupInput) => {
+  const onFormSubmit = async (input: SignupInput) => {
+    setSubmitError(null);
+    setSavedInput(input);
+    setStep("plans");
+  };
+
+  const handlePlanSelect = (plan: "free" | "individual" | "vip") => {
+    setSelectedPlan(plan);
+    if (plan === "free") {
+      executeSignup(plan);
+    } else {
+      setStep("payment");
+    }
+  };
+
+  const executeSignup = async (planToUse: string) => {
+    if (!savedInput) return;
+    setIsProcessing(true);
     setSubmitError(null);
     setSuccessMsg(null);
+
     try {
-      await signUp(input);
+      await signUp(savedInput, planToUse);
       setSuccessMsg("¡Cuenta creada! Te redirigimos...");
       setTimeout(onSuccess, 1200);
     } catch (err) {
+      setIsProcessing(false);
+      setStep("form"); // Vuelve al form si falla
       if (err instanceof ApiError) {
-        if (err.message.includes("Revisa tu correo")) setSuccessMsg(err.message);
-        else setSubmitError(err.message);
+        if (err.message.includes("Revisa tu correo")) {
+          setSuccessMsg(err.message);
+        } else {
+          setSubmitError(err.message);
+        }
       } else {
         setSubmitError("No pudimos crear tu cuenta. Inténtalo de nuevo.");
       }
     }
   };
 
+  if (step === "payment") {
+    return (
+      <div className="w-full flex flex-col gap-4 animate-in fade-in slide-in-from-right-4 duration-300">
+        <button onClick={() => setStep("plans")} className="text-white/40 hover:text-white flex items-center gap-2 text-sm w-fit transition-colors">
+          <ArrowLeft size={16} /> Volver a planes
+        </button>
+        <div className="text-center mb-2">
+          <h2 className="text-2xl font-extrabold text-white tracking-tight">Simular Pago</h2>
+          <p className="text-xs text-textMuted mt-1">Has seleccionado el plan {selectedPlan.toUpperCase()}</p>
+        </div>
+        
+        <div className="bg-white/5 border border-white/10 rounded-xl p-5 mb-2">
+          <div className="flex items-center gap-3 mb-4 text-white/50">
+            <CreditCard size={24} />
+            <span className="text-sm font-semibold">Pasarela de pago segura (MOCK)</span>
+          </div>
+          <p className="text-sm text-center text-textMuted mb-4">
+            Esto simula el proceso de Stripe. Al hacer clic, se creará tu cuenta con el plan <strong className="text-white">{selectedPlan}</strong> activo.
+          </p>
+          <button
+            type="button"
+            disabled={isProcessing}
+            onClick={() => executeSignup(selectedPlan)}
+            className="w-full py-3 bg-green-500 hover:bg-green-600 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-70"
+          >
+            {isProcessing ? <><Loader2 size={18} className="animate-spin" /> Procesando...</> : "Simular Pago Exitoso"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "plans") {
+    return (
+      <div className="w-full flex flex-col gap-4 animate-in fade-in slide-in-from-right-4 duration-300">
+        <button onClick={() => setStep("form")} className="text-white/40 hover:text-white flex items-center gap-2 text-sm w-fit transition-colors">
+          <ArrowLeft size={16} /> Volver al formulario
+        </button>
+        <div className="text-center mb-2">
+          <h2 className="text-2xl font-extrabold text-white tracking-tight">Elige tu Plan</h2>
+          <div className="w-10 h-1 bg-gold rounded-full mx-auto mt-2" />
+        </div>
+
+        {isProcessing && (
+          <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center rounded-xl">
+            <Loader2 className="animate-spin text-gold mb-4" size={32} />
+            <p className="text-white font-semibold">Configurando tu cuenta...</p>
+          </div>
+        )}
+
+        <div className="space-y-3">
+          {/* FREE */}
+          <button onClick={() => handlePlanSelect("free")} className="w-full text-left bg-black/40 border border-white/10 hover:border-white/30 rounded-xl p-4 transition-all group">
+            <div className="flex justify-between items-center">
+              <h3 className="font-bold text-white group-hover:text-gold transition-colors">Free</h3>
+              <span className="text-sm font-semibold text-white/50">$0</span>
+            </div>
+            <p className="text-xs text-textMuted mt-1">Con publicidad y funciones limitadas.</p>
+          </button>
+
+          {/* INDIVIDUAL */}
+          <button onClick={() => handlePlanSelect("individual")} className="w-full text-left bg-blue-500/10 border border-blue-500/30 hover:border-blue-400/50 rounded-xl p-4 transition-all group relative overflow-hidden">
+            <div className="flex justify-between items-center relative z-10">
+              <h3 className="font-bold text-blue-400 group-hover:text-blue-300 transition-colors">Individual</h3>
+              <span className="text-sm font-bold text-blue-400">$19<span className="text-xs opacity-50">/mes</span></span>
+            </div>
+            <p className="text-xs text-blue-200/60 mt-1 relative z-10">Catálogo sin interrupciones y notas.</p>
+          </button>
+
+          {/* VIP */}
+          <button onClick={() => handlePlanSelect("vip")} className="w-full text-left bg-gold/10 border border-gold/40 hover:border-gold/60 rounded-xl p-4 transition-all group relative overflow-hidden shadow-[0_0_15px_rgba(204,164,59,0.1)] hover:shadow-[0_0_20px_rgba(204,164,59,0.2)]">
+            <div className="absolute top-0 right-0 bg-gold text-darker text-[9px] font-black uppercase px-2 py-0.5 rounded-bl-lg">Recomendado</div>
+            <div className="flex justify-between items-center relative z-10">
+              <h3 className="font-bold text-gold group-hover:text-goldHover transition-colors flex items-center gap-1"><Crown size={14}/> VIP</h3>
+              <span className="text-sm font-bold text-gold">$99<span className="text-xs opacity-50">/mes</span></span>
+            </div>
+            <p className="text-xs text-gold/60 mt-1 relative z-10">Acceso total, lives y mentoría grupal.</p>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <form
-      onSubmit={handleSubmit(onSubmit)}
+      onSubmit={handleSubmit(onFormSubmit)}
       noValidate
-      className="w-full flex flex-col gap-3.5"
+      className="w-full flex flex-col gap-3.5 animate-in fade-in duration-300"
     >
       <div className="text-center">
         <h2 className="text-2xl md:text-[26px] font-extrabold text-white tracking-tight">
@@ -353,18 +471,9 @@ const SignUpForm = ({ onSuccess, onSwitch, compact = false }: SignUpFormProps) =
 
       <button
         type="submit"
-        disabled={isSubmitting}
-        className="mt-1 w-full py-3 bg-gold hover:bg-goldHover text-darker font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-[0_8px_24px_-8px_rgba(204,164,59,0.6)] hover:shadow-[0_8px_28px_-6px_rgba(204,164,59,0.8)] disabled:opacity-70 disabled:cursor-not-allowed"
+        className="mt-1 w-full py-3 bg-gold hover:bg-goldHover text-darker font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-[0_8px_24px_-8px_rgba(204,164,59,0.6)] hover:shadow-[0_8px_28px_-6px_rgba(204,164,59,0.8)]"
       >
-        {isSubmitting ? (
-          <>
-            <Loader2 size={18} className="animate-spin" /> Creando...
-          </>
-        ) : (
-          <>
-            Crear cuenta <ArrowRight size={18} />
-          </>
-        )}
+        Continuar <ArrowRight size={18} />
       </button>
 
       {compact && (
@@ -635,6 +744,16 @@ const AuthBackground = () => (
 const AuthPage = ({ initialMode = "signin" }: AuthPageProps) => {
   const navigate = useNavigate();
   const [mode, setMode] = useState<Mode>(initialMode);
+  
+  // Revisar si viene ?plan=vip en la URL
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const planParam = searchParams.get("plan");
+    if (planParam && mode !== "signup") {
+      setMode("signup");
+    }
+  }, []);
+
   const isSignUp = mode === "signup";
   const isForgot = mode === "forgot";
   const overlayOnLeft = isSignUp; // signin y forgot mantienen overlay a la derecha

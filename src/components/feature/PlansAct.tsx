@@ -1,5 +1,6 @@
 import { Check } from "lucide-react";
 import { motion, type Variants } from "motion/react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
 const plans = [
@@ -40,7 +41,7 @@ const plans = [
     description: "Para equipos empresariales y líderes de alto nivel.",
     price: "Empresarial",
     period: " a medida",
-    actionLabel: "Contactar Ventas",
+    actionLabel: "Acceso VIP",
     features: [
       "Todo lo del plan Individual",
       "Videoconferencias 1 a 1 con Iván",
@@ -119,13 +120,16 @@ export const PlansAct = () => {
             </div>
             
             <Button
+              asChild
               className={`w-full py-6 mb-8 rounded-xl text-base ${
                 plan.highlight
                   ? "bg-gold hover:bg-goldHover text-darker font-bold shadow-[0_0_15px_rgba(204,164,59,0.4)]"
                   : "bg-white/5 hover:bg-white/10 border border-white/10 text-white font-medium"
               }`}
             >
-              {plan.actionLabel}
+              <Link to={`/registro?plan=${plan.id}`}>
+                {plan.actionLabel}
+              </Link>
             </Button>
             
             <ul className="space-y-4">

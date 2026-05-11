@@ -50,6 +50,12 @@ export async function signIn(input: LoginInput): Promise<AuthResult> {
     console.error("Error fetching profile:", profileError);
   }
 
+  // Validar si está suspendido
+  if (profileData?.is_suspended) {
+    await supabase.auth.signOut();
+    throw new ApiError("suspended", "Tu cuenta ha sido suspendida por un administrador.", 403);
+  }
+
   // Traer plan de suscripción activo
   const { data: subData } = await supabase
     .from("subscriptions")
@@ -60,7 +66,7 @@ export async function signIn(input: LoginInput): Promise<AuthResult> {
     .limit(1)
     .single();
 
-  const plan = subData?.plan || PLANS.FREE;
+  const plan = subData?.plan || profileData?.plan || PLANS.FREE;
 
   const user = mapProfileToUser(
     profileData || { id: authData.user.id, role: USER_ROLES.STUDENT, full_name: "Usuario nuevo" },
@@ -74,13 +80,14 @@ export async function signIn(input: LoginInput): Promise<AuthResult> {
   };
 }
 
-export async function signUp(input: SignupInput): Promise<AuthResult> {
+export async function signUp(input: SignupInput, plan: string = PLANS.FREE): Promise<AuthResult> {
   const { data: authData, error: authError } = await supabase.auth.signUp({
     email: input.email,
     password: input.password,
     options: {
       data: {
         full_name: input.fullName,
+        plan: plan,
       },
     },
   });
@@ -100,7 +107,8 @@ export async function signUp(input: SignupInput): Promise<AuthResult> {
     fullName: input.fullName,
     avatarUrl: null,
     role: USER_ROLES.STUDENT,
-    plan: PLANS.FREE,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    plan: (plan as any),
     createdAt: new Date().toISOString(),
   };
 
@@ -156,6 +164,12 @@ export async function getCurrentUser(): Promise<User | null> {
     console.warn("[getCurrentUser] profileError:", profileError);
   }
 
+  // Validar suspensión
+  if (profileData?.is_suspended) {
+    await supabase.auth.signOut();
+    return null;
+  }
+
   const { data: subData, error: subError } = await supabase
     .from("subscriptions")
     .select("plan")
@@ -172,6 +186,6 @@ export async function getCurrentUser(): Promise<User | null> {
   return mapProfileToUser(
     profileData || { id: session.user.id, role: USER_ROLES.STUDENT },
     session.user,
-    subData?.plan || PLANS.FREE
+    subData?.plan || profileData?.plan || PLANS.FREE
   );
 }

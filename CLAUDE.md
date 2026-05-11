@@ -230,7 +230,7 @@ for select using (
 
 ---
 
-## 10. Estado del proyecto (Actualizado 2026-05-10)
+## 10. Estado del proyecto (Actualizado 2026-05-11)
 
 ### 10.1 Funcionalidad implementada
 
@@ -240,11 +240,15 @@ for select using (
 - `forgot` se trata como `signin` para el overlay (queda a la derecha). El submit muestra estado "Revisa tu correo".
 - Rutas: `/login`, `/registro`, `/recuperar-contrasena`, `/restablecer-contrasena` (esta última sigue como `ResetPassword.tsx` standalone para honrar el deep-link del email).
 - Supabase Auth + RLS por plan. `useAuth` hook + `useAuthStore` (zustand).
+- **Flujo de registro con plan:** `PlansAct` en landing redirige a `/registro?plan=vip`. El `AuthPage` en modo signup tiene 3 pasos: formulario → elegir plan → mock de pago. Al registrarse, la cuenta se crea con el plan seleccionado (simulación de Stripe). Si el plan es free, se omite el paso de pago.
 
 **Contenido y reproducción**
 - `AdminContentManager.tsx`: CRUD real de módulos y lecciones contra Supabase.
 - `AdminVideoUpload.tsx`: drag & drop a Cloudflare Stream vía `/api/stream/upload-url.ts` (Vercel Function que firma el upload directo).
-- `LessonPlayer.tsx`: pre-roll con `<Stream>` de Cloudflare, pillarboxing real, skip a los 30s, autoplay-friendly.
+- `LessonPlayer.tsx`: pre-roll con `<Stream>` de Cloudflare, skip a los 30s. Cuando el modo podcast está activo, NO renderiza el `<Stream>` del video para evitar que haya dos iframes del mismo video UID en el DOM (eso corrompía la sesión de Cloudflare).
+- `PodcastEngine.tsx`: motor de audio del modo podcast, montado en `main.tsx` **fuera** de `BrowserRouter`, `AuthBootstrap` y todos los providers. Nunca se desmonta una vez activado. Contiene el único `<Stream>` de Cloudflare para el podcast.
+- `GlobalPodcastPlayer.tsx`: solo UI — barra de controles inferior (play/pause, seek, volumen, skip ±10s, cerrar). Lee tiempo/progreso desde `podcastStreamRef` (ref global exportada por `PodcastEngine`). No contiene ningún iframe.
+- `player.store.ts`: store Zustand con `persist`. Persiste: `track`, `isPodcastMode`, `volume`, `lastKnownTime`, `lastVideoId`. NO persiste: `isPlaying` (para respetar autoplay policies del navegador al recargar).
 - `LessonViewer.tsx`: modo podcast + notas + playlist por módulo.
 - Lógica de planes: columna `allowed_plans` (array) en `modules`, `lessons`, `lives`. Filtrado estricto en `StudentDashboard.tsx` por `user.plan`.
 
@@ -255,6 +259,9 @@ for select using (
 
 **Admin shell**
 - `AdminLayout.tsx`: sidebar premium con shimmer en item activo, profile card, mouse-tracking glow, animated orbs en fondo. Sheet en mobile.
+- `AdminMetrics.tsx`: KPIs cards, gráfico de áreas (recharts), top módulos. Conectado a datos reales de Supabase vía `src/lib/api/admin/metrics.ts` (cuenta usuarios por plan, módulos publicados, MRR estimado).
+- `AdminUsers.tsx`: tabla con búsqueda, filtros por plan/rol, cambio de plan mediante modal, eliminación de usuarios. Datos reales desde Supabase vía `src/lib/api/admin/users.ts`.
+- `AdminSettings.tsx`: secciones agrupadas (Marca, Pagos, Notificaciones, Integraciones). Forms premium.
 
 **Animación / preferencias**
 - `MotionProvider.tsx`: envuelve la app en `MotionConfig`, controla Lenis en desktop, respeta `prefers-reduced-motion` y el toggle global del usuario.
@@ -266,7 +273,6 @@ for select using (
 - Tabla `subscriptions` real (hoy el plan vive en `users.plan` mock).
 - Generación de tipos `src/types/database.ts` con `supabase gen types`.
 - Cloudflare R2 para PDFs / recursos descargables.
-- Métricas / users / settings en admin (hoy son placeholders "coming soon").
 
 ### 10.3 Estado visual por panel (100% frontend — owner del proyecto)
 
@@ -342,7 +348,111 @@ for select using (
 - Wrapper con `AnimatePresence` en `routes.tsx` para fade/slide entre rutas.
 - Wrapper sobre `Dialog` (radix) con backdrop blur + scale-in para reemplazar los defaults en toda la app.
 
-### 10.6 Reglas operativas para retomar
+### 10.7 Arquitectura del Modo Podcast (crítico — no romper)
+
+El modo podcast es el feature más delicado de la plataforma. Permite al usuario escuchar el audio de una lección en segundo plano mientras navega por cualquier ruta. Su implementación requirió una arquitectura específica debido a limitaciones de Cloudflare Stream y navegadores.
+
+#### 10.7.1 Filosofía
+
+**Nunca puede haber dos `<Stream>` de Cloudflare para el mismo video UID en el DOM.** Si hay dos iframes del mismo UID, al destruirse uno (por navegación SPA), Cloudflare Stream corta la sesión de reproducción del otro, silenciando el audio.
+
+#### 10.7.2 Separación Engine / UI
+
+Para garantizar que el audio nunca se interrumpa, el sistema se divide en dos componentes independientes:
+
+| Componente | Rol | Ubicación en árbol | ¿Se desmonta? |
+|---|---|---|---|
+| `PodcastEngine` | Contiene el único `<Stream>` de Cloudflare para el podcast. Maneja play/pause, watchdog, restauración de posición. | `main.tsx` — fuera de `BrowserRouter`, `AuthBootstrap`, providers | **Nunca** (una vez activado) |
+| `GlobalPodcastPlayer` | Solo UI — barra de controles inferior. Lee tiempo/progreso desde `podcastStreamRef`. | `App.tsx` — dentro de `BrowserRouter` | Sí, si no hay track activo |
+
+`PodcastEngine` exporta una ref global mutable:
+```ts
+// src/components/feature/PodcastEngine.tsx
+export let podcastStreamRef: { current: any } = { current: null };
+```
+
+`GlobalPodcastPlayer` y `LessonPlayer` importan esta ref para leer `currentTime`, `duration`, y controlar el stream sin montar su propio iframe.
+
+#### 10.7.3 Árbol de montaje
+
+```
+StrictMode
+ └── ErrorBoundary
+      └── Fragment
+           ├── PodcastEngine         ← FUERA de todo. Nunca se desmonta.
+           └── QueryClientProvider
+                └── MotionProvider
+                     └── TooltipProvider
+                          └── AuthBootstrap
+                               └── App (BrowserRouter)
+                                    ├── AppRoutes
+                                    ├── GlobalPodcastPlayer  ← Solo UI, no iframe
+                                    └── Toaster
+```
+
+#### 10.7.4 `PodcastEngine` — patrones clave
+
+**`everActivated` (useState):** Una vez que el usuario activa el modo podcast (primer `track ≠ null`), el contenedor `<div>` se monta permanentemente. Cerrar el podcast (`closePlayer`) solo setea `track = null`, el contenedor sigue en el DOM. El `<Stream>` se renderiza condicionalmente (`{track && <Stream>}`) pero el contenedor siempre está, evitando que React lo destruya en re-renders.
+
+**Refs sincronizadas vs stale closures:** Los handlers nativos del `<Stream>` (onPause, onCanPlay, onTimeUpdate) NO pueden depender del closure de React porque se ejecutan en contexto del iframe. Se usan refs paralelas actualizadas con useEffect:
+```ts
+const isPlayingRef = useRef(false);
+useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
+```
+
+**Watchdog (setInterval 1s):** El navegador puede suspender iframes sin disparar el evento `pause` (especialmente en navegación SPA o cambio de pestaña). El watchdog verifica `el.paused` cada segundo y fuerza `play()` si corresponde. No depende de ningún evento.
+
+**visibilitychange:** Listener que reanuda el audio cuando el documento vuelve a `visible`. Complementa al watchdog para reanudación inmediata (sin esperar el intervalo de 1s).
+
+**Dimensiones del contenedor:** `320×180px` con `transform: translateX(-9999px)`. Chromium clasifica elementos con `width/height < ~50px` como "background" y los suspende. Usar dimensiones reales + desplazamiento fuera del viewport evita esto. `opacity: 0.01` (no `opacity: 0`) porque Chromium también suspende elementos con `opacity: 0`.
+
+#### 10.7.5 `LessonPlayer` — sin iframe duplicado
+
+Cuando `isPlayingThisInPodcast` (el track activo del podcast coincide con el video de la lección actual), `LessonPlayer` **no renderiza el `<Stream>` del video**:
+
+```tsx
+{videoSrc && !isPlayingThisInPodcast && (
+  <div key={videoSrc} className="...">
+    <Stream ... />
+  </div>
+)}
+```
+
+Esto garantiza que solo haya UN `<Stream>` de Cloudflare en el DOM (el de `PodcastEngine`). Cuando el usuario vuelve al modo video, `closePlayer()` se ejecuta y `isPlayingThisInPodcast` se vuelve `false`, causando que el `<Stream>` del video se monte fresco con `autoplay`.
+
+**Restauración de tiempo al volver del podcast:** Se usa `pendingSeekRef`. Al hacer clic "Volver a Video", se guarda el currentTime del engine (`podcastStreamRef.current?.currentTime`) en el ref. En el primer `onTimeUpdate` del Stream recién montado, se aplica el seek. El usuario escucha ≤100ms de audio desde 0 antes del seek — aceptable y no hay alternativa.
+
+#### 10.7.6 Flujo de activación
+
+1. Usuario en `/leccion` → activa "Modo Podcast"
+2. `handlePodcastToggle` → `playTrack(track, currentTime)` → store setea `track`, `isPodcastMode: true`, `isPlaying: true`
+3. `PodcastEngine` re-renderiza: `everActivated` → `true`, `<Stream>` monta, iframe carga, `onCanPlay` → restaura posición → `play()`
+4. `LessonPlayer` re-renderiza: `isPlayingThisInPodcast = true` → `<Stream>` del video se desmonta del DOM
+5. El audio ahora solo sale del `PodcastEngine` (un iframe)
+6. Usuario navega (logo, admin, login, etc.) — `PodcastEngine` no se ve afectado (fuera de Router)
+7. Si el navegador suspende el iframe, el watchdog lo retoma en ≤1s
+
+#### 10.7.7 Historial de bugs resueltos
+
+| Bug | Síntoma | Causa raíz | Fix |
+|---|---|---|---|
+| Audio doble al activar podcast | Se escuchaban dos audios superpuestos | El `useEffect` que controlaba play/pause del video local salía antes de pausar cuando `isPlayingThisInPodcast` era true | El efecto ahora pausa siempre que `isPlayingThisInPodcast \|\| showAd \|\| !playRequested` |
+| Podcast se pausa al navegar a Home/admin | El audio se cortaba al hacer clic en el logo o entrar al admin | `PodcastEngine` estaba dentro de `BrowserRouter` y `AuthBootstrap`. Cambios de ruta/auth causaban re-renders que destruían el iframe | Mover `PodcastEngine` a `main.tsx` fuera de todos los providers |
+| Podcast se pausa al navegar (segundo intento) | El audio seguía cortándose pese al fix anterior | `LessonPlayer` mantenía un segundo `<Stream>` del mismo video UID con `opacity-0` (para "no perder el SDK"). Al navegar, este iframe se destruía y Cloudflare cortaba la sesión compartida | Eliminar el `<Stream>` del `LessonPlayer` cuando `isPlayingThisInPodcast` es true |
+| Podcast no se reanuda tras volver a la pestaña | El audio quedaba en pausa al volver de otra pestaña | `onPause` del Stream no se disparaba siempre. El closure de React tenía valores stale de `isPlaying`/`isPodcastMode` | Watchdog 1s + refs sincronizadas + visibilitychange listener |
+| Contenedor del iframe tenía posición estática | Warning de Cloudflare Stream | El SDK require `position: non-static` para calcular offset | `position: fixed` en el contenedor del engine |
+
+#### 10.7.8 Reglas para no romper el modo podcast
+
+1. **Nunca renderizar dos `<Stream>` del mismo video UID.** Si hay un Stream en `PodcastEngine` reproduciendo un UID, ningún otro componente debe renderizar un `<Stream>` con el mismo `src`.
+2. **No mover `PodcastEngine` dentro de `BrowserRouter` o `AuthBootstrap`.** Su posición en `main.tsx` como sibling de `QueryClientProvider` es la única garantía de supervivencia.
+3. **No confiar en eventos nativos del iframe para reanudación.** El watchdog con `setInterval` es el mecanismo principal. Los eventos `onPause`/`visibilitychange` son complementarios.
+4. **Siempre usar refs sincronizadas para valores de store en handlers del Stream.** Los closures de React quedan stale.
+5. **`opacity: 0.01` y dimensiones reales (320×180) para el contenedor.** `opacity: 0` o `width/height: 1` causan throttling en Chromium.
+6. **No persisitir `isPlaying` en el store.** Al recargar la página, el navegador bloquea autoplay. El estado de reproducción debe comenzar como `false` y activarse con gesto del usuario.
+
+### 10.8 Reglas operativas para retomar
+
 - Después de cada módulo terminado: correr `npm run typecheck` + `npx vitest run <files>` antes de cerrar la tarea.
 - Mantener el inventario de tareas vivo (`TaskCreate`/`TaskUpdate`) en cada sesión nueva.
 - Cualquier nuevo primitivo va a `src/components/ui/` con un test al lado (`*.test.tsx`).

@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { 
   Users, 
   DollarSign, 
   PlayCircle, 
-  TrendingUp, 
   ArrowUpRight, 
   ArrowDownRight,
-  Filter
+  Filter,
+  Loader2,
+  Crown
 } from "lucide-react";
 import { 
   AreaChart, 
@@ -19,61 +20,83 @@ import {
   ResponsiveContainer
 } from "recharts";
 import { cn } from "@/lib/utils";
-
-// --- Mock Data ---
-const kpiData = [
-  {
-    title: "Usuarios Totales",
-    value: "2,450",
-    change: "+12.5%",
-    isPositive: true,
-    icon: Users,
-  },
-  {
-    title: "Ingresos (Mensual)",
-    value: "$14,500",
-    change: "+8.2%",
-    isPositive: true,
-    icon: DollarSign,
-  },
-  {
-    title: "Módulos Publicados",
-    value: "18",
-    change: "+2",
-    isPositive: true,
-    icon: PlayCircle,
-  },
-  {
-    title: "Retención",
-    value: "84%",
-    change: "-1.5%",
-    isPositive: false,
-    icon: TrendingUp,
-  },
-];
-
-const revenueData = [
-  { name: "Ene", VIP: 4000, Individual: 2400 },
-  { name: "Feb", VIP: 3000, Individual: 1398 },
-  { name: "Mar", VIP: 2000, Individual: 9800 },
-  { name: "Abr", VIP: 2780, Individual: 3908 },
-  { name: "May", VIP: 1890, Individual: 4800 },
-  { name: "Jun", VIP: 2390, Individual: 3800 },
-  { name: "Jul", VIP: 3490, Individual: 4300 },
-];
-
-const topModulesData = [
-  { id: 1, title: "Mentalidad de Abundancia", views: 1240, rating: 4.9 },
-  { id: 2, title: "Liderazgo Cuántico", views: 985, rating: 4.8 },
-  { id: 3, title: "Ventas de Alto Valor", views: 856, rating: 4.9 },
-  { id: 4, title: "Inteligencia Emocional", views: 642, rating: 4.7 },
-];
+import { fetchDashboardMetrics, type DashboardMetrics } from "@/lib/api/admin/metrics";
+import { toast } from "@/components/ui/toaster";
 
 const periods = ["Últimos 7 días", "Este mes", "Este año", "Histórico"];
 
-// --- Component ---
 const AdminMetrics = () => {
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [period, setPeriod] = useState(periods[1]);
+
+  useEffect(() => {
+    const loadMetrics = async () => {
+      try {
+        const data = await fetchDashboardMetrics();
+        setMetrics(data);
+      } catch (error) {
+        console.error("Error fetching metrics:", error);
+        toast.error("Error", {
+          description: "No se pudieron cargar las métricas en tiempo real.",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadMetrics();
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-8">
+        <Loader2 className="w-8 h-8 animate-spin text-gold" />
+      </div>
+    );
+  }
+
+  // --- Real Data Formatting ---
+  const kpiData = [
+    {
+      title: "Usuarios Totales",
+      value: metrics?.totalUsers.toString() || "0",
+      change: "En tiempo real",
+      isPositive: true,
+      icon: Users,
+    },
+    {
+      title: "Ingresos (MRR Estimado)",
+      value: `$${metrics?.totalRevenue.toLocaleString() || "0"}`,
+      change: "Suscripciones activas",
+      isPositive: true,
+      icon: DollarSign,
+    },
+    {
+      title: "Módulos Publicados",
+      value: metrics?.publishedModules.toString() || "0",
+      change: "En catálogo",
+      isPositive: true,
+      icon: PlayCircle,
+    },
+    {
+      title: "Usuarios VIP",
+      value: metrics?.usersByPlan.vip.toString() || "0",
+      change: "Plan de mayor valor",
+      isPositive: true,
+      icon: Crown,
+    },
+  ];
+
+  // Gráfico de relleno (Placeholder hasta conectar Stripe historicals)
+  const revenueData = [
+    { name: "Ene", VIP: 4000, Individual: 2400 },
+    { name: "Feb", VIP: 3000, Individual: 1398 },
+    { name: "Mar", VIP: 2000, Individual: 9800 },
+    { name: "Abr", VIP: 2780, Individual: 3908 },
+    { name: "May", VIP: 1890, Individual: 4800 },
+    { name: "Jun", VIP: 2390, Individual: 3800 },
+    { name: "Jul", VIP: 3490, Individual: 4300 },
+  ];
 
   return (
     <motion.div
@@ -101,7 +124,7 @@ const AdminMetrics = () => {
                 "px-4 py-2 rounded-lg text-sm font-medium transition-all",
                 period === p 
                   ? "bg-gold/15 text-gold shadow-[0_0_10px_rgba(204,164,59,0.1)]" 
-                  : "text-textMuted hover:text-white hover:bg-white/5"
+                  : "text-white/60 hover:text-white hover:bg-white/5"
               )}
             >
               {p}
@@ -110,31 +133,34 @@ const AdminMetrics = () => {
         </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* KPI Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpiData.map((kpi, idx) => (
-          <div 
-            key={idx} 
-            className="bg-black/30 border border-white/10 rounded-2xl p-6 relative overflow-hidden group hover:border-gold/30 transition-colors"
+        {kpiData.map((kpi, i) => (
+          <motion.div
+            key={kpi.title}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.1 }}
+            className="bg-black/30 border border-white/10 rounded-2xl p-6 hover:bg-white/[0.02] transition-colors relative overflow-hidden group"
           >
-            <div className="absolute top-0 right-0 -mr-4 -mt-4 w-24 h-24 bg-gold/5 rounded-full blur-2xl group-hover:bg-gold/10 transition-colors" />
-            <div className="flex justify-between items-start mb-4 relative z-10">
+            <div className="absolute inset-0 bg-gradient-to-br from-gold/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="flex items-start justify-between mb-4">
               <div className="w-12 h-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white group-hover:border-gold/30 group-hover:text-gold transition-colors">
-                <kpi.icon size={22} />
+                <kpi.icon size={24} strokeWidth={1.5} />
               </div>
               <div className={cn(
-                "flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full",
+                "flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full",
                 kpi.isPositive ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"
               )}>
                 {kpi.isPositive ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
                 {kpi.change}
               </div>
             </div>
-            <div className="relative z-10">
-              <h3 className="text-textMuted text-sm font-medium">{kpi.title}</h3>
-              <p className="text-3xl font-extrabold text-white mt-1">{kpi.value}</p>
+            <div>
+              <h3 className="text-textMuted text-sm font-medium mb-1">{kpi.title}</h3>
+              <p className="text-3xl font-extrabold text-white tracking-tight">{kpi.value}</p>
             </div>
-          </div>
+          </motion.div>
         ))}
       </div>
 
@@ -142,7 +168,7 @@ const AdminMetrics = () => {
         {/* Main Chart */}
         <div className="lg:col-span-2 bg-black/30 border border-white/10 rounded-2xl p-6 flex flex-col h-[400px]">
           <div className="flex justify-between items-center mb-6">
-            <h3 className="text-lg font-bold text-white">Ingresos por Plan</h3>
+            <h3 className="text-lg font-bold text-white">Ingresos por Plan (Histórico)</h3>
             <button className="text-textMuted hover:text-white transition-colors">
               <Filter size={18} />
             </button>
@@ -204,34 +230,38 @@ const AdminMetrics = () => {
 
         {/* Top Modules */}
         <div className="bg-black/30 border border-white/10 rounded-2xl p-6 flex flex-col h-[400px]">
-          <h3 className="text-lg font-bold text-white mb-6">Módulos más vistos</h3>
+          <h3 className="text-lg font-bold text-white mb-6">Lecciones más vistas</h3>
           <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-4">
-            {topModulesData.map((module, index) => (
-              <div 
-                key={module.id} 
-                className="flex items-center gap-4 p-3 rounded-xl hover:bg-white/5 border border-transparent hover:border-white/5 transition-colors"
-              >
-                <div className="w-10 h-10 rounded-lg bg-gold/10 flex items-center justify-center text-gold font-bold border border-gold/20 shrink-0">
-                  {index + 1}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <h4 className="text-white text-sm font-medium truncate" title={module.title}>
-                    {module.title}
-                  </h4>
-                  <div className="flex items-center gap-3 text-xs text-textMuted mt-1">
-                    <span className="flex items-center gap-1">
-                      <PlayCircle size={12} /> {module.views} vistas
-                    </span>
-                    <span className="text-gold flex items-center gap-1">
-                      ★ {module.rating}
-                    </span>
+            {metrics?.topLessons && metrics.topLessons.length > 0 ? (
+              metrics.topLessons.map((lesson, index) => (
+                <div 
+                  key={index} 
+                  className="flex items-center gap-4 p-3 rounded-xl hover:bg-white/5 border border-transparent hover:border-white/5 transition-colors"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-gold/10 flex items-center justify-center text-gold font-bold border border-gold/20 shrink-0">
+                    {index + 1}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h4 className="text-white text-sm font-medium truncate" title={lesson.title}>
+                      {lesson.title}
+                    </h4>
+                    <div className="flex items-center gap-3 text-xs text-textMuted mt-1">
+                      <span className="flex items-center gap-1">
+                        <PlayCircle size={12} /> {lesson.views} vistas
+                      </span>
+                    </div>
                   </div>
                 </div>
+              ))
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-textMuted">
+                <PlayCircle className="w-12 h-12 mb-3 opacity-20" />
+                <p className="text-sm">No hay datos de vistas aún</p>
               </div>
-            ))}
+            )}
           </div>
           <button className="mt-4 w-full py-3 bg-white/5 hover:bg-white/10 text-white text-sm font-medium rounded-xl transition-colors border border-white/10">
-            Ver todos los módulos
+            Ver todas las lecciones
           </button>
         </div>
       </div>

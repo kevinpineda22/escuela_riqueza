@@ -2,52 +2,61 @@ import { useState, useRef, useEffect } from "react";
 import { Play, Headphones, ShieldAlert, MonitorPlay } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player.store";
+import { podcastStreamRef } from "@/components/feature/PodcastEngine";
 import { Stream } from "@cloudflare/stream-react";
 
 interface LessonPlayerProps {
-  videoSrc?: string; // Ahora esperamos el Cloudflare Video ID, ej: 595f2bfac6285d604cf136e049c37b08
+  videoSrc?: string;
   isPremium: boolean;
   lesson?: { id: number; titulo: string; modId: number };
   moduleTitle?: string;
 }
 
-// Esta es la mejor práctica para no interrumpir el aprendizaje en medio del video.
-const AD_DURATION = 41; // 41 segundos de duración del anuncio
-const AD_VIDEO_ID = "02b22da00a68753980615a8df8f06e96"; // ID del video de publicidad aliado
+const AD_DURATION = 41;
+const AD_VIDEO_ID = "02b22da00a68753980615a8df8f06e96";
 
 const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayerProps) => {
-  const { playTrack, isPodcastMode, closePlayer, track, lastKnownTime, setLastKnownTime } = usePlayerStore();
+  const { playTrack, isPodcastMode, closePlayer, track, lastKnownTime, lastVideoId, setPlaybackProgress } = usePlayerStore();
 
-  // Verifica si el reproductor global está tocando EXACTAMENTE esta lección
   const isPlayingThisInPodcast = isPodcastMode && track?.videoId === videoSrc;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const streamRef = useRef<any>(null);
 
+  // Tiempo pendiente de restaurar al volver del modo podcast al video
+  const pendingSeekRef = useRef<number | null>(null);
+
   const [playRequested, setPlayRequested] = useState(false);
   const initializedTimeRef = useRef(false);
 
-  // Lógica de Anuncios
   const [showAd, setShowAd] = useState(false);
   const [hasAdPlayed, setHasAdPlayed] = useState(false);
   const [adCurrentTime, setAdCurrentTime] = useState(0);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const adStreamRef = useRef<any>(null);
 
-  // Cuando cambie el video, resetear los estados
+  // Controlar play/pause del video LOCAL
   useEffect(() => {
-    // Para evitar advertencias de set-state-in-effect y limpiar asincrónicamente
-    setTimeout(() => {
-      setPlayRequested(false);
-      setShowAd(false);
-      setHasAdPlayed(false);
-      setAdCurrentTime(0);
-      initializedTimeRef.current = false;
-    }, 0);
-  }, [videoSrc]);
+    if (!streamRef.current || isPlayingThisInPodcast) return;
+    if (showAd || !playRequested) {
+      try { streamRef.current.pause(); } catch { /* stream not ready */ }
+    } else {
+      try { streamRef.current.play(); } catch { /* stream not ready */ }
+    }
+  }, [showAd, isPlayingThisInPodcast, playRequested]);
+
+  // Resetear estado local cuando cambia la lección
+  useEffect(() => {
+    if (isPlayingThisInPodcast) return;
+    setPlayRequested(false);
+    setShowAd(false);
+    setHasAdPlayed(false);
+    setAdCurrentTime(0);
+    initializedTimeRef.current = false;
+  }, [videoSrc]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handlePlayRequest = () => {
     setPlayRequested(true);
-    // Si no es premium y no ha visto el anuncio, mostrar el anuncio (Pre-roll)
     if (!isPremium && !hasAdPlayed) {
       setShowAd(true);
       setAdCurrentTime(0);
@@ -61,26 +70,52 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
 
   const handlePodcastToggle = () => {
     if (isPlayingThisInPodcast) {
-      closePlayer(); // Al cerrar, el player global ya actualizó lastKnownTime
+      // Leer el tiempo actual del engine antes de cerrarlo
+      const latestTime = podcastStreamRef.current?.currentTime ?? usePlayerStore.getState().lastKnownTime;
+      closePlayer();
+      // El Stream local se montará con autoplay en el próximo render.
+      // Guardamos el tiempo exacto para restaurarlo en el primer onTimeUpdate.
+      pendingSeekRef.current = latestTime;
       setPlayRequested(true);
-      initializedTimeRef.current = false; // Forzar que el Stream local haga seek al tiempo guardado
     } else if (videoSrc && lesson && moduleTitle) {
-      if (streamRef.current) {
-        setLastKnownTime(streamRef.current.currentTime);
-      }
-      setPlayRequested(false); // Pausamos el video visual para no tener audio doble
+      setPlayRequested(false);
+      const currentTimeToPass = streamRef.current?.currentTime ?? lastKnownTime;
       playTrack({
         id: lesson.id,
         title: lesson.titulo,
         moduleTitle: moduleTitle,
-        videoId: videoSrc
-      }, lastKnownTime);
+        videoId: videoSrc,
+      }, currentTimeToPass);
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (!streamRef.current) return;
+
+    // Restaurar tiempo al volver del modo podcast (se ejecuta una vez)
+    if (pendingSeekRef.current !== null && streamRef.current.duration > 0) {
+      streamRef.current.currentTime = pendingSeekRef.current;
+      pendingSeekRef.current = null;
+      initializedTimeRef.current = true;
+      return;
+    }
+
+    // Restaurar tiempo la primera vez que se reproduce un video
+    if (!initializedTimeRef.current && streamRef.current.duration > 0) {
+      if (lastVideoId === videoSrc && lastKnownTime > 0) {
+        streamRef.current.currentTime = lastKnownTime;
+      }
+      initializedTimeRef.current = true;
+    }
+
+    const currentTime = streamRef.current.currentTime;
+    if (Math.abs(currentTime - lastKnownTime) > 1 && videoSrc) {
+      setPlaybackProgress(videoSrc, currentTime);
     }
   };
 
   return (
     <div className="w-full max-w-5xl flex flex-col gap-4">
-      {/* Indicador de Plan */}
       <div
         className={cn(
           "p-3 rounded-xl border flex items-center justify-between",
@@ -105,7 +140,6 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
         )}
       </div>
 
-      {/* Contenedor de Video Principal */}
       <div className="relative aspect-video bg-black rounded-2xl overflow-hidden border border-white/10 shadow-2xl group transition-all duration-500 ease-in-out">
         {!videoSrc ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20">
@@ -115,7 +149,6 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
           </div>
         ) : null}
 
-        {/* Pseudo-Podcast Mode Layer (Se pone encima y cubre el video visualmente) */}
         <div 
           className={cn(
             "absolute inset-0 z-30 bg-gradient-to-br from-darker to-[#1a1a1a] flex flex-col items-center justify-center transition-all duration-500 ease-in-out",
@@ -132,7 +165,6 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
           </div>
           <p className="text-sm text-textMuted mt-2 mb-6">Reproduciéndose en segundo plano.</p>
           
-          {/* Controles simples superpuestos en modo podcast */}
           <button 
             onClick={handlePodcastToggle}
             className="px-6 py-2.5 bg-white/10 hover:bg-white/20 border border-white/20 rounded-full flex items-center justify-center transition-all gap-2 text-sm font-bold text-white pointer-events-auto"
@@ -142,7 +174,6 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
           </button>
         </div>
 
-        {/* Layer del Anuncio en Video Real */}
         {showAd && (
           <div className="absolute inset-0 z-40 bg-black flex flex-col items-center justify-center">
             <div className="absolute top-4 left-4 z-50 bg-black/60 backdrop-blur-md px-4 py-2 border border-white/10 text-sm font-bold text-white uppercase tracking-widest rounded-lg flex items-center gap-2 pointer-events-none">
@@ -150,7 +181,6 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
               Publicidad de Aliado
             </div>
 
-            {/* Reproductor del anuncio sin controles y sin pointer-events para evitar interacción */}
             <div className="absolute inset-0 w-full h-full pointer-events-none flex items-center justify-center bg-black">
               <Stream
                 streamRef={adStreamRef}
@@ -192,7 +222,6 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
           </div>
         )}
 
-        {/* Portada Inicial si no está reproduciendo ni mostrando anuncio */}
         {!playRequested && !showAd && (
           <div className="absolute inset-0 z-20 bg-darker flex items-center justify-center">
             <button 
@@ -205,33 +234,24 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
           </div>
         )}
 
-        {/* Reproductor de Cloudflare Principal */}
-        {playRequested && !showAd && !isPlayingThisInPodcast && videoSrc && (
-          <div className="w-full h-full absolute inset-0 z-10 bg-black">
+        {videoSrc && !isPlayingThisInPodcast && (
+          <div 
+            key={videoSrc}
+            className={cn(
+              "w-full h-full absolute inset-0 bg-black transition-all duration-300",
+              showAd || !playRequested ? "opacity-0 pointer-events-none z-0" : "opacity-100 z-10"
+            )}
+          >
             <Stream
               streamRef={streamRef}
               src={videoSrc}
-              controls
-              autoplay
+              controls={!showAd}
+              autoplay={playRequested && !showAd}
               preload="auto"
               className="w-full h-full border-none"
-              onTimeUpdate={() => {
-              if (streamRef.current) {
-                // Sincronización en la primera carga si venimos del modo podcast
-                if (!initializedTimeRef.current && streamRef.current.duration > 0 && lastKnownTime > 0) {
-                  streamRef.current.currentTime = lastKnownTime;
-                  initializedTimeRef.current = true;
-                }
-                // Reducir la frecuencia de actualización de estado para evitar lag visual
-                // Solo actualizamos el store cada ~1 segundo en lugar de cada milisegundo
-                const currentTime = streamRef.current.currentTime;
-                if (Math.abs(currentTime - lastKnownTime) > 1) {
-                  setLastKnownTime(currentTime);
-                }
-              }
-            }}
-          />
-        </div>
+              onTimeUpdate={handleTimeUpdate}
+            />
+          </div>
         )}
       </div>
     </div>

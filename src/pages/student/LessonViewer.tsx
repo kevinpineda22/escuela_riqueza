@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { PlayCircle, Lock } from "lucide-react";
+import { motion } from "framer-motion";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import LessonPlayer from "@/components/feature/LessonPlayer";
@@ -42,43 +43,59 @@ const LessonViewer = () => {
             </p>
           </div>
 
-          <LessonPlayer videoSrc={VIDEO_FILENAME} isPremium={isUserPremium} />
+          <LessonPlayer 
+            videoSrc={VIDEO_FILENAME} 
+            isPremium={isUserPremium} 
+            lesson={{ id: 1, titulo: "El camino a la libertad financiera", modId: 1 }}
+            moduleTitle="Módulo 1"
+          />
 
-          <div className="mt-8 p-6 bg-gradient-to-r from-darker to-white/5 border border-white/10 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-6 shadow-[0_0_30px_rgba(204,164,59,0.05)]">
-            <div>
-              <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                <Lock className="text-gold" size={20} /> Desbloquea toda la experiencia
-              </h3>
-              <p className="text-sm text-textMuted mt-1 max-w-md">
-                Elimina la publicidad emergente, obtén certificado digital, habilita modo podcast y acceso a comunidad.
-              </p>
-            </div>
-            <Link
-              to="/login"
-              className="whitespace-nowrap px-8 py-3 bg-gold hover:bg-goldHover text-darker font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(204,164,59,0.3)] hover:scale-105"
+          {!isUserPremium && (
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mt-8 relative overflow-hidden p-6 bg-gradient-to-r from-darker to-[#1a1a1a] border border-gold/30 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-6 shadow-[0_0_30px_rgba(204,164,59,0.15)] group"
             >
-              Hacer Upgrade
-            </Link>
-          </div>
+              <div className="absolute inset-0 bg-gold/5 w-[200%] -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out"></div>
+              <div className="relative z-10">
+                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                  <Lock className="text-gold" size={20} /> Desbloquea toda la experiencia
+                </h3>
+                <p className="text-sm text-textMuted mt-1 max-w-md">
+                  Elimina la publicidad emergente, obtén certificado digital, habilita modo podcast y acceso a la comunidad.
+                </p>
+              </div>
+              <Link
+                to="/planes"
+                className="relative z-10 whitespace-nowrap px-8 py-3 bg-gold hover:bg-goldHover text-darker font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(204,164,59,0.3)] hover:scale-105"
+              >
+                Hacer Upgrade
+              </Link>
+            </motion.div>
+          )}
         </div>
 
         {/* Playlist */}
         <aside className="w-full lg:w-[400px] flex flex-col gap-4">
           <h3 className="text-lg font-bold text-white flex items-center justify-between mb-2">
             Contenido del Módulo
-            <span className="text-xs font-normal text-textMuted bg-white/10 px-2 py-1 rounded">1 / 5</span>
+            <span className="text-xs font-normal text-textMuted bg-white/10 px-2 py-1 rounded">1 / {upcomingLessons.length + 1}</span>
           </h3>
 
-          <div className="group flex gap-4 p-3 rounded-2xl bg-white/10 border border-gold/30 cursor-pointer overflow-hidden relative">
+          <motion.div 
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="group flex gap-4 p-3 rounded-2xl bg-white/10 border border-gold/30 cursor-pointer overflow-hidden relative shadow-[0_0_15px_rgba(204,164,59,0.1)]"
+          >
             <div className="w-32 h-20 bg-black rounded-xl overflow-hidden shrink-0 relative">
               <img
-              src="https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/18dc9190-6625-4b89-8f1e-3f221e96b500/public"
-                className="w-full h-full object-cover opacity-50 blur-sm scale-150"
+                src="https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/18dc9190-6625-4b89-8f1e-3f221e96b500/public"
+                className="w-full h-full object-cover opacity-50 blur-sm scale-150 transition-transform group-hover:scale-125"
                 alt="thumb"
               />
               <div className="absolute inset-0 bg-gold/20 flex items-center justify-center">
-                <div className="w-8 h-8 rounded-full bg-gold text-darker flex items-center justify-center pl-1">
-                  <PlayCircle size={16} />
+                <div className="w-8 h-8 rounded-full bg-gold text-darker flex items-center justify-center pl-1 shadow-[0_0_10px_rgba(204,164,59,0.8)]">
+                  <PlayCircle size={16} className="animate-pulse" />
                 </div>
               </div>
             </div>
@@ -86,15 +103,20 @@ const LessonViewer = () => {
               <h4 className="text-sm font-bold text-white leading-tight line-clamp-2">
                 El camino a la libertad financiera
               </h4>
-              <p className="text-xs text-gold mt-1">Reproduciendo • 45:00 min</p>
+              <p className="text-xs text-gold mt-1 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-gold animate-ping"></span> Reproduciendo • 45:00 min
+              </p>
             </div>
-          </div>
+          </motion.div>
 
-          {upcomingLessons.map((lesson) => (
-            <div
+          {upcomingLessons.map((lesson, i) => (
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: (i + 1) * 0.1 }}
               key={lesson.id}
               className={cn(
-                "group flex gap-4 p-3 rounded-2xl transition-all border border-transparent hover:bg-white/5 cursor-pointer",
+                "group flex gap-4 p-3 rounded-2xl transition-all border border-transparent hover:bg-white/5 cursor-pointer shadow-sm hover:shadow-[0_0_15px_rgba(255,255,255,0.02)]",
                 lesson.locked && "opacity-60 grayscale-[50%] hover:opacity-80"
               )}
             >
@@ -128,7 +150,7 @@ const LessonViewer = () => {
                   )}
                 </p>
               </div>
-            </div>
+            </motion.div>
           ))}
         </aside>
       </main>
