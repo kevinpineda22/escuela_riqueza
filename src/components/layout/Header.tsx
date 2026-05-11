@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { LogOut } from "lucide-react";
 import { useAuthStore } from "@/stores/auth.store";
 import { supabase } from "@/lib/supabase";
@@ -18,6 +18,7 @@ const getInitials = (name: string) => {
 
 const Header = () => {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const { user, clearSession } = useAuthStore();
 
   const handleLogout = async () => {
@@ -46,12 +47,38 @@ const Header = () => {
         <nav className="flex items-center gap-2 sm:gap-3">
           <AnimationToggle />
 
-          {user ? (
+          {user?.role === "admin" && (
+            <Link
+              to="/admin/content"
+              className="hidden sm:flex text-sm font-bold text-darker bg-gold hover:bg-goldHover px-4 py-1.5 rounded-full items-center gap-2 transition-all shadow-[0_0_10px_rgba(204,164,59,0.3)]"
+            >
+              Vista admin
+            </Link>
+          )}
+
+          {!user ? (
+            <Link
+              to="/login"
+              className="bg-gold hover:bg-goldHover text-darker text-sm font-bold px-4 sm:px-6 py-2 rounded-full transition-all shadow-[0_0_15px_rgba(204,164,59,0.3)] hover:shadow-[0_0_20px_rgba(204,164,59,0.5)] hover:-translate-y-0.5 whitespace-nowrap"
+            >
+              Iniciar sesión
+            </Link>
+          ) : pathname.startsWith("/dashboard") ? (
+            <button
+              onClick={handleLogout}
+              className="text-sm font-medium text-white/60 hover:text-red-400 transition-colors flex items-center gap-1.5"
+              title="Cerrar sesión"
+              aria-label="Cerrar sesión"
+            >
+              <LogOut size={16} />
+              <span className="hidden md:inline">Salir</span>
+            </button>
+          ) : (
             <div className="flex items-center gap-2 sm:gap-3">
               <Link
-                to="/dashboard?tab=perfil"
+                to="/dashboard?tab=modulos"
                 className="flex items-center gap-2 group"
-                title="Ir a mi panel"
+                title="Ir a mis módulos"
               >
                 <div className="w-9 h-9 rounded-full bg-gold/10 border border-gold/30 flex items-center justify-center overflow-hidden">
                   {user.avatarUrl ? (
@@ -67,18 +94,9 @@ const Header = () => {
                   )}
                 </div>
                 <span className="text-sm font-medium text-white/80 group-hover:text-gold transition-colors hidden md:block">
-                  Mi panel
+                  Mis módulos
                 </span>
               </Link>
-
-              {user.role === "admin" && (
-                <Link
-                  to="/admin/content"
-                  className="hidden sm:flex text-sm font-bold text-darker bg-gold hover:bg-goldHover px-4 py-1.5 rounded-full items-center gap-2 transition-all shadow-[0_0_10px_rgba(204,164,59,0.3)]"
-                >
-                  Vista admin
-                </Link>
-              )}
 
               <button
                 onClick={handleLogout}
@@ -90,13 +108,6 @@ const Header = () => {
                 <span className="hidden md:inline">Salir</span>
               </button>
             </div>
-          ) : (
-            <Link
-              to="/login"
-              className="bg-gold hover:bg-goldHover text-darker text-sm font-bold px-4 sm:px-6 py-2 rounded-full transition-all shadow-[0_0_15px_rgba(204,164,59,0.3)] hover:shadow-[0_0_20px_rgba(204,164,59,0.5)] hover:-translate-y-0.5 whitespace-nowrap"
-            >
-              Iniciar sesión
-            </Link>
           )}
         </nav>
       </div>

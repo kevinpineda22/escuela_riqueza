@@ -50,6 +50,7 @@ const StudentDashboard = () => {
     if (tab && ["modulos", "notas", "certificados", "comunidad", "perfil"].includes(tab)) {
       setActiveTab(tab);
     }
+    setTimeout(() => window.scrollTo(0, 0), 50);
   }, [location.search]);
 
   const [selectedModule, setSelectedModule] = useState<string | null>(null);
@@ -79,6 +80,7 @@ const StudentDashboard = () => {
         console.error("Error loading content:", error);
       } finally {
         setIsLoadingContent(false);
+        setTimeout(() => window.scrollTo(0, 0), 50);
       }
     };
     loadContent();
@@ -182,8 +184,8 @@ const StudentDashboard = () => {
 
   const NAV_ITEMS = useMemo(() => [
     { id: "modulos", icon: PlayCircle, label: "Módulos" },
-    { id: "notas", icon: Edit3, label: "Libreta" },
-    { id: "certificados", icon: Award, label: "Avales" },
+    { id: "notas", icon: Edit3, label: "Notas personales" },
+    { id: "certificados", icon: Award, label: "Certificado" },
     { id: "comunidad", icon: Users, label: "Comunidad VIP", premiumOnly: true, vipOnly: false },
     { id: "perfil", icon: UserIcon, label: "Mi Panel" }
   ], []);

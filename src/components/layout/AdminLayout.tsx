@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { motion, type Variants } from "motion/react";
 import {
   LogOut,
@@ -41,13 +41,13 @@ const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
 
   return (
     <>
-      <div className="px-6 mb-12 flex items-center justify-center pt-8 md:pt-0">
+      <Link to="/" className="px-6 mb-12 flex items-center justify-center pt-8 md:pt-0">
         <img
           src="https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/18dc9190-6625-4b89-8f1e-3f221e96b500/public"
           alt="Logo Admin"
           className="h-14 object-contain drop-shadow-md"
         />
-      </div>
+      </Link>
 
       <nav className="flex-1 px-4 space-y-2 overflow-y-auto">
         {navItems.map((item, idx) => (

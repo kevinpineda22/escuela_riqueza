@@ -179,10 +179,15 @@ Ver `env.example` (copiar a `.env.local` para desarrollo). Reglas:
 - Reproductor (`<Stream>` de `@cloudflare/stream-react`) consume el token.
 
 ### 7.4 Lives en vivo
-- Iván desde el panel admin crea un live → llamada a Cloudflare Stream Live (key RTMP).
-- Iván emite desde OBS apuntando al RTMP de Cloudflare.
-- Plataforma muestra el live embebido al rol `vip`.
+- Iván desde el panel admin crea una sala (`AdminLiveManager`) con título, `starts_at`, `stream_live_input_id`, `background_image_url` y `allowed_plans`.
+- Tabla `lives`: `id, title, description, starts_at (NOT NULL), duration_minutes, stream_live_input_id, required_plan, status (scheduled/live/ended), background_image_url, allowed_plans (text[]), created_at`.
+- Iván emite desde OBS apuntando al RTMP de Cloudflare (servidor `rtmps://live.cloudflare.com:443/live/`, clave = Input ID).
+- **Reproducción WebRTC**: en `VIPLiveRoom` se usa un `<iframe>` directo a Cloudflare con `?mode=webrtc&preferLowLatency=true` para latencia <1s.
+- Admin forza EN VIVO desde el panel → cambia `status` a `"live"` con mutex (solo 1 sala activa).
+- VIP ve countdown desde `starts_at` → intro cinemática → player WebRTC.
+- Polling 3s como fallback por si Realtime no está habilitado.
 - Chat en `Supabase Realtime` (canal `live:{liveId}`) — broadcast con tabla `live_messages` y RLS por suscripción.
+- Para baja latencia: OBS en CBR, keyframe 1s, 30fps; Cloudflare Live Input con Low-Latency HLS + WebRTC activado.
 
 ### 7.5 Pagos
 - Plan elegido en landing → checkout de Stripe (`POST /api/stripe/checkout`).
@@ -253,9 +258,9 @@ for select using (
 - Lógica de planes: columna `allowed_plans` (array) en `modules`, `lessons`, `lives`. Filtrado estricto en `StudentDashboard.tsx` por `user.plan`.
 
 **Lives**
-- `AdminLiveManager.tsx`: CRUD de salas, asignación de planes, botón "Forzar EN VIVO" (mutex en columna `is_active`).
-- `VIPLiveRoom.tsx`: countdown + reproductor + chat realtime (Supabase Realtime channel `live:{liveId}`).
-- `LiveChat.tsx`: chat funcional con scroll y broadcast en tiempo real.
+- `AdminLiveManager.tsx`: CRUD de salas con schema real (`starts_at`, `status`, `stream_live_input_id`, `allowed_plans`, `required_plan`). Timezone auto-detected con badge. Drag & drop de imagen de fondo a Supabase Storage (bucket `backgrounds`). Botón "Forzar EN VIVO" con mutex. Guía OBS con pasos para baja latencia y activación WebRTC.
+- `VIPLiveRoom.tsx`: countdown desde `starts_at`, intro cinemática al activarse, reproductor WebRTC via `<iframe mode=webrtc>` para latencia <1s. Polling 3s como fallback de estado. Chat en vivo con `live.id` real (no placeholder).
+- `LiveChat.tsx`: chat funcional con scroll y broadcast en tiempo real (Supabase Realtime).
 
 **Admin shell**
 - `AdminLayout.tsx`: sidebar premium con shimmer en item activo, profile card, mouse-tracking glow, animated orbs en fondo. Sheet en mobile.
@@ -276,26 +281,26 @@ for select using (
 
 ### 10.3 Estado visual por panel (100% frontend — owner del proyecto)
 
-**🟢 PREMIUM (no requieren trabajo de estilo)**
+**🟢 PREMIUM (funcional y con buen diseño)**
 - `LandingPage.tsx` y todos sus actos (`HeroCinematic`, `AwakeningAct`, `IntelligencesAct`, `PathAct`, `PlansAct`).
 - `AuthPage.tsx` (signin/signup/forgot) y `ResetPassword.tsx`.
 - `NotFound.tsx` (404 cinemático), `ErrorBoundary` (UI premium con retry), `AuthSplash` (logo halo + ring).
 - `AdminLayout.tsx` y `AdminVideoUpload.tsx`.
 - `AdminMetrics.tsx`, `AdminUsers.tsx`, `AdminSettings.tsx` (Fase 3 completada con recharts y mocks).
 - `StudentDashboard.tsx` (Fase 4 parcial: rediseño UX mobile-first, grid de módulos, drill-down, transiciones AnimatePresence).
+- `VIPLiveRoom.tsx` (flujo completo: countdown → intro cinemática → WebRTC <1s + chat real).
+- `AdminLiveManager.tsx` (CRUD completo con schema real, drag-drop imagen, timezone Colombia, guía OBS + WebRTC).
 
 **🟡 DECENT (gold/dark aplicado pero falta polish)**
-- `VIPLiveRoom.tsx` — falta: transición cinemática countdown → live, parallax bg, chat con diseño.
 - `Header.tsx` — falta: menú mobile funcional (botón existe pero no abre nada).
 - `Footer.tsx` — falta: gradient sutil, separador animado, vida visual.
 - `AdminContentManager.tsx` — falta: skeleton, focus-state animado, depth en upload zone.
-- `AdminLiveManager.tsx` — falta: fade-in en preview imagen, depth en form, skeleton.
 - `LessonPlayer.tsx` — falta: skeleton al cargar metadata, skin custom sobre `<Stream>`.
 - `GlobalPodcastPlayer.tsx` — falta: thumb del slider custom, pulse en barras, expand/collapse mobile.
+- `LiveChat.tsx` — mensajes sin entrance, input plano, sin skeleton, sin "está escribiendo".
 
 **🔴 BASIC / MISSING (placeholder o sin identidad)**
 - `LessonViewer.tsx` — playlist sin animación, modal upgrade plano, sin empty states.
-- `LiveChat.tsx` — mensajes sin entrance, input plano, sin skeleton, sin "está escribiendo".
 
 **⚫ Pantallas que aún no existen**
 - "Cuenta verificada / Email confirmado" post-signup (Supabase email link).
@@ -316,8 +321,8 @@ for select using (
 
 **❌ Pendientes**
 1. **Page transitions** — wrapper con `AnimatePresence` por route para fade/slide entre pantallas (Fase Cierre).
-2. **Custom Stream player skin** — wrapper sobre `<Stream>` con controles dorados (Fase 5).
-3. **Modal/Dialog premium** — backdrop blur + scale-in en lugar de radix defaults (Fase Cierre).
+2. **Modal/Dialog premium** — backdrop blur + scale-in en lugar de radix defaults (Fase Cierre).
+3. **Custom Stream player skin** — wrapper sobre `<Stream>` (solo para VOD, ya no para lives).
 
 ### 10.5 Plan de fases de estilo
 
@@ -334,15 +339,17 @@ for select using (
 
 **🔜 Fase 4 — Polish DECENT pages**
 - ✅ `StudentDashboard.tsx`: Rediseño UX mobile-first, sticky nav, drill-down (grid -> player), `AnimatePresence` en tabs, Skeletons implementados, global toaster.
-- ⏳ `VIPLiveRoom.tsx` + `LiveChat.tsx`: transición cinemática countdown → live, parallax bg, rediseñar LiveChat.
+- ✅ `VIPLiveRoom.tsx`: flujo completo (countdown → intro cinemática → WebRTC <1s + chat real).
+- ✅ `AdminLiveManager.tsx`: CRUD completo, drag-drop imagen, timezone Colombia, guía OBS + WebRTC.
+- ⏳ `LiveChat.tsx`: rediseñar (entrance de mensajes, input premium, skeleton, "está escribiendo").
 - ⏳ `LessonViewer.tsx`: playlist animada, modal upgrade premium, empty states con `<EmptyState/>`.
 - ⏳ `Header.tsx`: menú mobile funcional usando `<Sheet>` ya disponible.
 - ⏳ `Footer.tsx`: gradient sutil + separador animado.
 
 **🔜 Fase 5 — Player + Admin polish**
-- Custom skin sobre `<Stream>` (Cloudflare) con controles dorados — para `LessonPlayer` y `VIPLiveRoom`.
+- Custom skin sobre `<Stream>` (Cloudflare) con controles dorados — para `LessonPlayer` (VOD).
 - Pulir `GlobalPodcastPlayer` (thumb slider custom, pulse en barras durante playback, expand/collapse mobile).
-- Pulir `AdminContentManager` y `AdminLiveManager` (skeleton, focus animado, depth en upload zones, fade-in preview imagen).
+- Pulir `AdminContentManager` (skeleton, focus animado, depth en upload zones).
 
 **🔜 Fase Cierre — Transitions globales + Modal premium**
 - Wrapper con `AnimatePresence` en `routes.tsx` para fade/slide entre rutas.
@@ -451,7 +458,33 @@ Esto garantiza que solo haya UN `<Stream>` de Cloudflare en el DOM (el de `Podca
 5. **`opacity: 0.01` y dimensiones reales (320×180) para el contenedor.** `opacity: 0` o `width/height: 1` causan throttling en Chromium.
 6. **No persisitir `isPlaying` en el store.** Al recargar la página, el navegador bloquea autoplay. El estado de reproducción debe comenzar como `false` y activarse con gesto del usuario.
 
-### 10.8 Reglas operativas para retomar
+### 10.8 Historial de cambios — 2026-05-11
+
+#### API de lives alineada al schema real de Supabase
+- `src/lib/api/stream/lives.ts`: `LiveEvent` reescrito para coincidir con la tabla real (`starts_at`, `status`, `stream_live_input_id`, `required_plan`, `allowed_plans`, `background_image_url`).
+- `fetchActiveLive()` ahora devuelve la sala con `status="live"` o la próxima `scheduled`.
+- `sanitize()` corregido: solo convierte `""` a `null` para campos presentes en el payload (no para undefined). Fix del error 400 al forzar EN VIVO que mataba `starts_at`.
+
+#### AdminLiveManager — funcionalidad completa
+- **Timezone Colombia**: badge automático con timezone detectado (`Intl`). Helper `isoToLocalDatetime` para que el input `datetime-local` respete la zona horaria local al cargar datos guardados.
+- **Drag & drop de imagen**: subida a Supabase Storage bucket `backgrounds`. Fallback URL textual. Validación de tamaño (5MB max).
+- **Campos simplificados**: eliminado `duration_minutes` del UI. `required_plan` se auto-deriva del plan más alto en `allowed_plans`. Sin duplicados.
+- **Refresco al seleccionar sala**: `selectRoom()` hace fetch fresco a Supabase en vez de usar el estado local.
+- **Guía OBS**: pasos para CBR, keyframe 1s, 30fps, Low-Latency HLS y activación WebRTC.
+
+#### VIPLiveRoom — WebRTC + polling
+- **Reemplazo de `<Stream>` por `<iframe>` directo**: URL modo WebRTC (`?mode=webrtc&preferLowLatency=true`) para latencia <1s. Usa `VITE_CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN` del `.env`.
+- **Polling 3s**: consulta periódica a Supabase como fallback de Realtime (no requiere F5).
+- **Fallback de título**: si `live.title` existe, se muestra solo el título; si no, cae a "El conocimiento es la moneda definitiva".
+
+#### SQL migrations
+- `docs/migrate-lives-schema.sql`: incluye:
+  - `ALTER COLUMN background_image_url` (si no existe)
+  - RLS policies para `lives`, `live_messages`, storage bucket `backgrounds`
+  - Habilitación de Realtime (`ALTER PUBLICATION supabase_realtime ADD TABLE lives`)
+  - WebRTC manual step reminder
+
+### 10.9 Reglas operativas para retomar
 
 - Después de cada módulo terminado: correr `npm run typecheck` + `npx vitest run <files>` antes de cerrar la tarea.
 - Mantener el inventario de tareas vivo (`TaskCreate`/`TaskUpdate`) en cada sesión nueva.

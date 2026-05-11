@@ -21,6 +21,8 @@ interface PlayerStore {
   togglePodcastMode: () => void;
   setVolume: (volume: number) => void;
   setPlaybackProgress: (videoId: string, time: number) => void;
+  setLastKnownTime: (time: number) => void;
+  setLastVideoId: (videoId: string | null) => void;
   closePlayer: () => void;
   clearPlayer: () => void; // Use when auth changes to force hide
 }
@@ -39,6 +41,8 @@ export const usePlayerStore = create<PlayerStore>()(
       togglePodcastMode: () => set((state) => ({ isPodcastMode: !state.isPodcastMode })),
       setVolume: (volume) => set({ volume }),
       setPlaybackProgress: (videoId, time) => set({ lastVideoId: videoId, lastKnownTime: time }),
+      setLastKnownTime: (time) => set({ lastKnownTime: time }),
+      setLastVideoId: (videoId) => set({ lastVideoId: videoId }),
       closePlayer: () => set({ track: null, isPodcastMode: false, isPlaying: false }),
       clearPlayer: () => set({ track: null, isPlaying: false, isPodcastMode: false }),
     }),

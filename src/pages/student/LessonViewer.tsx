@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { PlayCircle, Lock } from "lucide-react";
 import { motion } from "framer-motion";
@@ -24,6 +25,11 @@ const VIDEO_FILENAME = "https://www.w3schools.com/html/mov_bbb.mp4"; // Placehol
 
 const LessonViewer = () => {
   const isUserPremium = false;
+
+  useEffect(() => {
+    const t = setTimeout(() => window.scrollTo(0, 0), 50);
+    return () => clearTimeout(t);
+  }, []);
 
   return (
     <div className="min-h-screen bg-darker selection:bg-gold/30 font-sans text-textMain flex flex-col">
