@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player.store";
 import { useAuthStore } from "@/stores/auth.store";
 import { supabase } from "@/lib/supabase";
-import { fetchActiveLive, type LiveEvent } from "@/lib/api/stream/lives";
+import { fetchActiveLive, checkLiveInputStatus, type LiveEvent } from "@/lib/api/stream/lives";
 
 const CF_SUBDOMAIN = import.meta.env.VITE_CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN || "";
 
@@ -18,14 +18,17 @@ const VIPLiveRoom = () => {
   const [loading, setLoading] = useState(true);
   const [showIntro, setShowIntro] = useState(false);
   const [timeLeft, setTimeLeft] = useState({ hours: 0, minutes: 0, seconds: 0 });
+  const [liveInputConnected, setLiveInputConnected] = useState(false);
   const { clearPlayer } = usePlayerStore();
 
   useEffect(() => { clearPlayer(); }, [clearPlayer]);
 
-  const isLive = live?.status === "live";
+  const isLive = live?.status === "live" && !live?.is_paused;
   const isEnded = live?.status === "ended";
+  const isPaused = live?.is_paused === true;
   const startsAt = live?.starts_at ? new Date(live.starts_at).getTime() : 0;
-  const hasStarted = !live?.starts_at || Date.now() >= startsAt;
+  const showIframe = !isPaused && (isLive || liveInputConnected);
+  const hasStreamId = Boolean(live?.stream_live_input_id);
 
   // Fetch active live on mount + validate plan access
   useEffect(() => {
@@ -74,9 +77,21 @@ const VIPLiveRoom = () => {
     return () => clearInterval(poll);
   }, []);
 
-  // Countdown — solo si starts_at está en el futuro y no está ended
+  // Poll Cloudflare Live Input status: si OBS está transmitiendo, mostrar iframe aunque falte starts_at
   useEffect(() => {
-    if (!live?.starts_at || hasStarted || isEnded) return;
+    if (!live?.stream_live_input_id || isEnded) return;
+    const check = async () => {
+      const { connected } = await checkLiveInputStatus(live.stream_live_input_id!);
+      setLiveInputConnected(prev => connected !== prev ? connected : prev);
+    };
+    check();
+    const poll = setInterval(check, 10000);
+    return () => clearInterval(poll);
+  }, [live?.id, live?.stream_live_input_id, isEnded]);
+
+  // Countdown — solo si starts_at está en el futuro, no ended y OBS no conectado
+  useEffect(() => {
+    if (!live?.starts_at || showIframe || isEnded) return;
     const timer = setInterval(() => {
       const diff = Math.max(0, startsAt - Date.now());
       setTimeLeft({
@@ -86,7 +101,7 @@ const VIPLiveRoom = () => {
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [live?.id, live?.status, live?.starts_at]);
+  }, [live?.id, live?.status, live?.starts_at, showIframe]);
 
   if (loading) {
     return (
@@ -186,6 +201,10 @@ const VIPLiveRoom = () => {
               <div className="flex items-center gap-2.5 bg-gray-600/20 backdrop-blur-md border border-gray-600/50 text-textMuted px-4 py-2 rounded-2xl text-[10px] font-black tracking-widest">
                 <VideoOff size={14} /> FINALIZADO
               </div>
+            ) : isPaused ? (
+              <div className="flex items-center gap-2.5 bg-yellow-600/20 backdrop-blur-md border border-yellow-600/50 text-yellow-500 px-4 py-2 rounded-2xl text-[10px] font-black tracking-widest">
+                <VideoOff size={14} /> EN PAUSA
+              </div>
             ) : isLive ? (
               <motion.div
                 initial={{ scale: 0.8, opacity: 0 }}
@@ -202,7 +221,7 @@ const VIPLiveRoom = () => {
             ) : (
               <div className="flex items-center gap-2.5 bg-black/40 backdrop-blur-md border border-white/10 text-white/70 px-4 py-2 rounded-2xl text-[10px] font-bold tracking-wider">
                 <Clock size={14} className="text-gold" />
-                {hasStarted ? "EN ESPERA" : "PRÓXIMAMENTE"}
+                {showIframe ? "EN ESPERA" : "PRÓXIMAMENTE"}
               </div>
             )}
           </div>
@@ -214,7 +233,7 @@ const VIPLiveRoom = () => {
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[radial-gradient(circle_at_center,rgba(204,164,59,0.05)_0%,transparent_70%)]" />
             <div className="absolute inset-0 opacity-[0.03] bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]" />
 
-            {!isLive && !isEnded && (
+            {!isLive && !isEnded && !isPaused && (
               <div
                 className="absolute inset-0 bg-cover bg-center"
                 style={{ backgroundImage: live.background_image_url ? `url('${live.background_image_url}')` : undefined }}
@@ -225,40 +244,64 @@ const VIPLiveRoom = () => {
           </div>
 
           <AnimatePresence mode="wait">
-            {isEnded ? (
+            {showIframe && hasStreamId ? (
+              <motion.div
+                key="player"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 1, delay: 0.5 }}
+                className="w-full h-full relative bg-black flex items-center justify-center"
+              >
+                <iframe
+                  src={`https://${CF_SUBDOMAIN}/${live.stream_live_input_id}/iframe?mode=webrtc&autoplay=true&preferLowLatency=true`}
+                  allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; camera; microphone"
+                  className="w-full h-full border-none absolute inset-0 z-0"
+                  allowFullScreen
+                  title="VIP Live Room"
+                />
+              </motion.div>
+            ) : isEnded ? (
               <motion.div
                 key="ended"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.8 }}
-                className="w-full h-full z-10 bg-black flex items-center justify-center"
+                className="w-full h-full flex items-center justify-center bg-black/80 relative"
               >
-                {live.recording_stream_uid ? (
-                  <div className="w-full h-full relative bg-black">
-                    <div className="absolute top-6 left-6 z-20">
-                      <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md border border-white/10 px-4 py-2 rounded-xl">
-                        <VideoOff size={16} className="text-textMuted" />
-                        <span className="text-xs font-bold text-white/70 uppercase tracking-wider">Transmisión finalizada</span>
-                      </div>
-                    </div>
-                    <iframe
-                      src={`https://${CF_SUBDOMAIN}/${live.recording_stream_uid}/iframe`}
-                      allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
-                      allowFullScreen
-                      className="w-full h-full border-none"
-                      title={`Grabación: ${live.title}`}
-                    />
-                  </div>
-                ) : (
-                  <div className="text-center z-10 px-6">
-                    <VideoOff size={48} className="mx-auto text-white/20 mb-4" />
-                    <h2 className="text-2xl font-bold text-white mb-2">Transmisión finalizada</h2>
-                    <p className="text-textMuted max-w-md mx-auto">Gracias por acompañarnos. Podés seguir conversando en el chat.</p>
-                  </div>
-                )}
+                <div className="text-center p-8 z-10">
+                  <VideoOff size={64} className="mx-auto text-white/20 mb-6" />
+                  <h2 className="text-2xl font-bold text-white mb-2">Transmisión finalizada</h2>
+                  <p className="text-textMuted max-w-md mx-auto">Gracias por acompañarnos. Podés seguir conversando en el chat.</p>
+                </div>
               </motion.div>
-            ) : !hasStarted ? (
+            ) : isPaused ? (
+              <motion.div
+                key="paused"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="w-full h-full flex items-center justify-center bg-black/80 relative"
+              >
+                <div className="text-center p-8 z-10">
+                  <VideoOff size={64} className="mx-auto text-yellow-500/50 mb-6" />
+                  <h2 className="text-2xl font-bold text-white mb-2">Transmisión en Pausa</h2>
+                  <p className="text-textMuted max-w-md mx-auto">La transmisión se ha pausado temporalmente. Volveremos en breve.</p>
+                </div>
+              </motion.div>
+            ) : !hasStreamId ? (
+              <motion.div
+                key="no-stream"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="w-full h-full flex items-center justify-center z-10"
+              >
+                <div className="text-white text-center p-12 bg-darker rounded-3xl border border-white/5">
+                  <div className="w-16 h-16 bg-red-500/20 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <Tv size={32} />
+                  </div>
+                  <h3 className="text-2xl font-bold mb-2">Señal no configurada</h3>
+                  <p className="text-textMuted max-w-sm mx-auto">El stream ID de Cloudflare no está vinculado a esta sala. Contactá al administrador.</p>
+                </div>
+              </motion.div>
+            ) : !showIframe ? (
               <motion.div
                 key="waiting"
                 initial={{ opacity: 0, scale: 0.9 }}
@@ -329,40 +372,15 @@ const VIPLiveRoom = () => {
               </motion.div>
             ) : (
               <motion.div
-                key="player"
+                key="waiting-end"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                transition={{ duration: 1.5 }}
-                className="w-full h-full z-10 bg-black flex items-center justify-center group"
+                className="w-full h-full flex items-center justify-center z-10"
               >
-                {!live.stream_live_input_id ? (
-                  <div className="text-white text-center p-12 bg-darker rounded-3xl border border-white/5">
-                    <div className="w-16 h-16 bg-red-500/20 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
-                      <Tv size={32} />
-                    </div>
-                    <h3 className="text-2xl font-bold mb-2">Señal no configurada</h3>
-                    <p className="text-textMuted max-w-sm mx-auto">El stream ID de Cloudflare no está vinculado a esta sala. Contacta al administrador.</p>
-                  </div>
-                ) : (
-                  <div className="w-full h-full relative bg-black">
-                    <iframe
-                      src={`https://${CF_SUBDOMAIN}/${live.stream_live_input_id}/iframe?mode=webrtc&controls=true&autoplay=true&preferLowLatency=true`}
-                      allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
-                      allowFullScreen
-                      className="w-full h-full border-none"
-                      title="Transmisión en vivo"
-                    />
-                    <div className="absolute bottom-10 left-10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none">
-                      <div className="flex items-center gap-4 bg-black/60 backdrop-blur-xl border border-white/10 px-5 py-3 rounded-2xl">
-                        <Tv size={20} className="text-gold" />
-                        <div>
-                          <p className="text-[10px] text-white/50 uppercase font-black tracking-widest">Señal desde</p>
-                          <p className="text-sm font-bold text-white tracking-tight">Cloudflare Stream WebRTC</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                <div className="text-center">
+                  <Clock size={48} className="mx-auto text-white/20 mb-4" />
+                  <p className="text-xl text-white/60 font-bold">Esperando señal...</p>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>

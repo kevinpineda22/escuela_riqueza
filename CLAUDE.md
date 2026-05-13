@@ -523,9 +523,10 @@ Esto garantiza que solo haya UN `<Stream>` de Cloudflare en el DOM (el de `Podca
 
 #### VIPLiveRoom — auto-detección de OBS + sala persistente
 - **El iframe de Cloudflare WebRTC** se muestra automáticamente cuando `starts_at` ha pasado (sin depender de Forzar EN VIVO). Cloudflare maneja internamente el estado "live" / "waiting for signal" según si OBS está transmitiendo.
+- **Detección de OBS vía API**: cuando la sala está en countdown (antes de `starts_at`), `VIPLiveRoom` consulta `/api/stream/live-input-status.ts` cada 10s. Si Cloudflare reporta que el Live Input está `connected` (OBS transmitiendo), salta el contador y muestra el iframe inmediatamente.
 - **Nuevo estado "FINALIZADO"**: cuando admin hace clic en "Finalizar", la sala NO se oculta. Muestra "Transmisión finalizada" overlay + el chat sigue activo. Solo al desactivar `is_active` aparece "No hay eventos".
 - **Chat siempre visible**: en estados scheduled, live, ended y hasta que la sala se desactive.
-- **Badges dinámicos**: "EN VIVO" (rojo), "EN ESPERA" (dorado, cuando starts_at pasó pero OBS no ha iniciado), "PRÓXIMAMENTE" (antes de starts_at), "FINALIZADO" (gris).
+- **Badges dinámicos**: "EN VIVO" (rojo), "EN ESPERA" (dorado, OBS conectado o starts_at pasado), "PRÓXIMAMENTE" (antes de starts_at), "FINALIZADO" (gris).
 
 ### 10.11 Reglas operativas para retomar
 

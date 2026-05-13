@@ -14,6 +14,7 @@ export interface LiveEvent {
   required_plan: PlanType;
   status: LiveStatus;
   is_active: boolean;
+  is_paused: boolean;
   background_image_url: string | null;
   allowed_plans: string[];
   created_at: string;
@@ -124,6 +125,20 @@ export async function fetchEndedLives(): Promise<LiveEvent[]> {
     .order("starts_at", { ascending: false });
   if (error) throw error;
   return (data || []) as LiveEvent[];
+}
+
+export async function checkLiveInputStatus(liveInputId: string): Promise<{ connected: boolean }> {
+  try {
+    const res = await fetch("/api/stream/live-input-status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ live_input_id: liveInputId }),
+    });
+    if (!res.ok) return { connected: false };
+    return await res.json();
+  } catch {
+    return { connected: false };
+  }
 }
 
 export async function fetchRecording(liveInputId: string): Promise<{ recording_uid: string | null; message?: string }> {

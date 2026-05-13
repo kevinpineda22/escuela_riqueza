@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Radio, Image as ImageIcon, Settings2, Save, Plus, Trash2, PlayCircle, StopCircle, Calendar, Clock, Monitor, Copy, Upload, Download, Video } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { fetchLives, fetchEndedLives, fetchRecording, createLive, updateLive, deleteLive, setActiveLive as apiSetActiveLive, type LiveEvent } from "@/lib/api/stream/lives";
+import { fetchLives, fetchEndedLives, fetchRecording, createLive, updateLive, deleteLive, setActiveLive as apiSetActiveLive, checkLiveInputStatus, type LiveEvent } from "@/lib/api/stream/lives";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toaster";
 
@@ -34,6 +34,7 @@ const AdminLiveManager = () => {
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [customInputId, setCustomInputId] = useState(false);
+  const [obsConnected, setObsConnected] = useState(false);
 
   const [formData, setFormData] = useState<Partial<LiveEvent>>({
     title: "",
@@ -47,9 +48,34 @@ const AdminLiveManager = () => {
     required_plan: "vip",
     duration_minutes: null,
     is_active: false,
+    is_paused: false,
   });
 
   useEffect(() => { loadData(); }, []);
+
+  useEffect(() => {
+    if (!activeLive?.stream_live_input_id || activeLive.status === "ended") return;
+    const check = async () => {
+      const { connected } = await checkLiveInputStatus(activeLive.stream_live_input_id!);
+      setObsConnected(prev => connected !== prev ? connected : prev);
+      
+      // Auto-live if OBS is streaming and status is scheduled
+      if (connected && activeLive.status === "scheduled") {
+        try {
+          const updated = await updateLive(activeLive.id, { status: "live", is_paused: false });
+          setLives(prev => prev.map(l => l.id === updated.id ? updated : l));
+          setActiveLive(updated);
+          setFormData(prev => ({ ...prev, status: "live" }));
+          toast.success("Transmisión detectada. Sala ahora EN VIVO.");
+        } catch (err) {
+          console.error(err);
+        }
+      }
+    };
+    check();
+    const poll = setInterval(check, 10000);
+    return () => clearInterval(poll);
+  }, [activeLive?.id, activeLive?.stream_live_input_id, activeLive?.status]);
 
   const uploadBackground = async (file: File) => {
     if (file.size > 5 * 1024 * 1024) { toast.error("La imagen no puede superar 5MB"); return; }
@@ -78,10 +104,12 @@ const AdminLiveManager = () => {
       const [active, ended] = await Promise.all([fetchLives(), fetchEndedLives()]);
       setLives(active);
       setEndedLives(ended);
-      if (active.length > 0) {
-        setActiveLive(active[0]);
-        setFormData(active[0]);
-        setCustomInputId(!PRESET_INPUT_IDS.some(p => p.value === active[0].stream_live_input_id));
+      // Seleccionar la sala activa (is_active=true), o la primera si ninguna está activa
+      const activeRoom = active.find(l => l.is_active) || active[0] || null;
+      if (activeRoom) {
+        setActiveLive(activeRoom);
+        setFormData(activeRoom);
+        setCustomInputId(!PRESET_INPUT_IDS.some(p => p.value === activeRoom.stream_live_input_id));
       }
     } catch (err) {
       console.error(err);
@@ -131,25 +159,47 @@ const AdminLiveManager = () => {
     }
   };
 
-  const handleToggleLive = async (forceLive: boolean) => {
+  const handleToggleLive = async (goingLive: boolean) => {
     if (!activeLive) return;
     try {
       setIsSaving(true);
-      if (forceLive) {
+      if (goingLive) {
         for (const live of lives) {
-          if (live.status === "live" && live.id !== activeLive.id) {
-            await updateLive(live.id, { status: "scheduled" });
+          if (live.status === "live" && !live.is_paused && live.id !== activeLive.id) {
+            await updateLive(live.id, { status: "scheduled", is_paused: false });
           }
         }
       }
-      const updated = await updateLive(activeLive.id, { status: forceLive ? "live" : "scheduled" });
-      setLives(prev => prev.map(l => l.id === updated.id ? updated : l).map(l => forceLive && l.id !== updated.id ? { ...l, status: "scheduled" as const } : l));
+      const updated = await updateLive(activeLive.id, {
+        status: goingLive ? "live" : "scheduled",
+        is_paused: false,
+      });
+      setLives(prev => prev.map(l => l.id === updated.id ? updated : l).map(l => goingLive && l.id !== updated.id ? { ...l, status: "scheduled" as const, is_paused: false } : l));
       setActiveLive(updated);
-      setFormData(prev => ({ ...prev, status: forceLive ? "live" : "scheduled" }));
-      toast.success(forceLive ? "Sala EN VIVO" : "Transmisión detenida");
+      setFormData(prev => ({ ...prev, status: goingLive ? "live" : "scheduled", is_paused: false }));
+      if (goingLive) toast.success("Sala EN VIVO");
+      else toast.success("Sala Programada");
     } catch (err) {
       console.error(err);
       toast.error("Error cambiando estado");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handlePauseResume = async (pause: boolean) => {
+    if (!activeLive) return;
+    try {
+      setIsSaving(true);
+      const updated = await updateLive(activeLive.id, { is_paused: pause });
+      setLives(prev => prev.map(l => l.id === updated.id ? updated : l));
+      setActiveLive(updated);
+      setFormData(prev => ({ ...prev, is_paused: pause }));
+      if (pause) toast.success("Transmisión Pausada");
+      else toast.success("Transmisión Reanudada");
+    } catch (err) {
+      console.error(err);
+      toast.error("Error al pausar/reanudar");
     } finally {
       setIsSaving(false);
     }
@@ -170,11 +220,13 @@ const AdminLiveManager = () => {
         required_plan: "vip",
         duration_minutes: null,
       });
-      setLives(prev => [newLive, ...prev]);
-      setActiveLive(newLive);
-      setFormData(newLive);
+      // Auto-activar la nueva sala (desactiva cualquier otra que estuviera activa)
+      const activated = await apiSetActiveLive(newLive.id);
+      setLives(prev => [activated, ...prev.filter(l => l.id !== activated.id).map(l => ({ ...l, is_active: false }))]);
+      setActiveLive(activated);
+      setFormData(activated);
       setActiveTab("editor");
-      toast.success("Sala creada", { description: "Ahora podés configurar título, horario y fondo." });
+      toast.success("Sala creada y activada", { description: "Ya está visible para los usuarios en /vip-live." });
     } catch (err) {
       console.error(err);
       toast.error("Error al crear sala");
@@ -215,7 +267,7 @@ const AdminLiveManager = () => {
 
   if (loading) return <div className="text-white text-center py-20">Cargando salas...</div>;
 
-  const isLive = formData.status === "live";
+  const isLive = formData.status === "live" && !formData.is_paused;
 
   return (
     <div className="max-w-5xl mx-auto pb-20">
@@ -473,16 +525,19 @@ const AdminLiveManager = () => {
           </div>
 
           {/* Control de Transmisión */}
-          <div className={cn("border rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4 transition-colors", isLive ? "bg-red-500/10 border-red-500/30" : "bg-darker border-white/10")}>
-            <div>
-              <h3 className={cn("text-lg font-bold", isLive ? "text-red-400" : "text-white")}>
-                Control de Transmisión {isLive && "(¡EN VIVO!)"}
-              </h3>
-              <p className="text-sm text-textMuted max-w-md mt-1">
-                {isLive
-                  ? "La transmisión está activa. Los usuarios VIP pueden ver el evento en vivo."
-                  : "Activa la sala para que los usuarios VIP vean la transmisión. Solo puede haber 1 sala activa a la vez."}
-              </p>
+          <div className={cn("border rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4 transition-colors", isLive ? "bg-red-500/10 border-red-500/30" : formData.is_paused ? "bg-yellow-500/10 border-yellow-500/30" : obsConnected ? "bg-red-500/5 border-red-500/20" : "bg-darker border-white/10")}>
+              <div>
+                <h3 className={cn("text-lg font-bold flex items-center gap-2", isLive ? "text-red-400" : formData.is_paused ? "text-yellow-500" : "text-white")}>
+                  Control de Transmisión {isLive && "(¡EN VIVO!)"} {formData.is_paused && "(PAUSADO)"}
+                  {obsConnected && !isLive && !formData.is_paused && <span className="text-[10px] bg-red-500/20 text-red-500 border border-red-500/50 px-2 py-0.5 rounded-full animate-pulse uppercase">OBS Detectado</span>}
+                </h3>
+                <p className="text-sm text-textMuted max-w-md mt-1">
+                  {isLive
+                    ? "La transmisión está activa. Los usuarios VIP pueden ver el evento en vivo."
+                    : formData.is_paused
+                    ? "La transmisión está detenida temporalmente. Los usuarios verán un mensaje de pausa."
+                    : "Activa la sala para que los usuarios VIP vean la transmisión. Si transmites desde OBS se activará automáticamente."}
+                </p>
               {formData.starts_at && !isLive && (
                 <p className="text-xs text-gold mt-2 flex items-center gap-1">
                   <Calendar size={12} /> Programado: {new Date(formData.starts_at).toLocaleString("es-CO")}
@@ -491,8 +546,8 @@ const AdminLiveManager = () => {
             </div>
             {isLive ? (
               <div className="flex gap-2">
-                <button onClick={() => handleToggleLive(false)}
-                  className="bg-gray-600 hover:bg-gray-700 text-white font-bold px-6 py-3 rounded-xl flex items-center gap-2 whitespace-nowrap transition-colors">
+                <button onClick={() => handlePauseResume(true)}
+                  className="bg-yellow-600 hover:bg-yellow-700 text-white font-bold px-6 py-3 rounded-xl flex items-center gap-2 whitespace-nowrap transition-colors">
                   <StopCircle size={20} /> Detener
                 </button>
                 <button onClick={async () => {
@@ -519,10 +574,15 @@ const AdminLiveManager = () => {
                   <StopCircle size={20} /> Finalizar
                 </button>
               </div>
+            ) : formData.is_paused ? (
+              <button onClick={() => handlePauseResume(false)}
+                className="bg-yellow-600 hover:bg-yellow-700 text-white font-bold px-6 py-3 rounded-xl flex items-center gap-2 whitespace-nowrap shadow-lg shadow-yellow-900/50 transition-colors">
+                <PlayCircle size={20} /> Reanudar
+              </button>
             ) : (
               <button onClick={() => handleToggleLive(true)}
                 className="bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-3 rounded-xl flex items-center gap-2 whitespace-nowrap shadow-lg shadow-red-900/50 transition-colors">
-                <PlayCircle size={20} /> Forzar EN VIVO
+                <PlayCircle size={20} /> {obsConnected ? "Iniciar Transmisión" : "Forzar EN VIVO"}
               </button>
             )}
           </div>
@@ -550,7 +610,8 @@ const AdminLiveManager = () => {
                 onClick={() => selectRoom(live)}>
                 <div className="flex items-center gap-4">
                   <div className={cn("w-3 h-3 rounded-full shrink-0",
-                    live.status === "live" ? "bg-red-500 animate-pulse shadow-[0_0_10px_red]" :
+                    live.status === "live" && !live.is_paused ? "bg-red-500 animate-pulse shadow-[0_0_10px_red]" :
+                    live.is_paused ? "bg-yellow-500 animate-pulse" :
                     live.starts_at ? "bg-gold/50" : "bg-gray-600")} />
                   <div>
                     <h4 className="text-white font-bold">{live.title || "Sin título"}</h4>
@@ -563,7 +624,8 @@ const AdminLiveManager = () => {
                       {live.allowed_plans?.map(plan => (
                         <span key={plan} className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-white/10 text-white/60">{plan}</span>
                       ))}
-                      {live.status === "live" && <span className="text-[10px] text-red-400 font-bold">EN VIVO</span>}
+                      {live.status === "live" && !live.is_paused && <span className="text-[10px] text-red-400 font-bold">EN VIVO</span>}
+                      {live.is_paused && <span className="text-[10px] text-yellow-400 font-bold">PAUSADO</span>}
                     </div>
                   </div>
                 </div>
@@ -634,6 +696,7 @@ const AdminLiveManager = () => {
                     <button onClick={async e => {
                       e.stopPropagation();
                       try {
+                        await updateLive(live.id, { status: "scheduled" });
                         const fresh = await apiSetActiveLive(live.id);
                         setLives(prev => [...prev, fresh]);
                         setEndedLives(prev => prev.filter(l => l.id !== live.id));
