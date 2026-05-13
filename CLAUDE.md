@@ -530,3 +530,4 @@ Esto garantiza que solo haya UN `<Stream>` de Cloudflare en el DOM (el de `Podca
 - Antes de tocar tabla nueva en Supabase: verificar que tiene RLS.
 - Antes de exponer un endpoint: verificar que valida JWT y rol.
 - Conservar la paleta gold/dark — el diseño actual es del cliente.
+- **SPA en Vercel**: cualquier ruta que no sea `/` requiere `vercel.json` con `rewrites: [{ "source": "/(.*)", "destination": "/index.html" }]`. Sin esto, recargar cualquier página (dashboard, VIP-live, admin) devuelve 404 NOT_FOUND. También afecta links con `<a href>` (navegación dura): aunque el link funcione en dev, en producción Vercel no conoce la ruta y devuelve 404.
