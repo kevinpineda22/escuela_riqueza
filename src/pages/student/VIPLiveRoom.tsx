@@ -1,85 +1,77 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import LiveChat from "@/components/feature/LiveChat";
 import { Sparkles, Calendar, Clock, Tv, Radio, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player.store";
+import { useAuthStore } from "@/stores/auth.store";
 import { supabase } from "@/lib/supabase";
 import { fetchActiveLive, type LiveEvent } from "@/lib/api/stream/lives";
 
 const CF_SUBDOMAIN = import.meta.env.VITE_CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN || "";
 
 const VIPLiveRoom = () => {
+  const navigate = useNavigate();
+  const { user } = useAuthStore();
   const [live, setLive] = useState<LiveEvent | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isLive, setIsLive] = useState(false);
   const [showIntro, setShowIntro] = useState(false);
   const [timeLeft, setTimeLeft] = useState({ hours: 0, minutes: 0, seconds: 0 });
   const { clearPlayer } = usePlayerStore();
 
   useEffect(() => { clearPlayer(); }, [clearPlayer]);
 
-  const triggerIntro = useCallback(() => {
-    if (isLive || showIntro) return;
-    setShowIntro(true);
-    setTimeout(() => {
-      setIsLive(true);
-      setShowIntro(false);
-    }, 3500);
-  }, [isLive, showIntro]);
+  const isLive = live?.status === "live";
 
-  // Fetch active live
+  // Fetch active live on mount + validate plan access
   useEffect(() => {
-    const load = async () => {
-      try {
-        const active = await fetchActiveLive();
+    if (!user) return;
+    fetchActiveLive()
+      .then(active => {
         setLive(active);
-      } catch (err) {
-        console.error("Error fetching live:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-  }, []);
+        if (active && !active.allowed_plans?.includes(user.plan)) {
+          navigate("/dashboard", { replace: true });
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [user, navigate]);
 
-  // On initial load, if already live → intro
+  // Trigger intro when status transitions to live (initial or via Realtime/poll)
   useEffect(() => {
-    if (live?.status === "live") triggerIntro();
-  }, [live?.id, live?.status, triggerIntro]);
+    if (live?.status !== "live" || showIntro) return;
+    setShowIntro(true);
+    const t = setTimeout(() => setShowIntro(false), 3500);
+    return () => clearTimeout(t);
+  }, [live?.id, live?.status]);
 
-  // Real-time subscription to active live
+  // Suscripción Realtime a TODA la tabla lives — detecta cualquier cambio
+  // (activar otra sala, forzar EN VIVO, detener, finalizar)
   useEffect(() => {
-    if (!live) return;
     const channel = supabase
-      .channel(`live-room-${live.id}`)
+      .channel("vip-live-all-changes")
       .on(
         "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "lives", filter: `id=eq.${live.id}` },
-        (payload) => {
-          const updated = payload.new as LiveEvent;
-          setLive(updated);
-          if (updated.status === "live") triggerIntro();
+        { event: "*", schema: "public", table: "lives" },
+        async () => {
+          const active = await fetchActiveLive();
+          setLive(active);
         }
       )
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [live?.id, triggerIntro]);
+  }, []);
 
-  // Polling fallback: refresca la sala cada 3s (por si Realtime no está habilitado en Supabase)
+  // Polling 3s como fallback — siempre refresca la sala activa
   useEffect(() => {
-    if (!live || live.status === "live") return;
     const poll = setInterval(async () => {
-      const { data } = await supabase.from("lives").select("*").eq("id", live.id).single();
-      if (data) {
-        const updated = data as LiveEvent;
-        setLive(updated);
-        if (updated.status === "live") triggerIntro();
-      }
+      const active = await fetchActiveLive();
+      setLive(active);
     }, 3000);
     return () => clearInterval(poll);
-  }, [live?.id, triggerIntro]);
+  }, []);
 
   // Countdown based on starts_at
   useEffect(() => {

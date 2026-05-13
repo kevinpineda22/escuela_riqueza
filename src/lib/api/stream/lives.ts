@@ -12,6 +12,7 @@ export interface LiveEvent {
   stream_live_input_id: string | null;
   required_plan: PlanType;
   status: LiveStatus;
+  is_active: boolean;
   background_image_url: string | null;
   allowed_plans: string[];
   created_at: string;
@@ -29,34 +30,36 @@ export async function fetchLives(): Promise<LiveEvent[]> {
   const { data, error } = await supabase
     .from("lives")
     .select("*")
+    .neq("status", "ended")
     .order("created_at", { ascending: false });
 
   if (error) throw error;
   return (data || []) as LiveEvent[];
 }
 
+export async function fetchLivesForPlan(plan: string): Promise<LiveEvent[]> {
+  const { data, error } = await supabase
+    .from("lives")
+    .select("*")
+    .in("status", ["scheduled", "live"])
+    .contains("allowed_plans", [plan])
+    .order("starts_at", { ascending: true });
+
+  if (error) throw error;
+  return (data || []) as LiveEvent[];
+}
+
 export async function fetchActiveLive(): Promise<LiveEvent | null> {
-  // First: currently live room
-  const { data: liveData, error: liveErr } = await supabase
+  const { data, error } = await supabase
     .from("lives")
     .select("*")
-    .eq("status", "live")
-    .limit(1);
-
-  if (liveErr) throw liveErr;
-  if (liveData && liveData.length > 0) return liveData[0] as LiveEvent;
-
-  // Fallback: next scheduled room (closest starts_at)
-  const { data: nextData, error: nextErr } = await supabase
-    .from("lives")
-    .select("*")
-    .eq("status", "scheduled")
+    .eq("is_active", true)
+    .in("status", ["live", "scheduled"])
     .order("starts_at", { ascending: true })
     .limit(1);
 
-  if (nextErr) throw nextErr;
-  if (nextData && nextData.length > 0) return nextData[0] as LiveEvent;
-
+  if (error) throw error;
+  if (data && data.length > 0) return data[0] as LiveEvent;
   return null;
 }
 
@@ -84,6 +87,29 @@ export async function updateLive(id: string, updates: Partial<LiveEvent>): Promi
 
   if (error) {
     console.error("[updateLive] Supabase error:", error);
+    throw error;
+  }
+  return data as LiveEvent;
+}
+
+export async function setActiveLive(id: string): Promise<LiveEvent> {
+  // Deactivate all others first
+  await supabase
+    .from("lives")
+    .update({ is_active: false })
+    .neq("id", id)
+    .in("status", ["scheduled", "live"]);
+
+  // Activate the selected one
+  const { data, error } = await supabase
+    .from("lives")
+    .update({ is_active: true })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("[setActiveLive] Supabase error:", error);
     throw error;
   }
   return data as LiveEvent;

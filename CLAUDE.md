@@ -258,8 +258,8 @@ for select using (
 - Lógica de planes: columna `allowed_plans` (array) en `modules`, `lessons`, `lives`. Filtrado estricto en `StudentDashboard.tsx` por `user.plan`.
 
 **Lives**
-- `AdminLiveManager.tsx`: CRUD de salas con schema real (`starts_at`, `status`, `stream_live_input_id`, `allowed_plans`, `required_plan`). Timezone auto-detected con badge. Drag & drop de imagen de fondo a Supabase Storage (bucket `backgrounds`). Botón "Forzar EN VIVO" con mutex. Guía OBS con pasos para baja latencia y activación WebRTC.
-- `VIPLiveRoom.tsx`: countdown desde `starts_at`, intro cinemática al activarse, reproductor WebRTC via `<iframe mode=webrtc>` para latencia <1s. Polling 3s como fallback de estado. Chat en vivo con `live.id` real (no placeholder).
+- `AdminLiveManager.tsx`: CRUD de salas con schema real (`starts_at`, `status`, `stream_live_input_id`, `allowed_plans`, `required_plan`, `is_active`). Timezone auto-detected con badge. Drag & drop de imagen de fondo a Supabase Storage (bucket `backgrounds`). Botón "Forzar EN VIVO" con mutex. Botón Activar/Inactivar por sala (columna `is_active`). Guía OBS con pasos para baja latencia y activación WebRTC.
+- `VIPLiveRoom.tsx`: countdown desde `starts_at`, intro cinemática al activarse, reproductor WebRTC via `<iframe mode=webrtc>` para latencia <1s. Suscripción Realtime a TODA la tabla `lives` + polling 3s. Acceso dinámico: valida `allowed_plans` del active live (sin plan fijo en ruta). Si el plan del usuario no está en `allowed_plans`, redirige al dashboard.
 - `LiveChat.tsx`: chat funcional con scroll y broadcast en tiempo real (Supabase Realtime).
 
 **Admin shell**
@@ -480,11 +480,37 @@ Esto garantiza que solo haya UN `<Stream>` de Cloudflare en el DOM (el de `Podca
 #### SQL migrations
 - `docs/migrate-lives-schema.sql`: incluye:
   - `ALTER COLUMN background_image_url` (si no existe)
+  - `ALTER TABLE ADD COLUMN is_active boolean NOT NULL DEFAULT false`
   - RLS policies para `lives`, `live_messages`, storage bucket `backgrounds`
   - Habilitación de Realtime (`ALTER PUBLICATION supabase_realtime ADD TABLE lives`)
   - WebRTC manual step reminder
 
-### 10.9 Reglas operativas para retomar
+### 10.9 Historial de cambios — 2026-05-12
+
+#### Columna `is_active` + selección manual de sala activa
+- **Motivación**: el admin quería elegir QUÉ sala se muestra a los usuarios, no que el sistema auto-seleccionara la más próxima.
+- **Columna `is_active`** (`boolean NOT NULL DEFAULT false`) agregada a tabla `lives`.
+- **`apiSetActiveLive(id)`** en `src/lib/api/stream/lives.ts`: desactiva todas las demás salas (`is_active = false`) y activa la seleccionada (`is_active = true`), todo en una transacción.
+- **`fetchActiveLive()`** reescrito: ahora solo consulta `is_active = true` + `status IN (scheduled, live)`. Sin auto-selección.
+- **Botón Activar/Inactivar** en `AdminLiveManager.tsx`: cada sala tiene un ícono de radio en la lista. Al clickear, llama a `apiSetActiveLive()` y actualiza el estado local + editor + toast.
+
+#### VIPLiveRoom — real-time contra toda la tabla + acceso dinámico por plan
+- **Ruta `/vip-live`** (`routes.tsx`): se quitó `minPlan={PLANS.VIP}`. Ahora es accesible a cualquier usuario autenticado.
+- **Validación de plan en VIPLiveRoom**: en el mount, si el `activeLive` existe pero el plan del usuario no está en `allowed_plans`, redirige a `/dashboard` via `useNavigate`.
+- **Suscripción Realtime a TODA la tabla** `lives` (antes solo al `live.id` específico). Esto permite detectar:
+  - Admin activa otra sala → VIP se cambia instantáneamente a la nueva sala
+  - Admin forza EN VIVO → la sala transiciona a live → intro cinemática → stream
+  - Admin detiene → vuelve a scheduled → countdown
+  - Admin finaliza → `fetchActiveLive()` devuelve null → muestra "No hay eventos"
+- **`isLive`** ahora es derivado (`live?.status === "live"`) en vez de estado separado. Detener/Finalizar resetean correctamente la vista sin stale state.
+- **Polling 3s** siempre activo (ya no condicional a `!live || live.status === "live"`) para cubrir fallback de Realtime.
+
+#### StudentDashboard — entrada anticipada ≤15 min
+- **Botón "Ver sala"** cuando el live está programado y falta ≤15 min para `starts_at`. Link a `/vip-live` para que el usuario entre a la sala de espera con countdown.
+- Si falta >15 min, muestra "Disponible para tu plan" (sin CTA).
+- La sección de lives ahora usa `fetchActiveLive()` en vez de `fetchLivesForPlan()`. Solo muestra la sala que el admin activó, si pertenece al plan del usuario.
+
+### 10.10 Reglas operativas para retomar
 
 - Después de cada módulo terminado: correr `npm run typecheck` + `npx vitest run <files>` antes de cerrar la tarea.
 - Mantener el inventario de tareas vivo (`TaskCreate`/`TaskUpdate`) en cada sesión nueva.

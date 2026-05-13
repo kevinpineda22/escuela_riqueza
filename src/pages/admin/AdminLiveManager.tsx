@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Radio, Image as ImageIcon, Settings2, Save, Plus, Trash2, PlayCircle, StopCircle, Calendar, Clock, Monitor, Copy, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { fetchLives, createLive, updateLive, deleteLive, type LiveEvent } from "@/lib/api/stream/lives";
+import { fetchLives, createLive, updateLive, deleteLive, setActiveLive as apiSetActiveLive, type LiveEvent } from "@/lib/api/stream/lives";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toaster";
 
@@ -38,6 +38,7 @@ const AdminLiveManager = () => {
     status: "scheduled",
     required_plan: "vip",
     duration_minutes: null,
+    is_active: false,
   });
 
   useEffect(() => { loadData(); }, []);
@@ -422,10 +423,25 @@ const AdminLiveManager = () => {
               )}
             </div>
             {isLive ? (
-              <button onClick={() => handleToggleLive(false)}
-                className="bg-gray-600 hover:bg-gray-700 text-white font-bold px-6 py-3 rounded-xl flex items-center gap-2 whitespace-nowrap transition-colors">
-                <StopCircle size={20} /> Detener Transmisión
-              </button>
+              <div className="flex gap-2">
+                <button onClick={() => handleToggleLive(false)}
+                  className="bg-gray-600 hover:bg-gray-700 text-white font-bold px-6 py-3 rounded-xl flex items-center gap-2 whitespace-nowrap transition-colors">
+                  <StopCircle size={20} /> Detener
+                </button>
+                <button onClick={async () => {
+                  if (!window.confirm("¿Finalizar esta sala? Pasara a estado 'ended' y no aparecerá más como próxima sala.")) return;
+                  try {
+                    const updated = await updateLive(activeLive!.id, { status: "ended" });
+                    setLives(prev => prev.map(l => l.id === updated.id ? updated : l).filter(l => l.status !== "ended"));
+                    setActiveLive(null);
+                    setFormData({ title: "", description: "", stream_live_input_id: "", starts_at: "", background_image_url: "", allowed_plans: ["vip"], status: "scheduled", required_plan: "vip", duration_minutes: null });
+                    toast.success("Sala finalizada");
+                  } catch (err) { console.error(err); toast.error("Error"); }
+                }}
+                  className="bg-red-800/50 hover:bg-red-800 text-red-400 font-bold px-6 py-3 rounded-xl flex items-center gap-2 whitespace-nowrap transition-colors border border-red-800/30">
+                  <StopCircle size={20} /> Finalizar
+                </button>
+              </div>
             ) : (
               <button onClick={() => handleToggleLive(true)}
                 className="bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-3 rounded-xl flex items-center gap-2 whitespace-nowrap shadow-lg shadow-red-900/50 transition-colors">
@@ -475,6 +491,23 @@ const AdminLiveManager = () => {
                   </div>
                 </div>
                 <div className="flex gap-2">
+                  <button onClick={async e => {
+                    e.stopPropagation();
+                    try {
+                      const updated = await apiSetActiveLive(live.id);
+                      setLives(prev => prev.map(l => ({ ...l, is_active: l.id === updated.id })));
+                      setActiveLive(updated);
+                      setFormData(updated);
+                      toast.success(`"${live.title || "Sala"}" activada`);
+                    } catch (err) {
+                      console.error(err);
+                      toast.error("Error al activar sala");
+                    }
+                  }}
+                    className={cn("p-2 rounded-lg transition-colors", live.is_active ? "text-gold bg-gold/10" : "text-white/30 hover:text-gold hover:bg-gold/10")}
+                    title={live.is_active ? "Sala activa" : "Activar sala"}>
+                    <Radio size={16} />
+                  </button>
                   <button onClick={e => { e.stopPropagation(); handleDelete(live.id); }}
                     className="p-2 text-red-500/50 hover:text-red-400 bg-red-500/5 rounded-lg hover:bg-red-500/20 transition-colors">
                     <Trash2 size={16} />

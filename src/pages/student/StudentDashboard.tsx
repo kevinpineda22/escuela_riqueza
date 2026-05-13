@@ -13,7 +13,8 @@ import {
   Loader2,
   CheckCircle2,
   ArrowLeft,
-  Crown
+  Crown,
+  Radio,
 } from "lucide-react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
@@ -26,6 +27,7 @@ import { useAuthStore } from "@/stores/auth.store";
 import { PLANS } from "@/types/user";
 import { supabase } from "@/lib/supabase";
 import { fetchModules, fetchLessons, type Module as DBModule, type Lesson as DBLesson } from "@/lib/api/stream/content";
+import { fetchActiveLive, type LiveEvent } from "@/lib/api/stream/lives";
 
 type TabId = "modulos" | "notas" | "certificados" | "comunidad" | "perfil";
 
@@ -58,6 +60,17 @@ const StudentDashboard = () => {
   const [dbModules, setDbModules] = useState<DBModule[]>([]);
   const [dbLessonsMap, setDbLessonsMap] = useState<Record<string, DBLesson[]>>({});
   const [isLoadingContent, setIsLoadingContent] = useState(true);
+  const [liveEvent, setLiveEvent] = useState<LiveEvent | null>(null);
+
+  useEffect(() => {
+    fetchActiveLive().then(active => {
+      if (active && user?.plan && active.allowed_plans?.includes(user.plan)) {
+        setLiveEvent(active);
+      } else {
+        setLiveEvent(null);
+      }
+    }).catch(() => setLiveEvent(null));
+  }, [user?.plan]);
 
   // Load content
   useEffect(() => {
@@ -292,6 +305,58 @@ const StudentDashboard = () => {
 
         {/* Contenido Principal */}
         <div className="col-span-1 lg:col-span-3 min-h-[500px]">
+          {/* Live Banner — solo si hay un live relevante para el plan del usuario */}
+          {liveEvent && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6 p-4 md:p-5 rounded-2xl border bg-gradient-to-r from-gold/5 via-gold/10 to-gold/5 border-gold/20 shadow-[0_0_30px_rgba(204,164,59,0.08)]"
+            >
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-4">
+                  <div className={cn(
+                    "w-3 h-3 rounded-full shrink-0",
+                    liveEvent.status === "live" ? "bg-red-500 animate-pulse shadow-[0_0_10px_red]" : "bg-gold"
+                  )} />
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold">
+                        {liveEvent.status === "live" ? "🔴 EN VIVO AHORA" : "Próximo En Vivo"}
+                      </span>
+                      <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-white/10 text-white/50">
+                        {user?.plan}
+                      </span>
+                    </div>
+                    <h4 className="text-white font-bold text-sm md:text-base mt-0.5">
+                      {liveEvent.title}
+                    </h4>
+                    {liveEvent.starts_at && liveEvent.status !== "live" && (
+                      <p className="text-[11px] text-textMuted/60 mt-0.5">
+                        {new Date(liveEvent.starts_at).toLocaleDateString("es-CO", {
+                          day: "numeric", month: "long", hour: "2-digit", minute: "2-digit"
+                        })}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {liveEvent.status === "live" ? (
+                  <a href="/vip-live"
+                    className="px-5 py-2.5 rounded-xl font-bold text-xs transition-all whitespace-nowrap flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-900/50">
+                    Ver transmisión <PlayCircle size={16} />
+                  </a>
+                ) : liveEvent.starts_at && (new Date(liveEvent.starts_at).getTime() - Date.now()) <= 15 * 60 * 1000 ? (
+                  <a href="/vip-live"
+                    className="px-5 py-2.5 rounded-xl font-bold text-xs transition-all whitespace-nowrap flex items-center gap-2 bg-gold/20 hover:bg-gold/30 text-gold border border-gold/30 shadow-lg shadow-gold/10">
+                    Ver sala <Radio size={16} />
+                  </a>
+                ) : (
+                  <span className="px-5 py-2.5 rounded-xl font-bold text-xs bg-gold/10 text-gold border border-gold/20 whitespace-nowrap">
+                    Disponible para tu plan
+                  </span>
+                )}
+              </div>
+            </motion.div>
+          )}
           <AnimatePresence mode="wait" initial={false}>
             {activeTab === "modulos" && (
               <motion.div

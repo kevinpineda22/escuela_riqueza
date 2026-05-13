@@ -13,7 +13,7 @@ import AdminSettings from "@/pages/admin/AdminSettings";
 import AdminLiveManager from "@/pages/admin/AdminLiveManager";
 import RequireAuth from "@/components/layout/RequireAuth";
 import AdminLayout from "@/components/layout/AdminLayout";
-import { PLANS, USER_ROLES } from "@/types/user";
+import { USER_ROLES } from "@/types/user";
 
 const AppRoutes = () => {
   return (
@@ -36,11 +36,11 @@ const AppRoutes = () => {
         }
       />
 
-      {/* VIP only */}
+      {/* Sala de en vivo — acceso validado por allowed_plans del active live */}
       <Route
         path="/vip-live"
         element={
-          <RequireAuth minPlan={PLANS.VIP}>
+          <RequireAuth>
             <VIPLiveRoom />
           </RequireAuth>
         }
