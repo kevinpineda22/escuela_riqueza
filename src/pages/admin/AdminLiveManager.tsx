@@ -369,7 +369,7 @@ const AdminLiveManager = () => {
                   <Video size={14} /> Obtener grabación
                 </button>
                 {formData.recording_stream_uid && (
-                  <a href={`https://${CF_SUBDOMAIN}/${formData.recording_stream_uid}/download`}
+                  <a href={`https://${CF_SUBDOMAIN}/${formData.recording_stream_uid}/downloads/`}
                     target="_blank" rel="noopener noreferrer"
                     className="bg-gold/10 hover:bg-gold/20 border border-gold/20 text-gold px-3 py-3 rounded-xl flex items-center gap-1.5 text-xs font-bold transition-colors shrink-0">
                     <Download size={14} /> Descargar
@@ -625,7 +625,7 @@ const AdminLiveManager = () => {
                   </div>
                   <div className="flex gap-2">
                     {live.recording_stream_uid && (
-                      <a href={`https://${CF_SUBDOMAIN}/${live.recording_stream_uid}/download`}
+                      <a href={`https://${CF_SUBDOMAIN}/${live.recording_stream_uid}/downloads/`}
                         target="_blank" rel="noopener noreferrer"
                         className="bg-gold/10 hover:bg-gold/20 border border-gold/20 text-gold px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-bold transition-colors">
                         <Download size={16} /> Descargar grabación

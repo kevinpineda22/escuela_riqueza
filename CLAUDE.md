@@ -481,6 +481,7 @@ Esto garantiza que solo haya UN `<Stream>` de Cloudflare en el DOM (el de `Podca
 - `docs/migrate-lives-schema.sql`: incluye:
   - `ALTER COLUMN background_image_url` (si no existe)
   - `ALTER TABLE ADD COLUMN is_active boolean NOT NULL DEFAULT false`
+  - `ALTER TABLE ADD COLUMN recording_stream_uid text`
   - RLS policies para `lives`, `live_messages`, storage bucket `backgrounds`
   - Habilitación de Realtime (`ALTER PUBLICATION supabase_realtime ADD TABLE lives`)
   - WebRTC manual step reminder
@@ -510,7 +511,23 @@ Esto garantiza que solo haya UN `<Stream>` de Cloudflare en el DOM (el de `Podca
 - Si falta >15 min, muestra "Disponible para tu plan" (sin CTA).
 - La sección de lives ahora usa `fetchActiveLive()` en vez de `fetchLivesForPlan()`. Solo muestra la sala que el admin activó, si pertenece al plan del usuario.
 
-### 10.10 Reglas operativas para retomar
+### 10.10 Historial de cambios — 2026-05-13
+
+#### Grabación automática de lives (sin acceso a Cloudflare)
+- **`/api/stream/recording.ts`** (Vercel Function): consulta Cloudflare Stream API para obtener el video de grabación de un Live Input. También habilita MP4 downloads vía API (`POST /accounts/{id}/stream/{uid}/downloads`).
+- **`fetchRecording(liveInputId)`** en `src/lib/api/stream/lives.ts`: llama a la Vercel Function desde el frontend.
+- **Botón "Obtener grabación"** en AdminLiveManager editor: busca la grabación en Cloudflare y rellena `recording_stream_uid` automáticamente.
+- **Al hacer clic en "Finalizar"**: intenta obtener la grabación automáticamente. Si Cloudflare ya la procesó, se vincula automáticamente.
+- **URL de descarga corregida**: `{subdomain}/{uid}/downloads/` (plural, con 's') que lista los MP4 disponibles.
+- **Pestaña "Finalizados"**: muestra el iframe embebido de la grabación + botón descarga + botón "Reactivar" (cambia status de vuelta a scheduled).
+
+#### VIPLiveRoom — auto-detección de OBS + sala persistente
+- **El iframe de Cloudflare WebRTC** se muestra automáticamente cuando `starts_at` ha pasado (sin depender de Forzar EN VIVO). Cloudflare maneja internamente el estado "live" / "waiting for signal" según si OBS está transmitiendo.
+- **Nuevo estado "FINALIZADO"**: cuando admin hace clic en "Finalizar", la sala NO se oculta. Muestra "Transmisión finalizada" overlay + el chat sigue activo. Solo al desactivar `is_active` aparece "No hay eventos".
+- **Chat siempre visible**: en estados scheduled, live, ended y hasta que la sala se desactive.
+- **Badges dinámicos**: "EN VIVO" (rojo), "EN ESPERA" (dorado, cuando starts_at pasó pero OBS no ha iniciado), "PRÓXIMAMENTE" (antes de starts_at), "FINALIZADO" (gris).
+
+### 10.11 Reglas operativas para retomar
 
 - Después de cada módulo terminado: correr `npm run typecheck` + `npx vitest run <files>` antes de cerrar la tarea.
 - Mantener el inventario de tareas vivo (`TaskCreate`/`TaskUpdate`) en cada sesión nueva.

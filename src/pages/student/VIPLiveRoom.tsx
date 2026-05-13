@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import LiveChat from "@/components/feature/LiveChat";
-import { Sparkles, Calendar, Clock, Tv, Radio, Loader2 } from "lucide-react";
+import { Sparkles, Calendar, Clock, Tv, Radio, Loader2, VideoOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player.store";
 import { useAuthStore } from "@/stores/auth.store";
@@ -23,6 +23,9 @@ const VIPLiveRoom = () => {
   useEffect(() => { clearPlayer(); }, [clearPlayer]);
 
   const isLive = live?.status === "live";
+  const isEnded = live?.status === "ended";
+  const startsAt = live?.starts_at ? new Date(live.starts_at).getTime() : 0;
+  const hasStarted = !live?.starts_at || Date.now() >= startsAt;
 
   // Fetch active live on mount + validate plan access
   useEffect(() => {
@@ -38,7 +41,7 @@ const VIPLiveRoom = () => {
       .finally(() => setLoading(false));
   }, [user, navigate]);
 
-  // Trigger intro when status transitions to live (initial or via Realtime/poll)
+  // Trigger intro when status transitions to live
   useEffect(() => {
     if (live?.status !== "live" || showIntro) return;
     setShowIntro(true);
@@ -46,8 +49,7 @@ const VIPLiveRoom = () => {
     return () => clearTimeout(t);
   }, [live?.id, live?.status]);
 
-  // Suscripción Realtime a TODA la tabla lives — detecta cualquier cambio
-  // (activar otra sala, forzar EN VIVO, detener, finalizar)
+  // Suscripción Realtime a TODA la tabla lives
   useEffect(() => {
     const channel = supabase
       .channel("vip-live-all-changes")
@@ -60,11 +62,10 @@ const VIPLiveRoom = () => {
         }
       )
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // Polling 3s como fallback — siempre refresca la sala activa
+  // Polling 3s como fallback
   useEffect(() => {
     const poll = setInterval(async () => {
       const active = await fetchActiveLive();
@@ -73,12 +74,11 @@ const VIPLiveRoom = () => {
     return () => clearInterval(poll);
   }, []);
 
-  // Countdown based on starts_at
+  // Countdown — solo si starts_at está en el futuro y no está ended
   useEffect(() => {
-    if (!live?.starts_at || live.status === "live") return;
-    const target = new Date(live.starts_at).getTime();
+    if (!live?.starts_at || hasStarted || isEnded) return;
     const timer = setInterval(() => {
-      const diff = Math.max(0, target - Date.now());
+      const diff = Math.max(0, startsAt - Date.now());
       setTimeLeft({
         hours: Math.floor(diff / 3600000),
         minutes: Math.floor((diff % 3600000) / 60000),
@@ -182,7 +182,11 @@ const VIPLiveRoom = () => {
           </div>
 
           <div className="flex flex-col items-end gap-3 pointer-events-auto">
-            {isLive ? (
+            {isEnded ? (
+              <div className="flex items-center gap-2.5 bg-gray-600/20 backdrop-blur-md border border-gray-600/50 text-textMuted px-4 py-2 rounded-2xl text-[10px] font-black tracking-widest">
+                <VideoOff size={14} /> FINALIZADO
+              </div>
+            ) : isLive ? (
               <motion.div
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
@@ -198,7 +202,7 @@ const VIPLiveRoom = () => {
             ) : (
               <div className="flex items-center gap-2.5 bg-black/40 backdrop-blur-md border border-white/10 text-white/70 px-4 py-2 rounded-2xl text-[10px] font-bold tracking-wider">
                 <Clock size={14} className="text-gold" />
-                SALA DE ESPERA
+                {hasStarted ? "EN ESPERA" : "PRÓXIMAMENTE"}
               </div>
             )}
           </div>
@@ -206,12 +210,11 @@ const VIPLiveRoom = () => {
 
         {/* Content Area */}
         <div className="flex-1 flex items-center justify-center bg-[#050505] relative overflow-hidden">
-          {/* Background Ambience */}
           <div className="absolute inset-0 z-0">
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[radial-gradient(circle_at_center,rgba(204,164,59,0.05)_0%,transparent_70%)]" />
             <div className="absolute inset-0 opacity-[0.03] bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]" />
 
-            {!isLive && (
+            {!isLive && !isEnded && (
               <div
                 className="absolute inset-0 bg-cover bg-center"
                 style={{ backgroundImage: live.background_image_url ? `url('${live.background_image_url}')` : undefined }}
@@ -222,7 +225,40 @@ const VIPLiveRoom = () => {
           </div>
 
           <AnimatePresence mode="wait">
-            {!isLive ? (
+            {isEnded ? (
+              <motion.div
+                key="ended"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.8 }}
+                className="w-full h-full z-10 bg-black flex items-center justify-center"
+              >
+                {live.recording_stream_uid ? (
+                  <div className="w-full h-full relative bg-black">
+                    <div className="absolute top-6 left-6 z-20">
+                      <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md border border-white/10 px-4 py-2 rounded-xl">
+                        <VideoOff size={16} className="text-textMuted" />
+                        <span className="text-xs font-bold text-white/70 uppercase tracking-wider">Transmisión finalizada</span>
+                      </div>
+                    </div>
+                    <iframe
+                      src={`https://${CF_SUBDOMAIN}/${live.recording_stream_uid}/iframe`}
+                      allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
+                      allowFullScreen
+                      className="w-full h-full border-none"
+                      title={`Grabación: ${live.title}`}
+                    />
+                  </div>
+                ) : (
+                  <div className="text-center z-10 px-6">
+                    <VideoOff size={48} className="mx-auto text-white/20 mb-4" />
+                    <h2 className="text-2xl font-bold text-white mb-2">Transmisión finalizada</h2>
+                    <p className="text-textMuted max-w-md mx-auto">Gracias por acompañarnos. Podés seguir conversando en el chat.</p>
+                  </div>
+                )}
+              </motion.div>
+            ) : !hasStarted ? (
               <motion.div
                 key="waiting"
                 initial={{ opacity: 0, scale: 0.9 }}
@@ -257,7 +293,6 @@ const VIPLiveRoom = () => {
                   </p>
                 )}
 
-                {/* Countdown Cards */}
                 {live.starts_at && (
                   <div className="flex justify-center gap-4 md:gap-10">
                     {[
@@ -334,7 +369,7 @@ const VIPLiveRoom = () => {
         </div>
       </div>
 
-      {/* Chat Sidebar */}
+      {/* Chat Sidebar — siempre visible si hay sala activa */}
       <div className="w-full md:w-80 lg:w-[400px] h-[45vh] md:h-screen bg-darker shrink-0 z-50 overflow-hidden">
         <LiveChat liveId={live.id} />
       </div>

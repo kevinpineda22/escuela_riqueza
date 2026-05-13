@@ -42,11 +42,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const video = data.result[0];
+
+    // Enable MP4 downloads for this video via Cloudflare API
+    let downloadEnabled = false;
+    try {
+      const dlRes = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${accountId}/stream/${video.uid}/downloads`,
+        { method: 'POST', headers: { 'Authorization': `Bearer ${apiToken}` } }
+      );
+      if (dlRes.ok) downloadEnabled = true;
+    } catch { /* non-critical, continue */ }
+
     return res.status(200).json({
       recording_uid: video.uid,
       title: video.meta?.name || null,
       duration: video.duration,
       status: video.status?.state || null,
+      downloadEnabled,
     });
   } catch (error) {
     console.error("Server error:", error);
