@@ -1,6 +1,7 @@
 -- 1. Agregar columnas (si no existen)
 ALTER TABLE public.lives ADD COLUMN IF NOT EXISTS background_image_url text;
 ALTER TABLE public.lives ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT false;
+ALTER TABLE public.lives ADD COLUMN IF NOT EXISTS recording_stream_uid text;
 
 -- 2. RLS para la tabla lives (permite CRUD a usuarios autenticados)
 ALTER TABLE public.lives ENABLE ROW LEVEL SECURITY;

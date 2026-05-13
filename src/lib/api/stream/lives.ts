@@ -10,6 +10,7 @@ export interface LiveEvent {
   starts_at: string;
   duration_minutes: number | null;
   stream_live_input_id: string | null;
+  recording_stream_uid: string | null;
   required_plan: PlanType;
   status: LiveStatus;
   is_active: boolean;
@@ -20,7 +21,7 @@ export interface LiveEvent {
 
 function sanitize(live: Record<string, unknown>): Record<string, unknown> {
   const out = { ...live };
-  for (const key of ["starts_at", "stream_live_input_id", "background_image_url", "description"] as const) {
+  for (const key of ["starts_at", "stream_live_input_id", "recording_stream_uid", "background_image_url", "description"] as const) {
     if (key in out && out[key] === "") out[key] = null;
   }
   return out;
@@ -113,6 +114,31 @@ export async function setActiveLive(id: string): Promise<LiveEvent> {
     throw error;
   }
   return data as LiveEvent;
+}
+
+export async function fetchEndedLives(): Promise<LiveEvent[]> {
+  const { data, error } = await supabase
+    .from("lives")
+    .select("*")
+    .eq("status", "ended")
+    .order("starts_at", { ascending: false });
+  if (error) throw error;
+  return (data || []) as LiveEvent[];
+}
+
+export async function fetchRecording(liveInputId: string): Promise<{ recording_uid: string | null; message?: string }> {
+  try {
+    const res = await fetch("/api/stream/recording", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ live_input_id: liveInputId }),
+    });
+    if (!res.ok) throw new Error("Error al consultar grabación");
+    return await res.json();
+  } catch (err) {
+    console.error("Error fetching recording:", err);
+    return { recording_uid: null, message: "Error de conexión con el servidor" };
+  }
 }
 
 export async function deleteLive(id: string): Promise<void> {

@@ -1,9 +1,14 @@
 import { useState, useEffect } from "react";
-import { Radio, Image as ImageIcon, Settings2, Save, Plus, Trash2, PlayCircle, StopCircle, Calendar, Clock, Monitor, Copy, Upload } from "lucide-react";
+import { Radio, Image as ImageIcon, Settings2, Save, Plus, Trash2, PlayCircle, StopCircle, Calendar, Clock, Monitor, Copy, Upload, Download, Video } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { fetchLives, createLive, updateLive, deleteLive, setActiveLive as apiSetActiveLive, type LiveEvent } from "@/lib/api/stream/lives";
+import { fetchLives, fetchEndedLives, fetchRecording, createLive, updateLive, deleteLive, setActiveLive as apiSetActiveLive, type LiveEvent } from "@/lib/api/stream/lives";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toaster";
+
+const CF_SUBDOMAIN = import.meta.env.VITE_CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN || "";
+const PRESET_INPUT_IDS = [
+  { label: "Principal (950f6b7...)", value: "950f6b77844e5a369bbeea208b2c428e" },
+];
 
 const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 const tzAbbr = new Intl.DateTimeFormat("es", { timeZoneName: "short" })
@@ -22,16 +27,19 @@ function highestPlan(plans: string[]): "free" | "individual" | "vip" {
 }
 
 const AdminLiveManager = () => {
-  const [activeTab, setActiveTab] = useState<"editor" | "rooms">("editor");
+  const [activeTab, setActiveTab] = useState<"editor" | "rooms" | "ended">("editor");
   const [lives, setLives] = useState<LiveEvent[]>([]);
+  const [endedLives, setEndedLives] = useState<LiveEvent[]>([]);
   const [activeLive, setActiveLive] = useState<LiveEvent | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [customInputId, setCustomInputId] = useState(false);
 
   const [formData, setFormData] = useState<Partial<LiveEvent>>({
     title: "",
     description: "",
     stream_live_input_id: "",
+    recording_stream_uid: "",
     starts_at: "",
     background_image_url: "",
     allowed_plans: ["vip"],
@@ -67,11 +75,13 @@ const AdminLiveManager = () => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const data = await fetchLives();
-      setLives(data);
-      if (data.length > 0) {
-        setActiveLive(data[0]);
-        setFormData(data[0]);
+      const [active, ended] = await Promise.all([fetchLives(), fetchEndedLives()]);
+      setLives(active);
+      setEndedLives(ended);
+      if (active.length > 0) {
+        setActiveLive(active[0]);
+        setFormData(active[0]);
+        setCustomInputId(!PRESET_INPUT_IDS.some(p => p.value === active[0].stream_live_input_id));
       }
     } catch (err) {
       console.error(err);
@@ -90,9 +100,11 @@ const AdminLiveManager = () => {
       const fresh = data as LiveEvent;
       setActiveLive(fresh);
       setFormData(fresh);
+      setCustomInputId(!PRESET_INPUT_IDS.some(p => p.value === fresh.stream_live_input_id));
     } else {
       setActiveLive(live);
       setFormData(live);
+      setCustomInputId(!PRESET_INPUT_IDS.some(p => p.value === live.stream_live_input_id));
     }
     setActiveTab("editor");
   };
@@ -150,6 +162,7 @@ const AdminLiveManager = () => {
         title: "Nuevo Evento",
         description: "",
         stream_live_input_id: "",
+        recording_stream_uid: "",
         starts_at: new Date(Date.now() + 86400000).toISOString(),
         background_image_url: "",
         allowed_plans: ["vip"],
@@ -237,6 +250,10 @@ const AdminLiveManager = () => {
           className={cn("px-4 py-2 rounded-lg font-semibold text-sm transition-all", activeTab === "rooms" ? "bg-white/10 text-white" : "text-textMuted hover:text-white")}>
           <Radio size={16} className="inline mr-2" />Salas ({lives.length})
         </button>
+        <button onClick={() => setActiveTab("ended")}
+          className={cn("px-4 py-2 rounded-lg font-semibold text-sm transition-all", activeTab === "ended" ? "bg-white/10 text-white" : "text-textMuted hover:text-white")}>
+          <Video size={16} className="inline mr-2" />Finalizados ({endedLives.length})
+        </button>
       </div>
 
       {activeTab === "editor" && activeLive && (
@@ -306,10 +323,60 @@ const AdminLiveManager = () => {
             </h3>
             <div className="space-y-2">
               <label className="text-sm font-semibold text-textMuted">Cloudflare Live Input ID</label>
-              <input type="text" placeholder="Ej: 595f2bfac6285d604cf136e049c37b08"
-                value={formData.stream_live_input_id || ""}
-                onChange={e => setFormData({ ...formData, stream_live_input_id: e.target.value })}
-                className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-gold font-mono text-sm" />
+              <select value={customInputId ? "__custom__" : (formData.stream_live_input_id || "")}
+                onChange={e => {
+                  if (e.target.value === "__custom__") {
+                    setCustomInputId(true);
+                    setFormData({ ...formData, stream_live_input_id: "" });
+                  } else {
+                    setCustomInputId(false);
+                    setFormData({ ...formData, stream_live_input_id: e.target.value });
+                  }
+                }}
+                className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-gold font-mono text-sm appearance-none cursor-pointer">
+                {PRESET_INPUT_IDS.map(p => (
+                  <option key={p.value} value={p.value} className="bg-black text-white">{p.label}</option>
+                ))}
+                <option value="__custom__" className="bg-black text-white">— Personalizado —</option>
+              </select>
+              {customInputId && (
+                <input type="text" placeholder="Ej: 595f2bfac6285d604cf136e049c37b08"
+                  value={formData.stream_live_input_id || ""}
+                  onChange={e => setFormData({ ...formData, stream_live_input_id: e.target.value })}
+                  className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-gold font-mono text-sm mt-2" />
+              )}
+            </div>
+
+            <div className="space-y-2 mt-4 pt-4 border-t border-white/10">
+              <label className="text-sm font-semibold text-textMuted">Grabación del directo (Cloudflare Stream UID)</label>
+              <div className="flex gap-2">
+                <input type="text" placeholder="Automático después de finalizar"
+                  value={formData.recording_stream_uid || ""}
+                  onChange={e => setFormData({ ...formData, recording_stream_uid: e.target.value })}
+                  className="flex-1 bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-gold font-mono text-sm" />
+                <button onClick={async () => {
+                  if (!activeLive?.stream_live_input_id) { toast.error("Primero configurá el Live Input ID"); return; }
+                  toast.info("Buscando grabación en Cloudflare...");
+                  const result = await fetchRecording(activeLive.stream_live_input_id);
+                  if (result.recording_uid) {
+                    setFormData(prev => ({ ...prev, recording_stream_uid: result.recording_uid }));
+                    toast.success("Grabación encontrada y vinculada");
+                  } else {
+                    toast.error(result.message || "Cloudflare aún no ha generado la grabación. Intentá de nuevo en unos minutos.");
+                  }
+                }}
+                  className="bg-white/10 hover:bg-white/20 text-white px-3 py-3 rounded-xl flex items-center gap-1.5 text-xs font-bold transition-colors shrink-0 whitespace-nowrap">
+                  <Video size={14} /> Obtener grabación
+                </button>
+                {formData.recording_stream_uid && (
+                  <a href={`https://${CF_SUBDOMAIN}/${formData.recording_stream_uid}/download`}
+                    target="_blank" rel="noopener noreferrer"
+                    className="bg-gold/10 hover:bg-gold/20 border border-gold/20 text-gold px-3 py-3 rounded-xl flex items-center gap-1.5 text-xs font-bold transition-colors shrink-0">
+                    <Download size={14} /> Descargar
+                  </a>
+                )}
+              </div>
+              <p className="text-[10px] text-textMuted/50">Al finalizar el directo, hacé clic en "Obtener grabación" para vincularla automáticamente. Sin necesidad de ir a Cloudflare.</p>
             </div>
 
             <details className="mt-4 group">
@@ -431,11 +498,21 @@ const AdminLiveManager = () => {
                 <button onClick={async () => {
                   if (!window.confirm("¿Finalizar esta sala? Pasara a estado 'ended' y no aparecerá más como próxima sala.")) return;
                   try {
-                    const updated = await updateLive(activeLive!.id, { status: "ended" });
+                    const recordingUid = activeLive!.stream_live_input_id
+                      ? (await fetchRecording(activeLive!.stream_live_input_id)).recording_uid
+                      : null;
+                    const updated = await updateLive(activeLive!.id, { status: "ended", recording_stream_uid: recordingUid || formData.recording_stream_uid });
                     setLives(prev => prev.map(l => l.id === updated.id ? updated : l).filter(l => l.status !== "ended"));
                     setActiveLive(null);
-                    setFormData({ title: "", description: "", stream_live_input_id: "", starts_at: "", background_image_url: "", allowed_plans: ["vip"], status: "scheduled", required_plan: "vip", duration_minutes: null });
-                    toast.success("Sala finalizada");
+                    setFormData({ title: "", description: "", stream_live_input_id: "", recording_stream_uid: "", starts_at: "", background_image_url: "", allowed_plans: ["vip"], status: "scheduled", required_plan: "vip", duration_minutes: null, is_active: false });
+                    const ended = await fetchEndedLives();
+                    setEndedLives(ended);
+                    setActiveTab("ended");
+                    if (recordingUid) {
+                      toast.success("Sala finalizada y grabación vinculada automáticamente");
+                    } else {
+                      toast.success("Sala finalizada. Usá 'Obtener grabación' en el editor si la grabación no se vinculó automáticamente.");
+                    }
                   } catch (err) { console.error(err); toast.error("Error"); }
                 }}
                   className="bg-red-800/50 hover:bg-red-800 text-red-400 font-bold px-6 py-3 rounded-xl flex items-center gap-2 whitespace-nowrap transition-colors border border-red-800/30">
@@ -513,6 +590,87 @@ const AdminLiveManager = () => {
                     <Trash2 size={16} />
                   </button>
                 </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {activeTab === "ended" && (
+        <div className="space-y-4">
+          {endedLives.length === 0 ? (
+            <div className="text-center py-12 text-textMuted bg-darker rounded-xl border border-white/5">
+              <Video size={40} className="mx-auto mb-4 opacity-30" />
+              <p className="text-lg font-semibold text-white/70">No hay transmisiones finalizadas</p>
+              <p className="text-sm mt-1">Las grabaciones aparecerán aquí después de finalizar un en vivo.</p>
+            </div>
+          ) : (
+            endedLives.map(live => (
+              <div key={live.id}
+                className="bg-darker border border-white/10 rounded-2xl p-6 space-y-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-3 h-3 rounded-full bg-gray-600 shrink-0" />
+                    <div>
+                      <h4 className="text-white font-bold text-lg">{live.title || "Sin título"}</h4>
+                      <div className="flex flex-wrap gap-2 mt-1 items-center text-xs text-textMuted">
+                        {live.starts_at && (
+                          <span className="flex items-center gap-1">
+                            <Calendar size={12} /> {new Date(live.starts_at).toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        )}
+                        <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-black/40 text-white/40">Finalizado</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    {live.recording_stream_uid && (
+                      <a href={`https://${CF_SUBDOMAIN}/${live.recording_stream_uid}/download`}
+                        target="_blank" rel="noopener noreferrer"
+                        className="bg-gold/10 hover:bg-gold/20 border border-gold/20 text-gold px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-bold transition-colors">
+                        <Download size={16} /> Descargar grabación
+                      </a>
+                    )}
+                    <button onClick={async e => {
+                      e.stopPropagation();
+                      try {
+                        const fresh = await apiSetActiveLive(live.id);
+                        setLives(prev => [...prev, fresh]);
+                        setEndedLives(prev => prev.filter(l => l.id !== live.id));
+                        setActiveLive(fresh);
+                        setFormData(fresh);
+                        setActiveTab("editor");
+                        toast.success(`"${live.title || "Sala"}" movida a salas activas`);
+                      } catch { toast.error("Error al reactivar"); }
+                    }} className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-bold transition-colors">
+                      <PlayCircle size={16} /> Reactivar
+                    </button>
+                    <button onClick={e => { e.stopPropagation(); handleDelete(live.id); }}
+                      className="p-2 text-red-500/50 hover:text-red-400 bg-red-500/5 rounded-lg hover:bg-red-500/20 transition-colors">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+                {live.recording_stream_uid && (
+                  <div className="aspect-video bg-black rounded-xl overflow-hidden border border-white/10">
+                    <iframe
+                      src={`https://${CF_SUBDOMAIN}/${live.recording_stream_uid}/iframe`}
+                      allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
+                      allowFullScreen
+                      className="w-full h-full border-none"
+                      title={`Grabación: ${live.title}`}
+                    />
+                  </div>
+                )}
+                {!live.recording_stream_uid && (
+                  <div className="aspect-video bg-black/40 rounded-xl flex items-center justify-center border border-dashed border-white/10">
+                    <div className="text-center">
+                      <Video size={32} className="mx-auto text-white/20 mb-2" />
+                      <p className="text-sm text-textMuted">Sin grabación disponible</p>
+                      <p className="text-[10px] text-textMuted/50 mt-1">Agregá el UID de la grabación en el editor para verla aquí.</p>
+                    </div>
+                  </div>
+                )}
               </div>
             ))
           )}
