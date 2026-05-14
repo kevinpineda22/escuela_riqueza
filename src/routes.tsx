@@ -1,11 +1,15 @@
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
+import { useScrollToHash } from "@/hooks/useScrollToHash";
 import LandingPage from "@/pages/public/LandingPage";
 import AuthPage from "@/pages/public/AuthPage";
 import ResetPassword from "@/pages/public/ResetPassword";
 import EmailConfirmed from "@/pages/public/EmailConfirmed";
 import Plans from "@/pages/public/Plans";
 import NotFound from "@/pages/public/NotFound";
+import HistoryPage from "@/pages/public/HistoryPage";
+import TermsPage from "@/pages/public/TermsPage";
+import PrivacyPage from "@/pages/public/PrivacyPage";
 import LessonViewer from "@/pages/student/LessonViewer";
 import StudentDashboard from "@/pages/student/StudentDashboard";
 import VIPLiveRoom from "@/pages/student/VIPLiveRoom";
@@ -33,6 +37,7 @@ const PageTransition = ({ children }: { children: React.ReactNode }) => (
 
 const AppRoutes = () => {
   const location = useLocation();
+  useScrollToHash();
 
   return (
     <AnimatePresence mode="wait">
@@ -46,6 +51,9 @@ const AppRoutes = () => {
         <Route path="/restablecer-contrasena" element={<PageTransition><ResetPassword /></PageTransition>} />
         <Route path="/cuenta-verificada" element={<PageTransition><EmailConfirmed /></PageTransition>} />
         <Route path="/planes" element={<PageTransition><Plans /></PageTransition>} />
+        <Route path="/historia" element={<PageTransition><HistoryPage /></PageTransition>} />
+        <Route path="/terminos" element={<PageTransition><TermsPage /></PageTransition>} />
+        <Route path="/privacidad" element={<PageTransition><PrivacyPage /></PageTransition>} />
 
         {/* Estudiantes (cualquier plan logueado) */}
         <Route

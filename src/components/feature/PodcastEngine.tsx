@@ -63,7 +63,7 @@ const PodcastEngine = () => {
   const mediaSessionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Una vez que el engine se activa (primer track), NUNCA se desactiva.
-  // El Stream se monta y no se desmonta jamás.
+  // El Stream se monta y no se desmonta jamǭs.
   const [everActivated, setEverActivated] = useState(false);
 
   const {
@@ -80,6 +80,15 @@ const PodcastEngine = () => {
   // Mantener refs sincronizadas
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
   useEffect(() => { isPodcastModeRef.current = isPodcastMode; }, [isPodcastMode]);
+  
+  const lastKnownTimeRef = useRef(lastKnownTime);
+  useEffect(() => { lastKnownTimeRef.current = lastKnownTime; }, [lastKnownTime]);
+  
+  const lastVideoIdRef = useRef(lastVideoId);
+  useEffect(() => { lastVideoIdRef.current = lastVideoId; }, [lastVideoId]);
+  
+  const trackRef = useRef(track);
+  useEffect(() => { trackRef.current = track; }, [track]);
 
   // Sincronizar ref global
   useEffect(() => {
@@ -242,9 +251,10 @@ const PodcastEngine = () => {
   // ── Handlers del Stream ──────────────────────────────────────────────────
 
   const handleCanPlay = () => {
-    if (!initializedRef.current && internalRef.current && track) {
-      if (lastVideoId === track.videoId && lastKnownTime > 0) {
-        internalRef.current.currentTime = lastKnownTime;
+    const currentTrack = trackRef.current;
+    if (!initializedRef.current && internalRef.current && currentTrack) {
+      if (lastVideoIdRef.current === currentTrack.videoId && lastKnownTimeRef.current > 0) {
+        internalRef.current.currentTime = lastKnownTimeRef.current;
       }
       initializedRef.current = true;
     }
@@ -256,16 +266,22 @@ const PodcastEngine = () => {
   const handlePlayEvent = () => {
     setTimeout(() => {
       const audioEl = hijackerRef.current;
-      if (audioEl && track) {
+      const currentTrack = trackRef.current;
+      if (audioEl && currentTrack) {
         audioEl.play().catch(() => {});
-        setMediaMetadata(track.title || "Lección en Audio", track.moduleTitle || "Escuela de la Riqueza");
+        setMediaMetadata(currentTrack.title || "Lección en Audio", currentTrack.moduleTitle || "Escuela de la Riqueza");
       }
     }, 100);
   };
 
   const handleTimeUpdate = () => {
-    if (!internalRef.current || !track) return;
-    setPlaybackProgress(track.videoId, internalRef.current.currentTime);
+    // No guardar progreso hasta que onCanPlay haya hecho el seek inicial.
+    // Si guardamos antes, el onTimeUpdate del iframe recién cargado
+    // (currentTime ≈ 0) pisaría lastKnownTime y arruinaría la restauración.
+    if (!initializedRef.current) return;
+    const currentTrack = trackRef.current;
+    if (!internalRef.current || !currentTrack) return;
+    setPlaybackProgress(currentTrack.videoId, internalRef.current.currentTime);
   };
 
   const handlePause = () => {

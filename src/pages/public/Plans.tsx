@@ -147,7 +147,9 @@ const Plans = () => {
         </section>
 
         {/* Planes principales (reusa PlansAct) */}
-        <PlansAct />
+        <div id="planes">
+          <PlansAct />
+        </div>
 
         {/* Comparativa detallada */}
         <section className="max-w-5xl mx-auto px-5 sm:px-6 py-16 sm:py-24 border-t border-white/5">
@@ -217,7 +219,7 @@ const Plans = () => {
         </section>
 
         {/* FAQ */}
-        <section className="max-w-3xl mx-auto px-5 sm:px-6 py-16 sm:py-24 border-t border-white/5">
+        <section id="faq" className="max-w-3xl mx-auto px-5 sm:px-6 py-16 sm:py-24 border-t border-white/5">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
