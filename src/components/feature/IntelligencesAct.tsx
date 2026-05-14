@@ -3,7 +3,8 @@ import { useRef } from "react";
 import { motion, useScroll, useTransform } from "motion/react";
 import { Link } from "react-router-dom";
 import { BookOpen, Briefcase, Heart, Lightbulb, Map, Target, ArrowRight, Lock, PlayCircle } from "lucide-react";
-import { useIsDesktop } from "@/hooks/useMediaQuery";
+import { useIsDesktop, usePrefersReducedMotion } from "@/hooks/useMediaQuery";
+import { usePreferencesStore } from "@/stores/preferences.store";
 import { useAuthStore } from "@/stores/auth.store";
 import { PLANS } from "@/types/user";
 
@@ -62,38 +63,47 @@ interface CardProps {
   total: number;
 }
 
-const IntelligenceCard = ({ intelligence, index, total }: CardProps) => {
+interface CardLayoutProps extends CardProps {
+  layout?: "carousel" | "stack";
+}
+
+const IntelligenceCard = ({ intelligence, index, total, layout = "carousel" }: CardLayoutProps) => {
   const { user } = useAuthStore();
   const isPremium = user?.plan === PLANS.INDIVIDUAL || user?.plan === PLANS.VIP;
   const linkTo = user ? "/dashboard?tab=modulos" : "/leccion";
 
+  const sizeClasses =
+    layout === "stack"
+      ? "w-full h-auto min-h-[280px] p-6 sm:p-8"
+      : "shrink-0 w-[80vw] sm:w-[55vw] md:w-[42vw] lg:w-[34vw] xl:w-[28vw] h-[60vh] md:h-[68vh] p-8 md:p-10";
+
   return (
     <Link
       to={linkTo}
-      className="group relative shrink-0 w-[80vw] sm:w-[55vw] md:w-[42vw] lg:w-[34vw] xl:w-[28vw] h-[60vh] md:h-[68vh] rounded-3xl bg-gradient-to-br from-white/[0.04] to-white/[0.01] border border-white/[0.08] backdrop-blur-md p-8 md:p-10 flex flex-col justify-between overflow-hidden transition-colors duration-300 hover:border-gold/40"
+      className={`group relative ${sizeClasses} rounded-3xl bg-gradient-to-br from-white/[0.04] to-white/[0.01] border border-white/[0.08] backdrop-blur-md flex flex-col justify-between overflow-hidden transition-colors duration-300 hover:border-gold/40`}
     >
       <div
         aria-hidden
         className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-gold/10 blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"
       />
 
-      <div className="relative z-10 flex flex-col gap-6">
-        <div className="flex items-center justify-between text-xs uppercase tracking-widest text-textMuted">
+      <div className={`relative z-10 flex flex-col ${layout === "stack" ? "gap-3 sm:gap-4" : "gap-6"}`}>
+        <div className="flex items-center justify-between text-[10px] sm:text-xs uppercase tracking-widest text-textMuted">
           <span>
             Inteligencia <span className="text-gold font-bold">{String(index + 1).padStart(2, "0")}</span>
           </span>
           <span>{String(total).padStart(2, "0")}</span>
         </div>
 
-        <div className="w-20 h-20 rounded-2xl bg-gold/10 text-gold flex items-center justify-center group-hover:scale-110 group-hover:bg-gold/20 transition-transform">
+        <div className={`${layout === "stack" ? "w-14 h-14 sm:w-16 sm:h-16" : "w-20 h-20"} rounded-2xl bg-gold/10 text-gold flex items-center justify-center group-hover:scale-110 group-hover:bg-gold/20 transition-transform`}>
           {intelligence.icon}
         </div>
 
-        <h3 className="text-3xl md:text-4xl font-extrabold tracking-tight text-white leading-tight text-balance">
+        <h3 className={`${layout === "stack" ? "text-2xl sm:text-3xl" : "text-3xl md:text-4xl"} font-extrabold tracking-tight text-white leading-tight text-balance`}>
           {intelligence.title}
         </h3>
 
-        <p className="text-textMuted leading-relaxed text-base md:text-lg text-pretty">
+        <p className={`text-textMuted leading-relaxed ${layout === "stack" ? "text-sm sm:text-base" : "text-base md:text-lg"} text-pretty`}>
           {intelligence.description}
         </p>
       </div>
@@ -170,7 +180,7 @@ const DesktopIntelligences = () => {
       className="relative h-[260vh] w-full"
       aria-label="Las seis inteligencias"
     >
-      <div className="sticky top-0 h-screen w-full flex flex-col justify-center overflow-hidden">
+      <div className="sticky top-0 h-[100svh] w-full flex flex-col justify-center overflow-hidden">
         <IntroHeading />
         <motion.div
           ref={trackRef}
@@ -193,9 +203,9 @@ const DesktopIntelligences = () => {
 
 const MobileIntelligences = () => {
   return (
-    <section id="modulos" className="relative z-10 max-w-3xl mx-auto px-6 py-20 w-full">
+    <section id="modulos" className="relative z-10 max-w-3xl mx-auto px-5 sm:px-6 py-16 sm:py-20 w-full">
       <IntroHeading />
-      <div className="flex flex-col gap-5 px-0">
+      <div className="flex flex-col gap-4 sm:gap-5 px-0">
         {intelligences.map((intelligence, index) => (
           <motion.div
             key={intelligence.id}
@@ -205,7 +215,7 @@ const MobileIntelligences = () => {
             transition={{ duration: 0.6, delay: index * 0.05 }}
             className="w-full"
           >
-            <IntelligenceCard intelligence={intelligence} index={index} total={intelligences.length} />
+            <IntelligenceCard intelligence={intelligence} index={index} total={intelligences.length} layout="stack" />
           </motion.div>
         ))}
       </div>
@@ -215,5 +225,10 @@ const MobileIntelligences = () => {
 
 export const IntelligencesAct = () => {
   const isDesktop = useIsDesktop();
-  return isDesktop ? <DesktopIntelligences /> : <MobileIntelligences />;
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const animationsEnabled = usePreferencesStore((s) => s.animationsEnabled);
+  // Si el usuario apaga animaciones (toggle o SO), forzar versión stack vertical
+  // para que las cards 4-6 NO queden fuera de viewport por falta del scroll horizontal.
+  const reduce = prefersReducedMotion || !animationsEnabled;
+  return isDesktop && !reduce ? <DesktopIntelligences /> : <MobileIntelligences />;
 };

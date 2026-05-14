@@ -50,7 +50,7 @@ const DefaultErrorFallback = ({ error, onReset }: DefaultFallbackProps) => (
     />
     <div
       aria-hidden
-      className="absolute -top-1/3 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full bg-[radial-gradient(circle_at_center,rgba(225,80,80,0.15),transparent_60%)] blur-3xl"
+      className="hidden md:block absolute -top-1/3 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full bg-[radial-gradient(circle_at_center,rgba(225,80,80,0.15),transparent_60%)] blur-3xl"
     />
     <div
       aria-hidden
@@ -76,8 +76,8 @@ const DefaultErrorFallback = ({ error, onReset }: DefaultFallbackProps) => (
           Ocurrió un error inesperado
         </h1>
         <p className="text-sm text-textMuted leading-relaxed">
-          No te preocupes, no se perdió tu progreso. Probá recargar o volver al
-          inicio. Si el problema persiste, contáctanos.
+          No te preocupes, no se perdió tu progreso. Intenta recargar o volver
+          al inicio. Si el problema persiste, contáctanos.
         </p>
       </div>
 

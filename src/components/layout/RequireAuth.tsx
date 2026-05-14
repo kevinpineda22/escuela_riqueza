@@ -1,4 +1,4 @@
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import type { ReactNode } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import type { Plan, UserRole } from "@/types/user";
@@ -17,9 +17,12 @@ const PLAN_RANK: Record<Plan, number> = {
 
 const RequireAuth = ({ children, role, minPlan }: RequireAuthProps) => {
   const { user, isAuthenticated } = useAuth();
+  const location = useLocation();
 
   if (!isAuthenticated || !user) {
-    return <Navigate to="/login" replace />;
+    const returnTo = `${location.pathname}${location.search}${location.hash}`;
+    const search = returnTo && returnTo !== "/" ? `?returnTo=${encodeURIComponent(returnTo)}` : "";
+    return <Navigate to={`/login${search}`} replace />;
   }
 
   if (role && user.role !== role) {

@@ -44,10 +44,9 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000" }: { liveId?
 
   // Cargar mensajes iniciales y suscribirse a nuevos
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let channel: any;
+    let isActive = true;
 
-    const initChat = async () => {
+    const fetchHistory = async () => {
       setLoading(true);
       // Esperar a que Supabase recupere la sesión local antes de conectarse a Realtime
       await supabase.auth.getSession();
@@ -58,6 +57,8 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000" }: { liveId?
         .select("id, content, created_at, user_id")
         .eq("live_id", liveId)
         .order("created_at", { ascending: true });
+
+      if (!isActive) return;
 
       if (msgsData && !error) {
         // Obtener perfiles de los usuarios que comentaron
@@ -77,6 +78,8 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000" }: { liveId?
           }
         }
 
+        if (!isActive) return;
+
         const history: ChatMessage[] = msgsData.map((msg: any) => ({
           id: msg.id,
           user_id: msg.user_id,
@@ -89,42 +92,49 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000" }: { liveId?
         setMessages([SYSTEM_MESSAGE]);
       }
       setLoading(false);
-
-      // 2. Suscribirse a nuevos mensajes (Realtime)
-      channel = supabase.channel(`live_messages_${liveId}`);
-      
-      channel.on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "live_messages", filter: `live_id=eq.${liveId}` },
-        async (payload: any) => {
-          const newMsg = payload.new;
-          
-          const { data: profileData } = await supabase
-            .from("profiles")
-            .select("full_name")
-            .eq("id", newMsg.user_id)
-            .maybeSingle();
-
-          const incomingMessage: ChatMessage = {
-            id: newMsg.id,
-            user_id: newMsg.user_id,
-            user_name: profileData?.full_name || "Usuario",
-            content: newMsg.content,
-            created_at: newMsg.created_at,
-          };
-
-          setMessages((prev) => [...prev, incomingMessage]);
-        }
-      ).subscribe();
     };
 
-    initChat();
+    fetchHistory();
+
+    // 2. Suscribirse a nuevos mensajes (Realtime) 
+    // Lo hacemos desde el inicio sin esperar el fetch, para no perder mensajes concurrentes y 
+    // evitar race conditions con el unmount de React Strict Mode.
+    const channel = supabase.channel(`live_messages_${liveId}`);
+    
+    channel.on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "live_messages", filter: `live_id=eq.${liveId}` },
+      async (payload: any) => {
+        const newMsg = payload.new;
+        
+        const { data: profileData } = await supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("id", newMsg.user_id)
+          .maybeSingle();
+
+        const incomingMessage: ChatMessage = {
+          id: newMsg.id,
+          user_id: newMsg.user_id,
+          user_name: profileData?.full_name || "Usuario",
+          content: newMsg.content,
+          created_at: newMsg.created_at,
+        };
+
+        if (isActive) {
+          setMessages((prev) => {
+             // Evitar duplicados si el realtime se adelantó al fetch
+             if (prev.some(m => m.id === incomingMessage.id)) return prev;
+             return [...prev, incomingMessage];
+          });
+        }
+      }
+    ).subscribe();
 
     // Cleanup de la suscripción al desmontar
     return () => {
-      if (channel) {
-        supabase.removeChannel(channel);
-      }
+      isActive = false;
+      supabase.removeChannel(channel);
     };
   }, [liveId]);
 

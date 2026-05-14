@@ -46,12 +46,12 @@ const SkeletonText = ({ count = 3, className, ...rest }: SkeletonGroupProps) => 
 const SkeletonCard = ({ className, ...rest }: HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      "p-5 rounded-2xl bg-white/[0.03] border border-white/[0.06] flex flex-col gap-4",
+      "p-4 sm:p-5 rounded-2xl bg-white/[0.03] border border-white/[0.06] flex flex-col gap-3 sm:gap-4",
       className,
     )}
     {...rest}
   >
-    <Skeleton variant="rect" className="h-32 w-full" />
+    <Skeleton variant="rect" className="h-24 sm:h-32 w-full" />
     <SkeletonText count={2} />
     <div className="flex items-center justify-between mt-1">
       <Skeleton variant="text" className="w-1/3" />

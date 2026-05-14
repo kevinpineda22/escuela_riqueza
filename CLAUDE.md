@@ -271,6 +271,8 @@ for select using (
 **Animación / preferencias**
 - `MotionProvider.tsx`: envuelve la app en `MotionConfig`, controla Lenis en desktop, respeta `prefers-reduced-motion` y el toggle global del usuario.
 - `AnimationToggle.tsx`: control persistido en `preferences.store` (zustand).
+- `routes.tsx`: Enuelto en `AnimatePresence` con `PageTransition` wrapper para transiciones fluidas de fade y blur entre páginas.
+- `src/components/ui/dialog.tsx`: Componente base de modal premium con backdrop blur, ring focus accesible y estética alineada.
 
 ### 10.2 Funcionalidad pendiente (la trabaja el compañero de equipo)
 - `/api/stream/playback-token.ts` — token firmado para reproducir VOD premium sin que se filtre la URL.

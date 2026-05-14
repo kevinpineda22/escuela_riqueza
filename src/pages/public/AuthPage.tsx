@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useForm, type UseFormRegisterReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { motion, AnimatePresence } from "motion/react";
@@ -677,21 +677,26 @@ const AuthBackground = () => (
     {/* Capa 1: base oscura con gradient diagonal sutil */}
     <div className="absolute inset-0 bg-[radial-gradient(ellipse_120%_80%_at_50%_0%,#1a1410_0%,#0a0a0a_50%,#050505_100%)]" />
 
-    {/* Capa 2: mesh radial multi-color animado (3 blobs amplios) */}
+    {/* Capa 2: mesh radial multi-color animado — solo desktop (perf mobile) */}
     <motion.div
-      className="absolute -top-1/3 -left-1/4 w-[80vw] h-[80vw] max-w-[900px] max-h-[900px] rounded-full bg-[radial-gradient(circle_at_center,rgba(204,164,59,0.35)_0%,rgba(204,164,59,0.05)_45%,transparent_70%)] blur-3xl"
+      className="hidden md:block absolute -top-1/3 -left-1/4 w-[80vw] h-[80vw] max-w-[900px] max-h-[900px] rounded-full bg-[radial-gradient(circle_at_center,rgba(204,164,59,0.35)_0%,rgba(204,164,59,0.05)_45%,transparent_70%)] blur-3xl"
       animate={{ x: [0, 60, -20, 0], y: [0, -40, 20, 0] }}
       transition={{ duration: 22, repeat: Infinity, ease: "easeInOut" }}
     />
     <motion.div
-      className="absolute -bottom-1/3 -right-1/4 w-[80vw] h-[80vw] max-w-[1000px] max-h-[1000px] rounded-full bg-[radial-gradient(circle_at_center,rgba(225,184,70,0.3)_0%,rgba(225,184,70,0.04)_50%,transparent_75%)] blur-3xl"
+      className="hidden md:block absolute -bottom-1/3 -right-1/4 w-[80vw] h-[80vw] max-w-[1000px] max-h-[1000px] rounded-full bg-[radial-gradient(circle_at_center,rgba(225,184,70,0.3)_0%,rgba(225,184,70,0.04)_50%,transparent_75%)] blur-3xl"
       animate={{ x: [0, -50, 30, 0], y: [0, 30, -40, 0] }}
       transition={{ duration: 26, repeat: Infinity, ease: "easeInOut", delay: 2 }}
     />
     <motion.div
-      className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[60vw] h-[60vw] max-w-[700px] max-h-[700px] rounded-full bg-[radial-gradient(circle_at_center,rgba(180,120,30,0.18)_0%,transparent_60%)] blur-3xl"
+      className="hidden md:block absolute top-1/4 left-1/2 -translate-x-1/2 w-[60vw] h-[60vw] max-w-[700px] max-h-[700px] rounded-full bg-[radial-gradient(circle_at_center,rgba(180,120,30,0.18)_0%,transparent_60%)] blur-3xl"
       animate={{ scale: [1, 1.15, 1], opacity: [0.5, 0.85, 0.5] }}
       transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
+    />
+    {/* Capa 2 bis — mobile: un único orbe estático compacto */}
+    <div
+      aria-hidden
+      className="md:hidden absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/3 w-[120vw] h-[120vw] rounded-full bg-[radial-gradient(circle_at_center,rgba(204,164,59,0.22),transparent_60%)] blur-2xl pointer-events-none"
     />
 
     {/* Capa 3: líneas diagonales finas (textura premium) */}
@@ -741,13 +746,18 @@ const AuthBackground = () => (
 /* Página principal                                              */
 /* ============================================================ */
 
+const isSafeReturnPath = (path: string): boolean => {
+  // Solo permitir paths internos (deben empezar con "/" pero no "//" ni "/\")
+  return /^\/[^/\\]/.test(path);
+};
+
 const AuthPage = ({ initialMode = "signin" }: AuthPageProps) => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [mode, setMode] = useState<Mode>(initialMode);
-  
+
   // Revisar si viene ?plan=vip en la URL
   useEffect(() => {
-    const searchParams = new URLSearchParams(window.location.search);
     const planParam = searchParams.get("plan");
     if (planParam && mode !== "signup") {
       setMode("signup");
@@ -766,9 +776,18 @@ const AuthPage = ({ initialMode = "signin" }: AuthPageProps) => {
     if (next !== mode) setMode(next);
   };
 
+  const resolveReturnTarget = (toAdmin: boolean): string => {
+    const returnToRaw = searchParams.get("returnTo");
+    if (returnToRaw) {
+      const decoded = decodeURIComponent(returnToRaw);
+      if (isSafeReturnPath(decoded)) return decoded;
+    }
+    return toAdmin ? "/admin/content" : "/dashboard";
+  };
+
   const handleSigninSuccess = (toAdmin: boolean) =>
-    navigate(toAdmin ? "/admin/content" : "/dashboard");
-  const handleSignupSuccess = () => navigate("/dashboard");
+    navigate(resolveReturnTarget(toAdmin));
+  const handleSignupSuccess = () => navigate(resolveReturnTarget(false));
 
   const slideTransition = {
     type: "tween" as const,
@@ -783,10 +802,10 @@ const AuthPage = ({ initialMode = "signin" }: AuthPageProps) => {
       {/* ==== Volver al inicio (estilo gold pill, coherente con header) ==== */}
       <Link
         to="/"
-        className="absolute top-4 left-4 sm:top-6 sm:left-6 z-30 inline-flex items-center gap-2 text-sm font-bold text-darker bg-gold/95 hover:bg-goldHover px-4 py-2 rounded-full transition-all shadow-[0_4px_18px_-4px_rgba(204,164,59,0.6)] hover:shadow-[0_6px_22px_-4px_rgba(204,164,59,0.8)] hover:-translate-y-0.5"
+        className="absolute top-3 left-3 sm:top-6 sm:left-6 z-30 inline-flex items-center gap-2 text-xs sm:text-sm font-bold text-darker bg-gold/95 hover:bg-goldHover px-3 sm:px-4 py-2 rounded-full transition-all shadow-[0_4px_18px_-4px_rgba(204,164,59,0.6)] hover:shadow-[0_6px_22px_-4px_rgba(204,164,59,0.8)] hover:-translate-y-0.5"
         aria-label="Volver al inicio"
       >
-        <ArrowLeft size={16} />
+        <ArrowLeft size={14} />
         <span className="hidden sm:inline">Volver al inicio</span>
       </Link>
 
@@ -885,7 +904,7 @@ const AuthPage = ({ initialMode = "signin" }: AuthPageProps) => {
       </article>
 
       {/* ==== MOBILE / TABLET (< lg) ==== */}
-      <div className="lg:hidden w-full max-w-md relative z-10 mt-14">
+      <div className="lg:hidden w-full max-w-md relative z-10 mt-16 sm:mt-14">
         <Link
           to="/"
           className="flex justify-center mb-6"

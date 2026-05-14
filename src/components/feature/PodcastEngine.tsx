@@ -286,7 +286,7 @@ const PodcastEngine = () => {
   // Renderizamos el Stream SIEMPRE para que el iframe exista antes del primer clic.
   // Si no hay track, usamos un AD_VIDEO_ID de placeholder para que Cloudflare no falle,
   // pero lo mantenemos silenciado y en pausa.
-  const streamSrc = track?.videoId || "6175f36e4f305cfcbb79a952802edfc2";
+  const streamSrc = track?.videoId || "02b22da00a68753980615a8df8f06e96";
 
   return (
     <div aria-hidden="true" style={CONTAINER_STYLE}>

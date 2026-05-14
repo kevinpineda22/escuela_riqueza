@@ -57,7 +57,7 @@ const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
             onClick={onNavigate}
             className={({ isActive }) =>
               cn(
-                "group relative flex items-center gap-3 w-full px-4 py-3.5 font-bold rounded-2xl transition-all overflow-hidden",
+                "group relative flex items-center gap-3 w-full px-4 py-3.5 font-bold rounded-2xl transition-all overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold",
                 isActive
                   ? "bg-gold/10 text-gold border border-gold/20 shadow-inner"
                   : "text-textMuted hover:text-white hover:bg-white/5 border border-transparent font-semibold"
@@ -165,7 +165,7 @@ const AdminLayout = () => {
         />
         <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
           <SheetTrigger asChild>
-            <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" aria-label="Menú admin">
+            <Button variant="ghost" size="icon" className="text-white hover:bg-white/10 w-11 h-11 focus-visible:ring-2 focus-visible:ring-gold" aria-label="Menú admin">
               <Menu size={24} />
             </Button>
           </SheetTrigger>
@@ -178,12 +178,12 @@ const AdminLayout = () => {
       </div>
 
       {/* Main Content Area */}
-      <main data-lenis-prevent className="flex-1 p-4 sm:p-6 md:p-8 lg:p-12 relative z-10 overflow-y-auto h-[calc(100dvh-65px)] md:h-screen w-full flex flex-col">
-        {/* Orbe flotante en el main (compartido por todas las vistas admin) */}
+      <main data-lenis-prevent className="flex-1 p-4 sm:p-6 md:p-8 lg:p-12 relative z-10 overflow-y-auto md:h-[100dvh] w-full flex flex-col min-h-0">
+        {/* Orbe flotante en el main — solo desktop (perf mobile) */}
         <motion.div
           animate={{ y: [0, -20, 0], scale: [1, 1.05, 1], opacity: [0.1, 0.15, 0.1] }}
           transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute top-[10%] right-[10%] -z-10 w-[500px] h-[500px] rounded-full bg-gold blur-[120px] pointer-events-none"
+          className="hidden md:block absolute top-[10%] right-[10%] -z-10 w-[500px] h-[500px] rounded-full bg-gold blur-[120px] pointer-events-none"
         />
 
         {/* Outlet renderiza la vista activa (Upload, Metrics, etc) */}

@@ -42,6 +42,8 @@ const getInitials = (name: string) => {
   return name.slice(0, 2).toUpperCase();
 };
 
+const VALID_TABS: TabId[] = ["modulos", "notas", "certificados", "comunidad", "perfil"];
+
 const StudentDashboard = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -51,13 +53,19 @@ const StudentDashboard = () => {
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const tab = searchParams.get("tab") as TabId;
-    if (tab && ["modulos", "notas", "certificados", "comunidad", "perfil"].includes(tab)) {
+    if (tab && VALID_TABS.includes(tab)) {
       setActiveTab(tab);
     }
     setTimeout(() => window.scrollTo(0, 0), 50);
   }, [location.search]);
 
   const [selectedModule, setSelectedModule] = useState<string | null>(null);
+
+  const changeTab = (next: TabId) => {
+    setSelectedModule(null);
+    // Empuja la URL para mantener sincronizado el hamburger y poder linkear directo.
+    navigate(`/dashboard?tab=${next}`, { replace: false });
+  };
   const [activeLesson, setActiveLesson] = useState<DBLesson | null>(null);
   const [dbModules, setDbModules] = useState<DBModule[]>([]);
   const [dbLessonsMap, setDbLessonsMap] = useState<Record<string, DBLesson[]>>({});
@@ -238,29 +246,10 @@ const StudentDashboard = () => {
     <div className={cn("min-h-screen bg-darker selection:bg-gold/30 font-sans text-textMain flex flex-col overflow-x-hidden", isPodcastMode ? "pb-24 md:pb-28" : "")}>
       <Header />
 
-      {/* Mobile Sticky Navigation */}
-      <div className="lg:hidden sticky top-0 z-40 bg-darker/80 backdrop-blur-xl border-b border-white/10 px-4 py-3 flex gap-2 overflow-x-auto custom-scrollbar shadow-lg shadow-black/50">
-        {NAV_ITEMS.map((item) => {
-          if (item.premiumOnly && !isPremium) return null;
-          const isActive = activeTab === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => { setActiveTab(item.id as TabId); setSelectedModule(null); }}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all shrink-0",
-                isActive ? "bg-gold/15 text-gold border border-gold/30 shadow-[0_0_10px_rgba(204,164,59,0.15)]" : "bg-white/5 text-textMuted border border-transparent hover:bg-white/10"
-              )}
-            >
-              <item.icon size={16} /> {item.label}
-            </button>
-          );
-        })}
-      </div>
 
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-10 grid grid-cols-1 lg:grid-cols-4 gap-8 relative">
         {/* Desktop Sidebar */}
-        <aside className="col-span-1 border-r border-white/10 pr-6 lg:flex flex-col hidden h-full sticky top-24 self-start max-h-[calc(100vh-120px)] overflow-y-auto custom-scrollbar">
+        <aside className="col-span-1 border-r border-white/10 pr-6 lg:flex flex-col hidden h-full sticky top-24 self-start max-h-[calc(100dvh-120px)] overflow-y-auto custom-scrollbar">
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4 }}>
             <div className="mb-10 text-center">
               <div className="w-24 h-24 rounded-full bg-gold/10 flex items-center justify-center border-2 border-gold/30 mb-4 mx-auto text-3xl font-bold text-gold shadow-[0_0_15px_rgba(204,164,59,0.3)] overflow-hidden relative group">
@@ -289,7 +278,7 @@ const StudentDashboard = () => {
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => { setActiveTab(item.id as TabId); setSelectedModule(null); }}
+                    onClick={() => changeTab(item.id as TabId)}
                     className={cn(
                       "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm font-medium group",
                       isActive ? "bg-white/10 text-white shadow-sm border border-white/5" : "text-textMuted hover:text-white hover:bg-white/5 border border-transparent"
@@ -360,17 +349,17 @@ const StudentDashboard = () => {
                 </div>
                 {liveEvent.status === "live" ? (
                   <a href="/vip-live"
-                    className="px-5 py-2.5 rounded-xl font-bold text-xs transition-all whitespace-nowrap flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-900/50">
-                    Ver transmisión <PlayCircle size={16} />
+                    className="px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl font-bold text-[11px] sm:text-xs transition-all whitespace-nowrap flex items-center gap-1.5 sm:gap-2 bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-900/50 shrink-0">
+                    <span className="hidden sm:inline">Ver transmisión</span><span className="sm:hidden">Ver</span> <PlayCircle size={14} />
                   </a>
                 ) : liveEvent.starts_at && (new Date(liveEvent.starts_at).getTime() - Date.now()) <= 15 * 60 * 1000 ? (
                   <a href="/vip-live"
-                    className="px-5 py-2.5 rounded-xl font-bold text-xs transition-all whitespace-nowrap flex items-center gap-2 bg-gold/20 hover:bg-gold/30 text-gold border border-gold/30 shadow-lg shadow-gold/10">
-                    Ver sala <Radio size={16} />
+                    className="px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl font-bold text-[11px] sm:text-xs transition-all whitespace-nowrap flex items-center gap-1.5 sm:gap-2 bg-gold/20 hover:bg-gold/30 text-gold border border-gold/30 shadow-lg shadow-gold/10 shrink-0">
+                    Ver sala <Radio size={14} />
                   </a>
                 ) : (
-                  <span className="px-5 py-2.5 rounded-xl font-bold text-xs bg-gold/10 text-gold border border-gold/20 whitespace-nowrap">
-                    Disponible para tu plan
+                  <span className="px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl font-bold text-[11px] sm:text-xs bg-gold/10 text-gold border border-gold/20 whitespace-nowrap shrink-0">
+                    <span className="hidden sm:inline">Disponible para tu plan</span><span className="sm:hidden">Disponible</span>
                   </span>
                 )}
               </div>
@@ -503,7 +492,7 @@ const StudentDashboard = () => {
 
                         {/* Zona de Lista de Lecciones */}
                         <div className="xl:col-span-1 flex flex-col gap-6">
-                          <div className="bg-black/40 border border-white/10 rounded-2xl overflow-hidden flex flex-col max-h-[500px] xl:max-h-[600px] shadow-lg">
+                          <div className="bg-black/40 border border-white/10 rounded-2xl overflow-hidden flex flex-col xl:max-h-[600px] shadow-lg">
                             <div className="p-4 border-b border-white/10 bg-white/5 backdrop-blur-md sticky top-0 z-10">
                               <h3 className="font-bold text-white text-sm flex items-center justify-between">
                                 Playlist del Módulo
@@ -838,3 +827,4 @@ const StudentDashboard = () => {
 };
 
 export default StudentDashboard;
+

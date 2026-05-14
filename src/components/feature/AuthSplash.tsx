@@ -18,7 +18,7 @@ const AuthSplash = ({ message = "Preparando tu experiencia..." }: AuthSplashProp
     <motion.div
       aria-hidden
       style={{ position: "absolute" }}
-      className="-top-1/3 left-1/2 -translate-x-1/2 w-[700px] h-[700px] rounded-full bg-[radial-gradient(circle_at_center,rgba(204,164,59,0.35),transparent_60%)] blur-3xl"
+      className="-top-1/3 left-1/2 -translate-x-1/2 w-[360px] h-[360px] md:w-[700px] md:h-[700px] rounded-full bg-[radial-gradient(circle_at_center,rgba(204,164,59,0.35),transparent_60%)] blur-2xl md:blur-3xl"
       animate={{ scale: [1, 1.12, 1], opacity: [0.45, 0.7, 0.45] }}
       transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
     />

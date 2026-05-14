@@ -138,17 +138,17 @@ export async function fetchEndedLives(): Promise<LiveEvent[]> {
   return (data || []) as LiveEvent[];
 }
 
-export async function checkLiveInputStatus(liveInputId: string): Promise<{ connected: boolean }> {
+export async function checkLiveInputStatus(liveInputId: string): Promise<{ connected: boolean; isError?: boolean }> {
   try {
     const res = await fetch("/api/stream/live-input-status", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ live_input_id: liveInputId }),
     });
-    if (!res.ok) return { connected: false };
+    if (!res.ok) return { connected: false, isError: true };
     return await res.json();
   } catch {
-    return { connected: false };
+    return { connected: false, isError: true };
   }
 }
 

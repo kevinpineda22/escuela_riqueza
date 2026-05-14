@@ -14,15 +14,20 @@ const NotFound = () => (
     />
     <motion.div
       aria-hidden
-      className="absolute -top-1/3 -left-1/4 w-[80vw] h-[80vw] max-w-[900px] max-h-[900px] rounded-full bg-[radial-gradient(circle_at_center,rgba(204,164,59,0.3)_0%,rgba(204,164,59,0.04)_45%,transparent_70%)] blur-3xl pointer-events-none"
+      className="hidden md:block absolute -top-1/3 -left-1/4 w-[80vw] h-[80vw] max-w-[900px] max-h-[900px] rounded-full bg-[radial-gradient(circle_at_center,rgba(204,164,59,0.3)_0%,rgba(204,164,59,0.04)_45%,transparent_70%)] blur-3xl pointer-events-none"
       animate={{ x: [0, 60, -20, 0], y: [0, -40, 20, 0] }}
       transition={{ duration: 22, repeat: Infinity, ease: "easeInOut" }}
     />
     <motion.div
       aria-hidden
-      className="absolute -bottom-1/3 -right-1/4 w-[80vw] h-[80vw] max-w-[1000px] max-h-[1000px] rounded-full bg-[radial-gradient(circle_at_center,rgba(225,184,70,0.25)_0%,rgba(225,184,70,0.04)_50%,transparent_75%)] blur-3xl pointer-events-none"
+      className="hidden md:block absolute -bottom-1/3 -right-1/4 w-[80vw] h-[80vw] max-w-[1000px] max-h-[1000px] rounded-full bg-[radial-gradient(circle_at_center,rgba(225,184,70,0.25)_0%,rgba(225,184,70,0.04)_50%,transparent_75%)] blur-3xl pointer-events-none"
       animate={{ x: [0, -50, 30, 0], y: [0, 30, -40, 0] }}
       transition={{ duration: 26, repeat: Infinity, ease: "easeInOut", delay: 2 }}
+    />
+    {/* En mobile, un único orbe estático más chico para mantener el ambiente sin tirar el GPU */}
+    <div
+      aria-hidden
+      className="md:hidden absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/3 w-[120vw] h-[120vw] rounded-full bg-[radial-gradient(circle_at_center,rgba(204,164,59,0.18),transparent_60%)] blur-2xl pointer-events-none"
     />
     <div
       aria-hidden

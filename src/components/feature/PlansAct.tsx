@@ -70,18 +70,18 @@ const itemVariants: Variants = {
 
 export const PlansAct = () => {
   return (
-    <section id="planes" className="relative z-10 max-w-7xl mx-auto px-6 py-24 md:py-32 border-t border-white/5">
+    <section id="planes" className="relative z-10 max-w-7xl mx-auto px-5 sm:px-6 py-20 sm:py-24 md:py-32 border-t border-white/5">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, margin: "-100px" }}
         transition={{ duration: 0.7 }}
-        className="text-center mb-16 md:mb-24"
+        className="text-center mb-12 sm:mb-16 md:mb-24"
       >
-        <h2 className="text-3xl md:text-5xl font-extrabold text-white mb-4 tracking-tight">
+        <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-white mb-4 tracking-tight">
           Elige tu Plan de Crecimiento
         </h2>
-        <p className="text-textMuted max-w-xl mx-auto text-lg md:text-xl text-balance">
+        <p className="text-textMuted max-w-xl mx-auto text-base sm:text-lg md:text-xl text-balance">
           Impulsa tu desarrollo al nivel que necesitas. Comienza gratis o accede a la experiencia completa.
         </p>
       </motion.div>
@@ -91,37 +91,37 @@ export const PlansAct = () => {
         initial="hidden"
         whileInView="visible"
         viewport={{ once: true, margin: "-50px" }}
-        className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start"
+        className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8 items-start"
       >
         {plans.map((plan) => (
           <motion.div
             key={plan.id}
             variants={itemVariants}
-            className={`relative p-8 rounded-3xl backdrop-blur-md transition-all duration-300 ${
+            className={`relative p-6 sm:p-8 rounded-3xl backdrop-blur-md transition-all duration-300 ${
               plan.highlight
-                ? "bg-darker border-2 border-gold lg:-translate-y-4 shadow-[0_0_30px_rgba(204,164,59,0.15)] hover:shadow-[0_0_40px_rgba(204,164,59,0.25)]"
+                ? "bg-darker border-2 border-gold lg:-translate-y-4 shadow-[0_0_30px_rgba(204,164,59,0.15)] hover:shadow-[0_0_40px_rgba(204,164,59,0.25)] mt-3 lg:mt-0"
                 : "bg-white/[0.02] border border-white/[0.05] hover:bg-white/[0.04] hover:border-white/10"
             }`}
           >
             {plan.badge && (
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-gold text-darker text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-wide">
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-gold text-darker text-[10px] sm:text-xs font-bold px-3 sm:px-4 py-1 sm:py-1.5 rounded-full uppercase tracking-wide whitespace-nowrap shadow-[0_4px_14px_-2px_rgba(204,164,59,0.5)]">
                 {plan.badge}
               </div>
             )}
-            
-            <h3 className="text-2xl font-bold text-white mb-2">{plan.name}</h3>
-            <p className="text-textMuted text-sm mb-6 h-10 text-pretty">{plan.description}</p>
-            
-            <div className="mb-8 flex items-baseline gap-1">
-              <span className={`font-bold ${plan.id === "free" ? "text-5xl text-white" : "text-2xl text-textMuted"}`}>
+
+            <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">{plan.name}</h3>
+            <p className="text-textMuted text-sm mb-5 sm:mb-6 sm:h-10 text-pretty">{plan.description}</p>
+
+            <div className="mb-6 sm:mb-8 flex items-baseline gap-1 flex-wrap">
+              <span className={`font-bold ${plan.id === "free" ? "text-4xl sm:text-5xl text-white" : "text-xl sm:text-2xl text-textMuted"}`}>
                 {plan.price}
               </span>
-              <span className="text-textMuted">{plan.period}</span>
+              <span className="text-textMuted text-sm sm:text-base">{plan.period}</span>
             </div>
-            
+
             <Button
               asChild
-              className={`w-full py-6 mb-8 rounded-xl text-base ${
+              className={`w-full py-5 sm:py-6 mb-6 sm:mb-8 rounded-xl text-sm sm:text-base ${
                 plan.highlight
                   ? "bg-gold hover:bg-goldHover text-darker font-bold shadow-[0_0_15px_rgba(204,164,59,0.4)]"
                   : "bg-white/5 hover:bg-white/10 border border-white/10 text-white font-medium"
@@ -131,8 +131,8 @@ export const PlansAct = () => {
                 {plan.actionLabel}
               </Link>
             </Button>
-            
-            <ul className="space-y-4">
+
+            <ul className="space-y-3 sm:space-y-4">
               {plan.features.map((feature, idx) => (
                 <li key={idx} className="flex items-start gap-3">
                   <Check className="text-gold w-5 h-5 shrink-0 mt-0.5" />

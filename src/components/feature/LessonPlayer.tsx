@@ -144,29 +144,29 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
     <div className="w-full max-w-5xl flex flex-col gap-4">
       <div
         className={cn(
-          "p-3 rounded-xl border flex items-center justify-between",
+          "p-3 rounded-xl border flex flex-wrap items-center justify-between gap-2",
           isPremium ? "bg-gold/10 border-gold/30 text-gold" : "bg-white/5 border-white/10 text-white/70"
         )}
       >
-        <div className="flex items-center gap-2 font-medium">
-          <ShieldAlert size={18} />
-          {isPremium ? "Plan Individual - Sin Interrupciones" : "Plan Gratuito - Reproducción con Publicidad"}
+        <div className="flex items-center gap-2 font-medium text-xs sm:text-sm min-w-0">
+          <ShieldAlert size={16} className="shrink-0" />
+          <span className="truncate">{isPremium ? "Plan Individual — Sin interrupciones" : "Plan Gratuito — Con publicidad"}</span>
         </div>
 
         {isPremium && (
           <button
             onClick={handlePodcastToggle}
             className={cn(
-              "flex items-center gap-2 px-4 py-1.5 rounded-lg font-medium transition-all",
+              "flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-lg font-medium transition-all text-xs sm:text-sm shrink-0",
               isPlayingThisInPodcast ? "bg-gold text-darker shadow-[0_0_15px_rgba(204,164,59,0.3)]" : "bg-transparent border border-gold hover:bg-gold/10 text-gold"
             )}
           >
-            <Headphones size={18} /> Modo Podcast {isPlayingThisInPodcast ? "ON" : "OFF"}
+            <Headphones size={16} /> Podcast <span className="hidden sm:inline">{isPlayingThisInPodcast ? "ON" : "OFF"}</span>
           </button>
         )}
       </div>
 
-      <div className="relative aspect-video bg-black rounded-2xl overflow-hidden border border-white/10 shadow-2xl group transition-all duration-500 ease-in-out">
+      <div className="relative aspect-video max-h-[70dvh] sm:max-h-none bg-black rounded-2xl overflow-hidden border border-white/10 shadow-2xl group transition-all duration-500 ease-in-out">
         {!videoSrc ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20">
             <MonitorPlay size={48} className="text-white/20 mb-4" />
@@ -183,13 +183,13 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
         >
           <img
             src="https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/18dc9190-6625-4b89-8f1e-3f221e96b500/public"
-            className="h-24 md:h-32 object-contain mb-6 opacity-80 animate-pulse drop-shadow-[0_0_15px_rgba(204,164,59,0.3)]"
+            className="h-16 sm:h-24 md:h-32 object-contain mb-4 sm:mb-6 opacity-80 animate-pulse drop-shadow-[0_0_15px_rgba(204,164,59,0.3)]"
           />
-          <div className="flex items-center gap-3">
-            <Headphones size={24} className="text-gold animate-bounce" />
-            <h3 className="text-2xl font-bold text-white">Modo Podcast Activado</h3>
+          <div className="flex items-center gap-2 sm:gap-3 px-4 text-center">
+            <Headphones size={20} className="text-gold animate-bounce shrink-0" />
+            <h3 className="text-lg sm:text-2xl font-bold text-white">Modo Podcast Activado</h3>
           </div>
-          <p className="text-sm text-textMuted mt-2 mb-6">Reproduciéndose en segundo plano.</p>
+          <p className="text-xs sm:text-sm text-textMuted mt-2 mb-4 sm:mb-6 px-4 text-center">Reproduciéndose en segundo plano.</p>
           
           <button 
             onClick={handlePodcastToggle}
