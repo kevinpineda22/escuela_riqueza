@@ -8,10 +8,50 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Play, Pause, X, Volume2, VolumeX,
-  SkipBack, SkipForward, Headphones,
+  RotateCcw, RotateCw, Headphones,
 } from "lucide-react";
 import { usePlayerStore } from "@/stores/player.store";
 import { podcastStreamRef } from "@/components/feature/PodcastEngine";
+import { cn } from "@/lib/utils";
+
+const SKIP_SECONDS = 10;
+
+const SecondaryButton = ({
+  onClick, title, ariaLabel, children, className,
+}: {
+  onClick: () => void;
+  title: string;
+  ariaLabel: string;
+  children: React.ReactNode;
+  className?: string;
+}) => (
+  <button
+    onClick={onClick}
+    title={title}
+    aria-label={ariaLabel}
+    className={cn(
+      "w-10 h-10 rounded-full flex items-center justify-center shrink-0",
+      "text-white/70 hover:text-white hover:bg-white/8 active:bg-white/12",
+      "transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/60",
+      className,
+    )}
+  >
+    {children}
+  </button>
+);
+
+const SkipIcon = ({
+  direction,
+}: { direction: "back" | "forward" }) => (
+  <span className="relative inline-flex items-center justify-center w-5 h-5">
+    {direction === "back"
+      ? <RotateCcw size={20} strokeWidth={1.8} />
+      : <RotateCw size={20} strokeWidth={1.8} />}
+    <span className="absolute text-[8px] font-bold leading-none mt-[1px] tracking-tight">
+      {SKIP_SECONDS}
+    </span>
+  </span>
+);
 
 const GlobalPodcastPlayer = () => {
   const {
@@ -28,8 +68,6 @@ const GlobalPodcastPlayer = () => {
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-
-  // Polling de currentTime desde el engine (evita props drilling y re-renders en cadena)
   const rafRef = useRef<number>(0);
 
   useEffect(() => {
@@ -52,10 +90,7 @@ const GlobalPodcastPlayer = () => {
     return () => cancelAnimationFrame(rafRef.current);
   }, [isPodcastMode, track]);
 
-  // No renderizar si no hay podcast activo
   if (!track || !isPodcastMode) return null;
-
-  // ── Handlers ──────────────────────────────────────────────────────────────
 
   const togglePlay = () => {
     const el = podcastStreamRef.current;
@@ -80,12 +115,12 @@ const GlobalPodcastPlayer = () => {
 
   const handleSkipBack = () => {
     const el = podcastStreamRef.current;
-    if (el) el.currentTime = Math.max(el.currentTime - 10, 0);
+    if (el) el.currentTime = Math.max(el.currentTime - SKIP_SECONDS, 0);
   };
 
   const handleSkipForward = () => {
     const el = podcastStreamRef.current;
-    if (el && duration > 0) el.currentTime = Math.min(el.currentTime + 10, duration);
+    if (el && duration > 0) el.currentTime = Math.min(el.currentTime + SKIP_SECONDS, duration);
   };
 
   const handleClose = () => {
@@ -101,31 +136,28 @@ const GlobalPodcastPlayer = () => {
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
-  // ── Render ─────────────────────────────────────────────────────────────────
-
   return (
     <div className="fixed bottom-0 left-0 w-full z-[100] bg-darker/95 backdrop-blur-xl border-t border-white/10 shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
-      {/* Progress bar — top edge */}
+      {/* Progress bar — top edge (mobile primary scrubber) */}
       <div className="absolute top-0 left-0 w-full h-1 bg-white/5 cursor-pointer">
         <div
           className="h-full bg-gold transition-all duration-100 relative"
           style={{ width: `${progress}%` }}
-        >
-          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-[0_0_10px_rgba(204,164,59,1)] opacity-0 hover:opacity-100" />
-        </div>
+        />
         <input
-          type="range" min="0" max="100"
+          type="range" min="0" max="100" step="0.1"
           value={progress}
           onChange={handleSeek}
+          aria-label="Progreso"
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
         />
       </div>
 
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 h-20 md:h-24 flex items-center justify-between gap-2 sm:gap-4">
-        {/* Info — Left */}
-        <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
-          <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-16 md:h-16 bg-gold/10 rounded-xl border border-gold/30 flex items-center justify-center shrink-0 shadow-lg relative overflow-hidden">
-            <Headphones className="text-gold w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8" />
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2 md:py-3 flex flex-col md:grid md:grid-cols-3 md:items-center gap-2 md:gap-4">
+        {/* LEFT — info card */}
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-11 h-11 md:w-14 md:h-14 bg-gold/10 rounded-xl border border-gold/30 flex items-center justify-center shrink-0 shadow-lg relative overflow-hidden">
+            <Headphones className="text-gold w-5 h-5 md:w-7 md:h-7" />
             {isPlaying && (
               <div className="absolute bottom-1.5 flex gap-0.5 items-end h-3">
                 <div className="w-0.5 bg-gold h-full animate-[pulse_1s_ease-in-out_infinite]" />
@@ -135,95 +167,114 @@ const GlobalPodcastPlayer = () => {
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <h4 className="text-white font-bold text-xs sm:text-sm md:text-base truncate leading-tight">{track.title}</h4>
-            <div className="flex items-center gap-2 mt-0.5">
-              <p className="text-textMuted text-[10px] sm:text-xs md:text-sm truncate uppercase tracking-wider">
-                {track.moduleTitle}
-              </p>
-              <span className="md:hidden text-[10px] font-mono text-white/40 shrink-0">
-                {formatTime(currentTime)}/{formatTime(duration)}
-              </span>
-            </div>
+            <h4 className="text-white font-bold text-sm md:text-base truncate leading-tight">
+              {track.title}
+            </h4>
+            <p className="text-textMuted text-[11px] md:text-xs truncate uppercase tracking-wider mt-0.5">
+              {track.moduleTitle}
+            </p>
+          </div>
+
+          {/* Mobile-only close */}
+          <div className="md:hidden">
+            <SecondaryButton
+              onClick={handleClose}
+              title="Cerrar reproductor"
+              ariaLabel="Cerrar reproductor"
+              className="hover:text-red-400 hover:bg-red-400/10"
+            >
+              <X size={18} />
+            </SecondaryButton>
           </div>
         </div>
 
-        {/* Controls — Center */}
-        <div className="flex flex-col items-center justify-center shrink-0 md:flex-1 md:max-w-md">
-          <div className="flex items-center gap-3 sm:gap-4 md:gap-6">
-            <button
+        {/* CENTER — controls (Spotify-style, truly centered) */}
+        <div className="flex flex-col items-center w-full md:max-w-[420px] md:mx-auto md:justify-self-center">
+          <div className="flex items-center justify-center gap-3 sm:gap-4">
+            <SecondaryButton
               onClick={handleSkipBack}
-              className="text-white/50 hover:text-white transition-colors p-1.5 sm:p-2"
-              title="Retroceder 10s"
-              aria-label="Retroceder 10 segundos"
+              title="Retroceder 10 segundos"
+              ariaLabel="Retroceder 10 segundos"
             >
-              <SkipBack size={18} />
-            </button>
+              <SkipIcon direction="back" />
+            </SecondaryButton>
+
             <button
               onClick={togglePlay}
               aria-label={isPlaying ? "Pausar" : "Reproducir"}
-              className="w-9 h-9 sm:w-10 sm:h-10 md:w-12 md:h-12 bg-white hover:scale-105 text-darker rounded-full flex items-center justify-center transition-all shadow-[0_0_15px_rgba(255,255,255,0.2)] shrink-0"
+              className={cn(
+                "w-12 h-12 rounded-full flex items-center justify-center shrink-0",
+                "bg-white text-darker hover:scale-105 active:scale-95",
+                "transition-transform shadow-[0_0_18px_rgba(255,255,255,0.18)]",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/60",
+              )}
             >
               {isPlaying
-                ? <Pause size={18} className="fill-current" />
-                : <Play size={18} className="fill-current ml-0.5" />
+                ? <Pause size={20} className="fill-current" />
+                : <Play size={20} className="fill-current ml-0.5" />
               }
             </button>
-            <button
+
+            <SecondaryButton
               onClick={handleSkipForward}
-              className="text-white/50 hover:text-white transition-colors p-1.5 sm:p-2"
-              title="Avanzar 10s"
-              aria-label="Avanzar 10 segundos"
+              title="Avanzar 10 segundos"
+              ariaLabel="Avanzar 10 segundos"
             >
-              <SkipForward size={18} />
-            </button>
+              <SkipIcon direction="forward" />
+            </SecondaryButton>
           </div>
 
-          {/* Time + Scrubber — Desktop */}
-          <div className="hidden md:flex items-center gap-3 w-full mt-2 text-[11px] font-medium text-white/50">
-            <span>{formatTime(currentTime)}</span>
+          {/* Desktop scrubber + time */}
+          <div className="hidden md:flex items-center gap-3 w-full mt-2 text-[11px] font-medium text-white/50 tabular-nums">
+            <span className="w-10 text-right">{formatTime(currentTime)}</span>
             <div className="flex-1 h-1 rounded-full bg-white/10 relative group">
               <div
-                className="absolute top-0 left-0 h-full bg-white rounded-full group-hover:bg-gold transition-colors"
+                className="absolute top-0 left-0 h-full bg-white/80 rounded-full group-hover:bg-gold transition-colors"
                 style={{ width: `${progress}%` }}
               />
               <input
-                type="range" min="0" max="100"
+                type="range" min="0" max="100" step="0.1"
                 value={progress}
                 onChange={handleSeek}
+                aria-label="Progreso"
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               />
             </div>
-            <span>{formatTime(duration)}</span>
+            <span className="w-10 text-left">{formatTime(duration)}</span>
           </div>
         </div>
 
-        {/* Actions — Right */}
-        <div className="flex items-center justify-end gap-1 sm:gap-2 md:gap-4 shrink-0">
-          <div className="hidden md:flex items-center gap-2">
-            <button
-              onClick={() => setVolume(volume === 0 ? 1 : 0)}
-              className="text-white/70 hover:text-white transition-colors"
-              aria-label="Mutear/desmutear"
-            >
-              {volume === 0 ? <VolumeX size={20} /> : <Volume2 size={20} />}
-            </button>
-            <input
-              type="range" min="0" max="1" step="0.05"
-              value={volume}
-              onChange={(e) => setVolume(Number(e.target.value))}
-              aria-label="Volumen"
-              className="w-20 accent-gold bg-white/20 h-1 rounded-full cursor-pointer appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full"
-            />
-          </div>
-          <div className="w-px h-8 bg-white/10 mx-2 hidden md:block" />
-          <button
-            onClick={handleClose}
-            className="p-1.5 sm:p-2 text-white/50 hover:text-red-400 transition-colors"
-            title="Cerrar reproductor"
-            aria-label="Cerrar reproductor"
+        {/* RIGHT — actions (desktop only) */}
+        <div className="hidden md:flex items-center justify-end gap-2 shrink-0">
+          <SecondaryButton
+            onClick={() => setVolume(volume === 0 ? 1 : 0)}
+            title={volume === 0 ? "Activar sonido" : "Silenciar"}
+            ariaLabel="Silenciar o activar sonido"
           >
-            <X size={20} />
-          </button>
+            {volume === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />}
+          </SecondaryButton>
+          <input
+            type="range" min="0" max="1" step="0.05"
+            value={volume}
+            onChange={(e) => setVolume(Number(e.target.value))}
+            aria-label="Volumen"
+            className="w-20 accent-gold bg-white/15 h-1 rounded-full cursor-pointer appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full"
+          />
+          <div className="w-px h-7 bg-white/10 mx-1" />
+          <SecondaryButton
+            onClick={handleClose}
+            title="Cerrar reproductor"
+            ariaLabel="Cerrar reproductor"
+            className="hover:text-red-400 hover:bg-red-400/10"
+          >
+            <X size={18} />
+          </SecondaryButton>
+        </div>
+
+        {/* Mobile time row */}
+        <div className="md:hidden flex items-center justify-between text-[10px] font-medium text-white/50 tabular-nums px-1 -mt-1">
+          <span>{formatTime(currentTime)}</span>
+          <span>{formatTime(duration)}</span>
         </div>
       </div>
     </div>

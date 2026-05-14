@@ -138,15 +138,30 @@ export async function fetchEndedLives(): Promise<LiveEvent[]> {
   return (data || []) as LiveEvent[];
 }
 
-export async function checkLiveInputStatus(liveInputId: string): Promise<{ connected: boolean; isError?: boolean }> {
+let liveInputStatusDisabled = false;
+
+export async function checkLiveInputStatus(liveInputId: string): Promise<{ connected: boolean; isError?: boolean; disabled?: boolean }> {
+  if (liveInputStatusDisabled) {
+    return { connected: false, disabled: true };
+  }
+  if (import.meta.env.DEV) {
+    // Vite dev no ejecuta Functions de /api. Apagamos el polling para evitar 502s.
+    liveInputStatusDisabled = true;
+    return { connected: false, disabled: true };
+  }
   try {
     const res = await fetch("/api/stream/live-input-status", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ live_input_id: liveInputId }),
     });
-    if (!res.ok) return { connected: false, isError: true };
-    return await res.json();
+    if (!res.ok) {
+      if (res.status >= 500) liveInputStatusDisabled = true;
+      return { connected: false, isError: true };
+    }
+    const data = await res.json();
+    if (data?.disabled) liveInputStatusDisabled = true;
+    return data;
   } catch {
     return { connected: false, isError: true };
   }

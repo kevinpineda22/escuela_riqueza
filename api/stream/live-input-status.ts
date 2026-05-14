@@ -9,10 +9,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const apiToken = process.env.CLOUDFLARE_STREAM_API_TOKEN || process.env.CLOUDFLARE_API_TOKEN || process.env.CLOUDFLARE_STREAM_TOKEN;
 
   if (!accountId || !apiToken) {
-    return res.status(500).json({ error: 'Faltan credenciales de Cloudflare' });
+    return res.status(200).json({ connected: false, disabled: true });
   }
 
-  const { live_input_id } = req.body;
+  const { live_input_id } = req.body || {};
   if (!live_input_id) {
     return res.status(400).json({ error: 'Falta live_input_id' });
   }
@@ -29,13 +29,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
 
     if (!response.ok) {
-      return res.status(200).json({ connected: false, error: 'No se pudo consultar estado' });
+      return res.status(200).json({ connected: false });
     }
 
     const data = await response.json();
     const input = data?.result;
-
-    // Cloudflare Live Input status: null (idle) or connected (receiving data)
     const connected = input?.status?.connected === true;
     const meta = input?.meta || {};
 
@@ -44,8 +42,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       status: input?.status || null,
       name: meta.name || null,
     });
-  } catch (error) {
-    console.error("Server error:", error);
-    return res.status(200).json({ connected: false, error: 'Error interno' });
+  } catch {
+    return res.status(200).json({ connected: false });
   }
 }
