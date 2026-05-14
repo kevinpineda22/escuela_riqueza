@@ -287,12 +287,12 @@ const AdminContentManager = () => {
                 placeholder="Descripción (opcional)..."
                 className="bg-black/50 text-white px-3 py-2 rounded-lg outline-none text-sm w-full border border-white/10 focus:border-gold resize-none h-20"
               />
-              <div className="flex gap-2 items-center bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
-                <span className="text-white/60 text-xs mr-1">Planes:</span>
+              <div className="flex flex-wrap gap-2 items-center bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
+                <span className="text-white/60 text-xs mr-1 w-full sm:w-auto">Planes:</span>
                 {["free", "individual", "vip"].map((plan) => (
                   <label key={plan} className="flex items-center gap-1 cursor-pointer">
-                    <input 
-                      type="checkbox" 
+                    <input
+                      type="checkbox"
                       checked={newModuleAllowedPlans.includes(plan as any)}
                       onChange={(e) => {
                         if (e.target.checked) {
@@ -353,7 +353,7 @@ const AdminContentManager = () => {
             >
               {/* Module Header */}
               {editingModule?.id === mod.id ? (
-                <div className="p-4 bg-white/[0.05] border-b border-white/10">
+                <div className="p-3 sm:p-4 bg-white/[0.05] border-b border-white/10">
                   <form onSubmit={handleUpdateModule} className="flex flex-col gap-3">
                     <div className="flex gap-2">
                       <input 
@@ -376,12 +376,12 @@ const AdminContentManager = () => {
                       placeholder="Descripción del módulo"
                       className="w-full bg-black/50 border border-white/20 rounded-md px-3 py-1.5 text-sm text-white outline-none focus:border-gold resize-none h-16"
                     />
-                    <div className="flex gap-2 items-center bg-black/50 border border-white/20 rounded-md px-3 py-1.5 text-sm">
-                      <span className="text-white/60 text-xs">Planes:</span>
+                    <div className="flex flex-wrap gap-2 items-center bg-black/50 border border-white/20 rounded-md px-3 py-1.5 text-sm">
+                      <span className="text-white/60 text-xs w-full sm:w-auto">Planes:</span>
                       {["free", "individual", "vip"].map((plan) => (
                         <label key={plan} className="flex items-center gap-1 text-white/80 cursor-pointer">
-                          <input 
-                            type="checkbox" 
+                          <input
+                            type="checkbox"
                             checked={editingModule?.allowed_plans?.includes(plan as any)}
                             onChange={(e) => {
                               if (editingModule) {
@@ -402,45 +402,56 @@ const AdminContentManager = () => {
                   </form>
                 </div>
               ) : (
-                <div 
-                  className="flex items-center justify-between p-4 cursor-pointer hover:bg-white/[0.02] transition-colors"
+                <div
+                  className="flex items-center justify-between p-3 sm:p-4 gap-2 cursor-pointer hover:bg-white/[0.02] transition-colors"
                   onClick={() => toggleModule(mod.id)}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="cursor-grab text-white/20 hover:text-white/50 p-1">
+                  <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                    <div className="cursor-grab text-white/20 hover:text-white/50 p-1 hidden sm:block shrink-0">
                       <GripVertical size={20} />
                     </div>
-                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                      {mod.title}
-                      {!mod.is_published && <span className="text-[10px] bg-white/10 text-white/60 px-2 py-0.5 rounded-full font-normal">Oculto</span>}
-                    </h3>
-                    <span className="text-xs font-mono text-gold bg-gold/10 px-2 py-1 rounded-md border border-gold/20">
+                    <div className="text-white/50 sm:hidden shrink-0">
+                      {expandedModules[mod.id] ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-sm sm:text-lg font-bold text-white flex items-center gap-2 flex-wrap">
+                        <span className="truncate min-w-0">{mod.title}</span>
+                        {!mod.is_published && <span className="text-[10px] bg-white/10 text-white/60 px-2 py-0.5 rounded-full font-normal shrink-0">Oculto</span>}
+                      </h3>
+                      <span className="text-[10px] sm:text-xs font-mono text-gold bg-gold/10 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-md border border-gold/20 inline-block mt-1 sm:hidden">
+                        {lessonsMap[mod.id]?.length || 0} lecciones
+                      </span>
+                    </div>
+                    <span className="hidden sm:inline-block text-xs font-mono text-gold bg-gold/10 px-2 py-1 rounded-md border border-gold/20 shrink-0">
                       {lessonsMap[mod.id]?.length || 0} lecciones
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex gap-1 mr-2 opacity-0 group-hover:opacity-100 md:opacity-100 transition-opacity">
-                      <button 
+                  <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+                    <div className="flex gap-0.5 sm:gap-1 sm:mr-2 transition-opacity opacity-100 md:opacity-70 md:group-hover:opacity-100">
+                      <button
                         onClick={(e) => { e.stopPropagation(); setEditingModule(mod); }}
-                        className="p-1.5 text-white/40 hover:text-white bg-transparent rounded-md hover:bg-white/10 transition-colors"
+                        aria-label="Editar módulo"
+                        className="p-2 text-white/60 hover:text-white bg-white/[0.04] md:bg-transparent rounded-md hover:bg-white/10 transition-colors"
                       >
                         <Edit2 size={16} />
                       </button>
-                      <button 
+                      <button
                         onClick={(e) => handleToggleModulePublish(mod, e)}
                         title={mod.is_published ? "Ocultar módulo" : "Publicar módulo"}
-                        className={`p-1.5 rounded-md transition-colors ${mod.is_published ? 'text-white/40 hover:text-white hover:bg-white/10' : 'text-yellow-500/70 hover:text-yellow-500 hover:bg-yellow-500/10'}`}
+                        aria-label={mod.is_published ? "Ocultar módulo" : "Publicar módulo"}
+                        className={`p-2 rounded-md transition-colors ${mod.is_published ? 'text-white/60 hover:text-white bg-white/[0.04] md:bg-transparent hover:bg-white/10' : 'text-yellow-500/80 hover:text-yellow-500 bg-yellow-500/[0.06] md:bg-transparent hover:bg-yellow-500/10'}`}
                       >
                         {mod.is_published ? <Eye size={16} /> : <EyeOff size={16} />}
                       </button>
-                      <button 
+                      <button
                         onClick={(e) => handleDeleteModule(mod.id, e)}
-                        className="p-1.5 text-white/40 hover:text-red-400 bg-transparent rounded-md hover:bg-red-500/10 transition-colors"
+                        aria-label="Eliminar módulo"
+                        className="p-2 text-white/60 hover:text-red-400 bg-white/[0.04] md:bg-transparent rounded-md hover:bg-red-500/10 transition-colors"
                       >
                         <Trash2 size={16} />
                       </button>
                     </div>
-                    <div className="text-white/50">
+                    <div className="text-white/50 hidden sm:block">
                       {expandedModules[mod.id] ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
                     </div>
                   </div>
@@ -514,12 +525,12 @@ const AdminContentManager = () => {
                                 </span>
                               </div>
 
-                              <div className="flex gap-2">
-                                <div className="flex-1 flex gap-2 items-center bg-black/50 border border-white/20 rounded-md px-3 py-1.5 text-sm">
+                              <div className="flex flex-col sm:flex-row gap-2">
+                                <div className="flex-1 flex flex-wrap gap-2 items-center bg-black/50 border border-white/20 rounded-md px-3 py-1.5 text-sm">
                                   {["free", "individual", "vip"].map((plan) => (
                                     <label key={plan} className="flex items-center gap-1 text-white/80 cursor-pointer">
-                                      <input 
-                                        type="checkbox" 
+                                      <input
+                                        type="checkbox"
                                         checked={editingLesson.allowed_plans?.includes(plan as any)}
                                         onChange={(e) => {
                                           const plans = editingLesson.allowed_plans || [];
@@ -535,53 +546,58 @@ const AdminContentManager = () => {
                                     </label>
                                   ))}
                                 </div>
-                                <button type="submit" disabled={uploading} className="bg-gold hover:bg-goldHover text-darker px-4 py-1.5 rounded-md text-sm font-bold disabled:opacity-50 flex items-center gap-2">
-                                  {uploading ? "Subiendo..." : "Guardar"}
-                                </button>
-                                <button type="button" onClick={() => setEditingLesson(null)} className="bg-white/10 text-white px-3 py-1.5 rounded-md text-sm"><X size={16}/></button>
+                                <div className="flex gap-2">
+                                  <button type="submit" disabled={uploading} className="flex-1 sm:flex-none bg-gold hover:bg-goldHover text-darker px-4 py-2 rounded-md text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-2">
+                                    {uploading ? "Subiendo..." : "Guardar"}
+                                  </button>
+                                  <button type="button" onClick={() => setEditingLesson(null)} aria-label="Cancelar" className="bg-white/10 text-white px-3 py-2 rounded-md text-sm"><X size={16}/></button>
+                                </div>
                               </div>
                             </form>
                         ) : (
-                          <div key={lesson.id} className={`flex items-center justify-between p-3 rounded-xl hover:bg-white/[0.05] transition-colors group ${!lesson.is_published ? 'bg-transparent border border-dashed border-white/10 opacity-70' : 'bg-white/[0.03] border border-white/5'}`}>
-                            <div className="flex items-center gap-3">
-                              <Video size={16} className={lesson.is_published ? "text-gold/60" : "text-white/30"} />
-                              <div>
-                                <p className="text-sm font-semibold text-white/90 group-hover:text-gold transition-colors flex items-center gap-2">
-                                  {lesson.title}
-                                  {!lesson.is_published && <span className="text-[10px] bg-white/10 text-white/60 px-1.5 py-0.5 rounded font-normal">Oculta</span>}
+                          <div key={lesson.id} className={`flex items-center justify-between gap-2 p-2.5 sm:p-3 rounded-xl hover:bg-white/[0.05] transition-colors group ${!lesson.is_published ? 'bg-transparent border border-dashed border-white/10 opacity-70' : 'bg-white/[0.03] border border-white/5'}`}>
+                            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                              <Video size={16} className={`shrink-0 ${lesson.is_published ? "text-gold/60" : "text-white/30"}`} />
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs sm:text-sm font-semibold text-white/90 group-hover:text-gold transition-colors flex items-center gap-2 flex-wrap">
+                                  <span className="truncate min-w-0">{lesson.title}</span>
+                                  {!lesson.is_published && <span className="text-[10px] bg-white/10 text-white/60 px-1.5 py-0.5 rounded font-normal shrink-0">Oculta</span>}
                                 </p>
-                                <div className="flex gap-1 items-center mt-1">
+                                <div className="flex gap-1 items-center mt-1 flex-wrap">
                                   {lesson.allowed_plans?.map(plan => (
                                     <span key={plan} className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded ${
-                                      plan === 'free' ? 'bg-green-500/10 text-green-400' : 
-                                      plan === 'individual' ? 'bg-blue-500/10 text-blue-400' : 
+                                      plan === 'free' ? 'bg-green-500/10 text-green-400' :
+                                      plan === 'individual' ? 'bg-blue-500/10 text-blue-400' :
                                       'bg-purple-500/10 text-purple-400'
                                     }`}>
                                       {plan}
                                     </span>
                                   ))}
-                                  {lesson.stream_uid && <span className="text-[10px] text-white/30 flex items-center gap-1 ml-1"><CheckCircle2 size={10}/> Video Subido</span>}
+                                  {lesson.stream_uid && <span className="text-[10px] text-white/30 flex items-center gap-1 ml-1"><CheckCircle2 size={10}/> <span className="hidden sm:inline">Video Subido</span></span>}
                                 </div>
                               </div>
                             </div>
-                            
-                            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button 
+
+                            <div className="flex gap-1 sm:gap-2 shrink-0 transition-opacity opacity-100 md:opacity-0 md:group-hover:opacity-100">
+                              <button
                                 onClick={() => handleToggleLessonPublish(lesson)}
                                 title={lesson.is_published ? "Ocultar lección" : "Publicar lección"}
-                                className={`p-1.5 rounded-md transition-colors ${lesson.is_published ? 'text-white/40 hover:text-white bg-white/5 hover:bg-white/10' : 'text-yellow-500/70 hover:text-yellow-500 bg-yellow-500/5 hover:bg-yellow-500/10'}`}
+                                aria-label={lesson.is_published ? "Ocultar lección" : "Publicar lección"}
+                                className={`p-2 rounded-md transition-colors ${lesson.is_published ? 'text-white/60 hover:text-white bg-white/5 hover:bg-white/10' : 'text-yellow-500/80 hover:text-yellow-500 bg-yellow-500/5 hover:bg-yellow-500/10'}`}
                               >
                                 {lesson.is_published ? <Eye size={14} /> : <EyeOff size={14} />}
                               </button>
-                              <button 
+                              <button
                                 onClick={() => setEditingLesson(lesson)}
-                                className="p-1.5 text-white/40 hover:text-white bg-white/5 rounded-md hover:bg-white/10"
+                                aria-label="Editar lección"
+                                className="p-2 text-white/60 hover:text-white bg-white/5 rounded-md hover:bg-white/10 transition-colors"
                               >
                                 <Edit2 size={14} />
                               </button>
-                              <button 
+                              <button
                                 onClick={() => handleDeleteLesson(lesson)}
-                                className="p-1.5 text-white/40 hover:text-red-400 bg-white/5 rounded-md hover:bg-red-500/10"
+                                aria-label="Eliminar lección"
+                                className="p-2 text-white/60 hover:text-red-400 bg-white/5 rounded-md hover:bg-red-500/10 transition-colors"
                               >
                                 <Trash2 size={14} />
                               </button>
@@ -610,12 +626,12 @@ const AdminContentManager = () => {
                                   className="w-full bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-gold outline-none resize-none h-20"
                                 />
                               </div>
-                              <div className="md:col-span-2 flex items-center gap-4 bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
-                                <span className="text-white/60">Planes permitidos:</span>
+                              <div className="md:col-span-2 flex flex-wrap items-center gap-3 sm:gap-4 bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
+                                <span className="text-white/60 w-full sm:w-auto">Planes permitidos:</span>
                                 {["free", "individual", "vip"].map((plan) => (
                                   <label key={plan} className="flex items-center gap-1.5 cursor-pointer">
-                                    <input 
-                                      type="checkbox" 
+                                    <input
+                                      type="checkbox"
                                       checked={lessonForm.allowed_plans.includes(plan as any)}
                                       onChange={(e) => {
                                         const plans = lessonForm.allowed_plans;
@@ -633,8 +649,8 @@ const AdminContentManager = () => {
                               </div>
                               
                               <div className="md:col-span-2">
-                                <div 
-                                  className={`w-full border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center transition-colors cursor-pointer ${
+                                <div
+                                  className={`w-full border-2 border-dashed rounded-xl p-5 sm:p-8 flex flex-col items-center justify-center transition-colors cursor-pointer ${
                                     dragActive ? 'border-gold bg-gold/5' : 'border-white/10 hover:border-white/30 bg-black/30'
                                   }`}
                                   onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}

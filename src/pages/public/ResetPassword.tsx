@@ -91,7 +91,7 @@ const ResetPassword = () => {
       />
       <div
         aria-hidden
-        className="absolute -bottom-[10%] -right-[5%] w-[500px] h-[500px] bg-amber-500 rounded-full blur-[120px] opacity-15 pointer-events-none"
+        className="hidden md:block absolute -bottom-[10%] -right-[5%] w-[500px] h-[500px] bg-amber-500 rounded-full blur-[120px] opacity-15 pointer-events-none"
       />
 
       <div className="w-full max-w-[440px] relative z-10 flex flex-col items-center">

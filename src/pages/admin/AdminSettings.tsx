@@ -93,41 +93,41 @@ const AdminSettings = () => {
     <motion.div
       initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
-      className="max-w-7xl mx-auto flex flex-col h-[calc(100vh-140px)]" // Adjusted to fit screen height nicely
+      className="max-w-7xl mx-auto flex flex-col flex-1 min-h-0"
     >
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-8 shrink-0">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-6 sm:mb-8 shrink-0">
         <div>
-          <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-3">
-            <Settings className="text-gold" /> Ajustes del Sistema
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2 sm:gap-3">
+            <Settings className="text-gold" size={28} /> Ajustes del Sistema
           </h1>
-          <p className="text-textMuted mt-1">
+          <p className="text-textMuted mt-1 text-sm sm:text-base">
             Configuración global de la plataforma, integraciones y reglas de negocio.
           </p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 sm:gap-4 w-full sm:w-auto">
           {saveMessage && (
-            <motion.span 
+            <motion.span
               initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}
-              className={cn("text-sm font-semibold px-3 py-1.5 rounded-lg", saveMessage.type === "success" ? "bg-green-500/10 text-green-400 border border-green-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20")}
+              className={cn("text-xs sm:text-sm font-semibold px-3 py-1.5 rounded-lg flex-1 sm:flex-none text-center", saveMessage.type === "success" ? "bg-green-500/10 text-green-400 border border-green-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20")}
             >
               {saveMessage.text}
             </motion.span>
           )}
-          <button 
+          <button
             onClick={handleSave}
             disabled={isSaving}
-            className="px-6 py-2.5 bg-gold hover:bg-goldHover text-darker font-bold rounded-xl transition-all shadow-[0_4px_14px_rgba(204,164,59,0.4)] flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+            className="flex-1 sm:flex-none px-4 sm:px-6 py-2.5 bg-gold hover:bg-goldHover text-darker font-bold rounded-xl transition-all shadow-[0_4px_14px_rgba(204,164,59,0.4)] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed text-sm sm:text-base"
           >
             {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-            Guardar Cambios
+            <span className="whitespace-nowrap">Guardar Cambios</span>
           </button>
         </div>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-8 flex-1 min-h-0">
-        {/* Sidebar Nav */}
-        <aside className="w-full md:w-64 shrink-0 space-y-2">
+      <div className="flex flex-col md:flex-row gap-4 md:gap-8 flex-1 min-h-0">
+        {/* Sidebar Nav — vertical en desktop, scroll horizontal en mobile */}
+        <aside className="w-full md:w-64 shrink-0 flex md:flex-col gap-2 overflow-x-auto md:overflow-visible custom-scrollbar -mx-1 px-1 md:mx-0 md:px-0 pb-1 md:pb-0">
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
             return (
@@ -135,13 +135,13 @@ const AdminSettings = () => {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm font-medium",
-                  isActive 
-                    ? "bg-white/10 text-white border border-white/10 shadow-sm" 
+                  "shrink-0 md:w-full flex items-center gap-2 md:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl transition-all text-xs sm:text-sm font-medium whitespace-nowrap",
+                  isActive
+                    ? "bg-white/10 text-white border border-white/10 shadow-sm"
                     : "text-textMuted hover:text-white hover:bg-white/5 border border-transparent"
                 )}
               >
-                <tab.icon size={18} className={isActive ? "text-gold" : "opacity-70"} />
+                <tab.icon size={16} className={isActive ? "text-gold" : "opacity-70"} />
                 {tab.label}
               </button>
             );
@@ -207,13 +207,13 @@ const AdminSettings = () => {
                   <p className="text-sm text-textMuted mb-6">Asocia los IDs de los productos de Stripe con los roles de la plataforma.</p>
                   
                   <div className="space-y-4">
-                    <div className="grid grid-cols-12 gap-4 items-center bg-white/5 p-4 rounded-xl border border-white/10">
-                      <div className="col-span-3 font-bold text-white">Plan INDIVIDUAL</div>
-                      <div className="col-span-9"><InputField label="" placeholder="price_1Nxxxxxxxxxxx" defaultValue="price_1Pindividualmock123" /></div>
+                    <div className="flex flex-col sm:grid sm:grid-cols-12 gap-3 sm:gap-4 sm:items-center bg-white/5 p-4 rounded-xl border border-white/10">
+                      <div className="sm:col-span-3 font-bold text-white text-sm sm:text-base">Plan INDIVIDUAL</div>
+                      <div className="sm:col-span-9"><InputField label="" placeholder="price_1Nxxxxxxxxxxx" defaultValue="price_1Pindividualmock123" /></div>
                     </div>
-                    <div className="grid grid-cols-12 gap-4 items-center bg-gold/5 p-4 rounded-xl border border-gold/20">
-                      <div className="col-span-3 font-bold text-gold">Plan VIP</div>
-                      <div className="col-span-9"><InputField label="" placeholder="price_1Nxxxxxxxxxxx" defaultValue="price_1Pvipmock456" /></div>
+                    <div className="flex flex-col sm:grid sm:grid-cols-12 gap-3 sm:gap-4 sm:items-center bg-gold/5 p-4 rounded-xl border border-gold/20">
+                      <div className="sm:col-span-3 font-bold text-gold text-sm sm:text-base">Plan VIP</div>
+                      <div className="sm:col-span-9"><InputField label="" placeholder="price_1Nxxxxxxxxxxx" defaultValue="price_1Pvipmock456" /></div>
                     </div>
                   </div>
                 </div>

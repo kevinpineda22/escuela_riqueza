@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
+import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
-import { 
+import {
   Users, Search, Filter, MoreVertical, Shield, Crown, Mail,
   ShieldAlert, Trash2, Edit, X, Loader2
 } from "lucide-react";
@@ -143,18 +144,18 @@ const AdminUsers = () => {
       </div>
 
       {/* Toolbar */}
-      <div className="flex flex-col md:flex-row gap-4">
+      <div className="flex flex-col md:flex-row gap-3 md:gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" size={18} />
           <input type="text" placeholder="Buscar por nombre o correo..." value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full bg-black/40 border border-white/10 rounded-xl pl-11 pr-4 py-3 text-white focus:outline-none focus:border-gold/50 transition-colors" />
         </div>
-        <div className="flex items-center gap-3">
+        <div className="grid grid-cols-2 md:flex md:items-center gap-2 md:gap-3">
           <DropdownMenu>
-            <DropdownMenuTrigger className="flex items-center gap-2 px-4 py-3 bg-black/40 border border-white/10 rounded-xl text-white/80 hover:text-white transition-colors focus:outline-none">
-              <Crown size={16} />
-              <span className="text-sm font-medium capitalize">Plan: {planFilter === "all" ? "Todos" : planFilter}</span>
+            <DropdownMenuTrigger className="flex items-center justify-center md:justify-start gap-2 px-3 sm:px-4 py-3 bg-black/40 border border-white/10 rounded-xl text-white/80 hover:text-white transition-colors focus:outline-none">
+              <Crown size={16} className="shrink-0" />
+              <span className="text-xs sm:text-sm font-medium capitalize truncate">Plan: {planFilter === "all" ? "Todos" : planFilter}</span>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuLabel>Filtrar por Plan</DropdownMenuLabel>
@@ -166,9 +167,9 @@ const AdminUsers = () => {
             </DropdownMenuContent>
           </DropdownMenu>
           <DropdownMenu>
-            <DropdownMenuTrigger className="flex items-center gap-2 px-4 py-3 bg-black/40 border border-white/10 rounded-xl text-white/80 hover:text-white transition-colors focus:outline-none">
-              <Shield size={16} />
-              <span className="text-sm font-medium capitalize">Rol: {roleFilter === "all" ? "Todos" : roleFilter}</span>
+            <DropdownMenuTrigger className="flex items-center justify-center md:justify-start gap-2 px-3 sm:px-4 py-3 bg-black/40 border border-white/10 rounded-xl text-white/80 hover:text-white transition-colors focus:outline-none">
+              <Shield size={16} className="shrink-0" />
+              <span className="text-xs sm:text-sm font-medium capitalize truncate">Rol: {roleFilter === "all" ? "Todos" : roleFilter}</span>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuLabel>Filtrar por Rol</DropdownMenuLabel>
@@ -189,7 +190,84 @@ const AdminUsers = () => {
           </div>
         ) : (
         <>
-        <div className="overflow-x-auto">
+        {/* Cards (mobile) */}
+        <div className="md:hidden divide-y divide-white/5">
+          {filteredUsers.length > 0 ? (
+            filteredUsers.map((u) => {
+              const plan = getPlan(u);
+              const subInfo = userSubscriptions[u.id];
+              return (
+                <div key={u.id} className="p-4 space-y-3 hover:bg-white/[0.02] transition-colors">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="w-11 h-11 rounded-full bg-gold/10 border border-gold/30 flex items-center justify-center text-gold font-bold text-sm shrink-0">
+                        {getInitials(u.full_name)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-white font-semibold text-sm truncate">{u.full_name}</div>
+                        <div className="text-textMuted text-xs flex items-center gap-1 mt-0.5 truncate"><Mail size={10} className="shrink-0" /> <span className="truncate">{u.email || "Sin email"}</span></div>
+                      </div>
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger className="p-2 rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors focus:outline-none shrink-0">
+                        <MoreVertical size={18} />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-52">
+                        <DropdownMenuItem asChild className="flex items-center gap-2 cursor-pointer">
+                          <Link to={`/admin/users/${u.id}`}>
+                            <Edit size={16} /> Ver Detalles
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => { setSelectedUser(u); setNewPlan(plan); setShowPlanModal(true); }}
+                          className="flex items-center gap-2 cursor-pointer"
+                        >
+                          <Crown size={16} /> Modificar Plan
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        {u.status === "active" ? (
+                          <DropdownMenuItem onClick={() => handleToggleSuspend(u)} className="flex items-center gap-2 cursor-pointer text-red-400 focus:text-red-300 focus:bg-red-500/10">
+                            <ShieldAlert size={16} /> Suspender Usuario
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem onClick={() => handleToggleSuspend(u)} className="flex items-center gap-2 cursor-pointer text-green-400 focus:text-green-300 focus:bg-green-500/10">
+                            <Shield size={16} /> Reactivar Usuario
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem onClick={() => handleDelete(u)} className="flex items-center gap-2 cursor-pointer text-red-400 focus:text-red-300 focus:bg-red-500/10">
+                          <Trash2 size={16} /> Eliminar
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+                    <span className={cn("px-2 py-0.5 rounded-md font-bold uppercase tracking-wider", planColors[plan])}>{plan}</span>
+                    <span className={cn("px-2 py-0.5 rounded-md font-bold uppercase tracking-wider", roleColors[u.role as Role])}>{u.role}</span>
+                    <span className={cn("px-2 py-0.5 rounded-md font-bold uppercase tracking-wider flex items-center gap-1.5",
+                      u.status === "active" ? "bg-green-500/10 text-green-400 border border-green-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"
+                    )}>
+                      <span className={cn("w-1.5 h-1.5 rounded-full", u.status === "active" ? "bg-green-500" : "bg-red-500")} />
+                      {u.status === "active" ? "Activo" : "Suspendido"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-textMuted pt-1 border-t border-white/5">
+                    <span>Registrado: <span className="text-white/70 font-medium">{formatDate(u.created_at)}</span></span>
+                    {subInfo && <span>Hasta: <span className="text-white/70 font-medium">{formatDate(subInfo.endDate)}</span></span>}
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="px-6 py-12 text-center text-textMuted">
+              <Filter className="mx-auto mb-3 opacity-20" size={32} />
+              <p className="text-lg font-medium text-white/70">No se encontraron usuarios</p>
+              <p className="text-sm mt-1">Prueba con otros términos de búsqueda o cambia los filtros.</p>
+            </div>
+          )}
+        </div>
+
+        {/* Tabla (desktop md+) */}
+        <div className="overflow-x-auto hidden md:block">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-white/5 border-b border-white/10 text-xs uppercase tracking-wider text-textMuted font-bold">
@@ -242,10 +320,12 @@ const AdminUsers = () => {
                             <MoreVertical size={18} />
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-52">
-                            <DropdownMenuItem className="flex items-center gap-2 cursor-pointer">
-                              <Edit size={16} /> Ver Detalles
+                            <DropdownMenuItem asChild className="flex items-center gap-2 cursor-pointer">
+                              <Link to={`/admin/users/${u.id}`}>
+                                <Edit size={16} /> Ver Detalles
+                              </Link>
                             </DropdownMenuItem>
-                            <DropdownMenuItem 
+                            <DropdownMenuItem
                               onClick={() => { setSelectedUser(u); setNewPlan(plan); setShowPlanModal(true); }}
                               className="flex items-center gap-2 cursor-pointer"
                             >

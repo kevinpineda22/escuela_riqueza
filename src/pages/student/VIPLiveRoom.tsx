@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import LiveChat from "@/components/feature/LiveChat";
-import { Sparkles, Calendar, Clock, Tv, Radio, Loader2, VideoOff } from "lucide-react";
+import { Sparkles, Calendar, Clock, Tv, Radio, Loader2, VideoOff, ArrowLeft, MessageSquare, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player.store";
 import { useAuthStore } from "@/stores/auth.store";
@@ -19,6 +19,7 @@ const VIPLiveRoom = () => {
   const [showIntro, setShowIntro] = useState(false);
   const [timeLeft, setTimeLeft] = useState({ hours: 0, minutes: 0, seconds: 0 });
   const [liveInputConnected, setLiveInputConnected] = useState(false);
+  const [isChatOpenMobile, setIsChatOpenMobile] = useState(false);
   const { clearPlayer } = usePlayerStore();
 
   useEffect(() => { clearPlayer(); }, [clearPlayer]);
@@ -80,12 +81,28 @@ const VIPLiveRoom = () => {
   // Poll Cloudflare Live Input status: si OBS está transmitiendo, mostrar iframe aunque falte starts_at
   useEffect(() => {
     if (!live?.stream_live_input_id || isEnded) return;
+    
+    let failCount = 0;
+    let poll: ReturnType<typeof setInterval>;
+    
     const check = async () => {
-      const { connected } = await checkLiveInputStatus(live.stream_live_input_id!);
+      const { connected, isError } = await checkLiveInputStatus(live.stream_live_input_id!);
+      
+      if (isError) {
+        failCount++;
+        if (failCount >= 3) {
+          // Si el endpoint proxy no funciona (ej. HTTP 502 localmente), abortar el polling
+          clearInterval(poll);
+        }
+      } else {
+        failCount = 0;
+      }
+      
       setLiveInputConnected(prev => connected !== prev ? connected : prev);
     };
+    
     check();
-    const poll = setInterval(check, 10000);
+    poll = setInterval(check, 10000);
     return () => clearInterval(poll);
   }, [live?.id, live?.stream_live_input_id, isEnded]);
 
@@ -105,7 +122,7 @@ const VIPLiveRoom = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
+      <div className="min-h-[100dvh] bg-black flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-gold" />
       </div>
     );
@@ -124,8 +141,8 @@ const VIPLiveRoom = () => {
   }
 
   return (
-    <div className="min-h-screen bg-black text-textMain flex flex-col md:flex-row overflow-hidden font-sans">
-      <div className="flex-1 flex flex-col relative h-[60vh] md:h-screen">
+    <div className="min-h-[100dvh] bg-black text-textMain flex flex-col md:flex-row overflow-hidden font-sans">
+      <div className="flex-1 flex flex-col relative h-[100dvh] md:h-screen">
         {/* Cinematic Intro Overlay */}
         <AnimatePresence>
           {showIntro && (
@@ -175,18 +192,25 @@ const VIPLiveRoom = () => {
         <motion.div
           initial={{ y: -100 }}
           animate={{ y: 0 }}
-          className="absolute top-0 left-0 w-full p-6 md:p-8 z-40 flex justify-between items-start pointer-events-none"
+          className="absolute top-0 left-0 w-full p-3 sm:p-5 md:p-8 z-40 flex justify-between items-start gap-3 pointer-events-none"
         >
-          <div className="flex items-center gap-4 pointer-events-auto">
-            <div className="p-2.5 bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl">
+          <div className="flex items-center gap-2 sm:gap-4 pointer-events-auto min-w-0 flex-1">
+            <button
+              onClick={() => navigate("/dashboard")}
+              aria-label="Volver al dashboard"
+              className="p-2 sm:p-2.5 bg-black/50 backdrop-blur-md border border-white/10 rounded-xl sm:rounded-2xl text-white/80 hover:text-white hover:bg-black/70 transition-colors shrink-0"
+            >
+              <ArrowLeft size={18} />
+            </button>
+            <div className="p-2 sm:p-2.5 bg-black/40 backdrop-blur-md border border-white/10 rounded-xl sm:rounded-2xl shrink-0">
               <img
                 src="https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/18dc9190-6625-4b89-8f1e-3f221e96b500/public"
                 alt="Logo"
-                className="h-10 object-contain"
+                className="h-7 sm:h-10 object-contain"
               />
             </div>
-            <div className="hidden sm:block">
-              <h1 className="font-extrabold text-xl leading-tight text-white tracking-tight drop-shadow-2xl">
+            <div className="hidden md:block min-w-0">
+              <h1 className="font-extrabold text-base lg:text-xl leading-tight text-white tracking-tight drop-shadow-2xl truncate">
                 {live.title || "Sesión de Riqueza"} <span className="text-gold">VIP</span>
               </h1>
               <div className="flex items-center gap-2 mt-1">
@@ -196,31 +220,31 @@ const VIPLiveRoom = () => {
             </div>
           </div>
 
-          <div className="flex flex-col items-end gap-3 pointer-events-auto">
+          <div className="flex flex-col items-end gap-2 sm:gap-3 pointer-events-auto shrink-0">
             {isEnded ? (
-              <div className="flex items-center gap-2.5 bg-gray-600/20 backdrop-blur-md border border-gray-600/50 text-textMuted px-4 py-2 rounded-2xl text-[10px] font-black tracking-widest">
-                <VideoOff size={14} /> FINALIZADO
+              <div className="flex items-center gap-1.5 sm:gap-2.5 bg-gray-600/20 backdrop-blur-md border border-gray-600/50 text-textMuted px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl text-[9px] sm:text-[10px] font-black tracking-widest">
+                <VideoOff size={12} /> FINALIZADO
               </div>
             ) : isPaused ? (
-              <div className="flex items-center gap-2.5 bg-yellow-600/20 backdrop-blur-md border border-yellow-600/50 text-yellow-500 px-4 py-2 rounded-2xl text-[10px] font-black tracking-widest">
-                <VideoOff size={14} /> EN PAUSA
+              <div className="flex items-center gap-1.5 sm:gap-2.5 bg-yellow-600/20 backdrop-blur-md border border-yellow-600/50 text-yellow-500 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl text-[9px] sm:text-[10px] font-black tracking-widest">
+                <VideoOff size={12} /> EN PAUSA
               </div>
             ) : isLive ? (
               <motion.div
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                className="flex items-center gap-2.5 bg-red-600/20 backdrop-blur-md border border-red-600/50 text-red-500 px-4 py-2 rounded-2xl text-xs font-black tracking-widest shadow-[0_0_30px_rgba(220,38,38,0.2)]"
+                className="flex items-center gap-1.5 sm:gap-2.5 bg-red-600/20 backdrop-blur-md border border-red-600/50 text-red-500 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl text-[10px] sm:text-xs font-black tracking-widest shadow-[0_0_30px_rgba(220,38,38,0.2)]"
               >
                 <motion.span
                   animate={{ scale: [1, 1.4, 1], opacity: [1, 0.5, 1] }}
                   transition={{ repeat: Infinity, duration: 2 }}
-                  className="w-2.5 h-2.5 bg-red-500 rounded-full shadow-[0_0_10px_rgba(220,38,38,1)]"
+                  className="w-2 h-2 sm:w-2.5 sm:h-2.5 bg-red-500 rounded-full shadow-[0_0_10px_rgba(220,38,38,1)]"
                 />
                 EN VIVO
               </motion.div>
             ) : (
-              <div className="flex items-center gap-2.5 bg-black/40 backdrop-blur-md border border-white/10 text-white/70 px-4 py-2 rounded-2xl text-[10px] font-bold tracking-wider">
-                <Clock size={14} className="text-gold" />
+              <div className="flex items-center gap-1.5 sm:gap-2.5 bg-black/40 backdrop-blur-md border border-white/10 text-white/70 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl text-[9px] sm:text-[10px] font-bold tracking-wider">
+                <Clock size={12} className="text-gold" />
                 {showIframe ? "EN ESPERA" : "PRÓXIMAMENTE"}
               </div>
             )}
@@ -228,7 +252,7 @@ const VIPLiveRoom = () => {
         </motion.div>
 
         {/* Content Area */}
-        <div className="flex-1 flex items-center justify-center bg-[#050505] relative overflow-hidden">
+        <div className="flex-1 flex items-center justify-center bg-[#050505] relative overflow-y-auto overflow-x-hidden">
           <div className="absolute inset-0 z-0">
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[radial-gradient(circle_at_center,rgba(204,164,59,0.05)_0%,transparent_70%)]" />
             <div className="absolute inset-0 opacity-[0.03] bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]" />
@@ -308,18 +332,18 @@ const VIPLiveRoom = () => {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 1.1 }}
                 transition={{ duration: 0.8 }}
-                className="text-center z-10 px-6 max-w-4xl mx-auto"
+                className="text-center z-10 px-4 sm:px-6 pt-20 sm:pt-24 md:pt-0 pb-24 md:pb-0 max-w-4xl mx-auto"
               >
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="mb-12 inline-flex items-center gap-3 px-6 py-2.5 bg-gold/5 border border-gold/20 rounded-full"
+                  className="mb-6 sm:mb-12 inline-flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-2 sm:py-2.5 bg-gold/5 border border-gold/20 rounded-full"
                 >
-                  <Calendar size={16} className="text-gold" />
-                  <span className="text-sm font-bold text-gold/80 tracking-widest uppercase">Próximo Encuentro VIP</span>
+                  <Calendar size={14} className="text-gold" />
+                  <span className="text-[11px] sm:text-sm font-bold text-gold/80 tracking-widest uppercase">Próximo Encuentro VIP</span>
                 </motion.div>
 
-                <h2 className="text-4xl md:text-7xl font-black mb-8 text-white tracking-tighter leading-[1.1]">
+                <h2 className="text-3xl sm:text-5xl md:text-7xl font-black mb-6 sm:mb-8 text-white tracking-tight md:tracking-tighter leading-[1.1] text-balance">
                   {live.title ? (
                     live.title
                   ) : (
@@ -331,13 +355,13 @@ const VIPLiveRoom = () => {
                 </h2>
 
                 {live.description && (
-                  <p className="text-textMuted mb-16 text-lg md:text-xl max-w-2xl mx-auto font-medium leading-relaxed">
+                  <p className="text-textMuted mb-10 sm:mb-16 text-sm sm:text-lg md:text-xl max-w-2xl mx-auto font-medium leading-relaxed text-balance">
                     {live.description}
                   </p>
                 )}
 
                 {live.starts_at && (
-                  <div className="flex justify-center gap-4 md:gap-10">
+                  <div className="flex justify-center gap-2 sm:gap-4 md:gap-10">
                     {[
                       { val: timeLeft.hours, label: "Horas" },
                       { val: timeLeft.minutes, label: "Minutos" },
@@ -346,28 +370,28 @@ const VIPLiveRoom = () => {
                       <div key={idx} className="flex flex-col items-center">
                         <div
                           className={cn(
-                            "relative w-20 h-28 md:w-36 md:h-44 flex items-center justify-center rounded-3xl border border-white/10 overflow-hidden shadow-2xl transition-all duration-500",
+                            "relative w-16 h-20 sm:w-24 sm:h-32 md:w-36 md:h-44 flex items-center justify-center rounded-2xl sm:rounded-3xl border border-white/10 overflow-hidden shadow-2xl transition-all duration-500",
                             unit.highlight ? "bg-gold/10 border-gold/30" : "bg-white/5"
                           )}
                         >
                           <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent" />
                           <span
                             className={cn(
-                              "text-4xl md:text-8xl font-black font-mono tracking-tighter",
+                              "text-3xl sm:text-5xl md:text-8xl font-black font-mono tracking-tighter",
                               unit.highlight ? "text-gold" : "text-white"
                             )}
                           >
                             {unit.val.toString().padStart(2, "0")}
                           </span>
                         </div>
-                        <span className="text-[10px] text-textMuted uppercase tracking-[0.3em] mt-5 font-black">{unit.label}</span>
+                        <span className="text-[9px] sm:text-[10px] text-textMuted uppercase tracking-[0.25em] sm:tracking-[0.3em] mt-3 sm:mt-5 font-black">{unit.label}</span>
                       </div>
                     ))}
                   </div>
                 )}
 
                 {!live.starts_at && (
-                  <p className="text-2xl text-white/60 font-bold">Próximamente</p>
+                  <p className="text-xl sm:text-2xl text-white/60 font-bold">Próximamente</p>
                 )}
               </motion.div>
             ) : (
@@ -387,10 +411,59 @@ const VIPLiveRoom = () => {
         </div>
       </div>
 
-      {/* Chat Sidebar — siempre visible si hay sala activa */}
-      <div className="w-full md:w-80 lg:w-[400px] h-[45vh] md:h-screen bg-darker shrink-0 z-50 overflow-hidden">
+      {/* Chat — sidebar fijo en desktop, drawer overlay en mobile */}
+      <div className="hidden md:flex md:w-80 lg:w-[400px] md:h-screen bg-darker shrink-0 z-50 overflow-hidden">
         <LiveChat liveId={live.id} />
       </div>
+
+      {/* FAB del chat (solo mobile) — z-40 para no competir con sheets z-50 */}
+      <button
+        onClick={() => setIsChatOpenMobile(true)}
+        aria-label="Abrir chat"
+        className="md:hidden fixed bottom-5 right-5 z-40 w-14 h-14 rounded-full bg-gold hover:bg-goldHover text-darker flex items-center justify-center shadow-[0_10px_30px_-5px_rgba(204,164,59,0.6)] active:scale-95 transition-transform"
+      >
+        <MessageSquare size={22} />
+        <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse border-2 border-darker" />
+      </button>
+
+      {/* Chat drawer (mobile) */}
+      <AnimatePresence>
+        {isChatOpenMobile && (
+          <>
+            <motion.button
+              type="button"
+              aria-label="Cerrar chat"
+              onClick={() => setIsChatOpenMobile(false)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="md:hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-[60]"
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 30, stiffness: 280 }}
+              className="md:hidden fixed bottom-0 left-0 right-0 h-[85dvh] z-[70] bg-darker rounded-t-3xl overflow-hidden shadow-[0_-20px_40px_-10px_rgba(0,0,0,0.8)] flex flex-col"
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-black/40 shrink-0">
+                <div className="w-10 h-1 bg-white/20 rounded-full absolute left-1/2 -translate-x-1/2 top-2" />
+                <h3 className="text-sm font-bold text-white pt-2">Comunidad VIP</h3>
+                <button
+                  onClick={() => setIsChatOpenMobile(false)}
+                  aria-label="Cerrar chat"
+                  className="p-2.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="flex-1 min-h-0">
+                <LiveChat liveId={live.id} />
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

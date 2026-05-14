@@ -120,7 +120,7 @@ const AdminVideoUpload = () => {
                 Módulo Perteneciente
               </label>
               <Select value={formData.module} onValueChange={handleSelectChange} required>
-                <SelectTrigger className="w-full bg-black/40 border border-white/10 rounded-2xl px-4 py-6 text-white focus:ring-1 focus:ring-gold/50 focus:bg-black/60 transition-all shadow-inner text-base data-[state=open]:border-gold/50">
+                <SelectTrigger className="w-full bg-black/40 border border-white/10 rounded-2xl px-4 py-4 sm:py-6 text-white focus:ring-1 focus:ring-gold/50 focus:bg-black/60 transition-all shadow-inner text-sm sm:text-base data-[state=open]:border-gold/50">
                   <SelectValue placeholder="Selecciona el módulo oficial" />
                 </SelectTrigger>
                 <SelectContent className="bg-darker border border-white/10 rounded-xl shadow-2xl">
@@ -164,7 +164,7 @@ const AdminVideoUpload = () => {
               onDrop={handleDrop}
               onClick={() => !videoFile && fileInputRef.current?.click()}
               className={cn(
-                "relative w-full flex-1 min-h-[260px] border-2 border-dashed rounded-[1.5rem] flex flex-col items-center justify-center transition-all duration-300 overflow-hidden",
+                "relative w-full flex-1 min-h-[200px] sm:min-h-[260px] border-2 border-dashed rounded-[1.5rem] flex flex-col items-center justify-center transition-all duration-300 overflow-hidden",
                 isDragging ? "border-gold bg-gold/10 scale-[1.02]" : "border-white/15 bg-black/30 hover:bg-black/50 hover:border-white/30",
                 !videoFile && "cursor-pointer group"
               )}

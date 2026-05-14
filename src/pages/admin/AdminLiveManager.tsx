@@ -297,33 +297,33 @@ const AdminLiveManager = () => {
           </h1>
           <p className="text-textMuted mt-1">Crea, programa y controla tus transmisiones en vivo para usuarios VIP.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 w-full md:w-auto">
           <button onClick={handleCreateNew} disabled={isSaving}
-            className="bg-white/10 hover:bg-white/20 text-white px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold transition-colors">
-            <Plus size={18} /> Nueva Sala
+            className="flex-1 md:flex-none bg-white/10 hover:bg-white/20 text-white px-3 sm:px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-bold transition-colors">
+            <Plus size={18} /> <span className="whitespace-nowrap">Nueva Sala</span>
           </button>
           {activeLive && (
             <button onClick={handleSave} disabled={isSaving}
-              className="bg-gold hover:bg-goldHover text-darker font-bold px-5 py-2.5 rounded-xl flex items-center gap-2 transition-all disabled:opacity-50">
-              <Save size={18} /> {isSaving ? "Guardando..." : "Guardar"}
+              className="flex-1 md:flex-none bg-gold hover:bg-goldHover text-darker font-bold px-3 sm:px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50">
+              <Save size={18} /> <span className="whitespace-nowrap">{isSaving ? "Guardando..." : "Guardar"}</span>
             </button>
           )}
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6 border-b border-white/10 pb-4">
+      <div className="flex gap-2 mb-6 border-b border-white/10 pb-4 overflow-x-auto custom-scrollbar -mx-1 px-1">
         <button onClick={() => setActiveTab("editor")}
-          className={cn("px-4 py-2 rounded-lg font-semibold text-sm transition-all", activeTab === "editor" ? "bg-white/10 text-white" : "text-textMuted hover:text-white")}>
-          <Settings2 size={16} className="inline mr-2" />Editor
+          className={cn("px-3 sm:px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all whitespace-nowrap shrink-0 flex items-center gap-2", activeTab === "editor" ? "bg-white/10 text-white" : "text-textMuted hover:text-white")}>
+          <Settings2 size={16} />Editor
         </button>
         <button onClick={() => setActiveTab("rooms")}
-          className={cn("px-4 py-2 rounded-lg font-semibold text-sm transition-all", activeTab === "rooms" ? "bg-white/10 text-white" : "text-textMuted hover:text-white")}>
-          <Radio size={16} className="inline mr-2" />Salas ({lives.length})
+          className={cn("px-3 sm:px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all whitespace-nowrap shrink-0 flex items-center gap-2", activeTab === "rooms" ? "bg-white/10 text-white" : "text-textMuted hover:text-white")}>
+          <Radio size={16} />Salas ({lives.length})
         </button>
         <button onClick={() => setActiveTab("ended")}
-          className={cn("px-4 py-2 rounded-lg font-semibold text-sm transition-all", activeTab === "ended" ? "bg-white/10 text-white" : "text-textMuted hover:text-white")}>
-          <Video size={16} className="inline mr-2" />Finalizados ({endedLives.length})
+          className={cn("px-3 sm:px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all whitespace-nowrap shrink-0 flex items-center gap-2", activeTab === "ended" ? "bg-white/10 text-white" : "text-textMuted hover:text-white")}>
+          <Video size={16} />Finalizados ({endedLives.length})
         </button>
       </div>
 
@@ -593,9 +593,9 @@ const AdminLiveManager = () => {
               )}
             </div>
             {isLive ? (
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                 <button onClick={() => handlePauseResume(true)}
-                  className="bg-yellow-600 hover:bg-yellow-700 text-white font-bold px-6 py-3 rounded-xl flex items-center gap-2 whitespace-nowrap transition-colors">
+                  className="flex-1 sm:flex-none bg-yellow-600 hover:bg-yellow-700 text-white font-bold px-4 sm:px-6 py-3 rounded-xl flex items-center justify-center gap-2 whitespace-nowrap transition-colors">
                   <StopCircle size={20} /> Detener
                 </button>
                 <button onClick={async () => {
@@ -618,18 +618,18 @@ const AdminLiveManager = () => {
                     }
                   } catch (err) { console.error(err); toast.error("Error"); }
                 }}
-                  className="bg-red-800/50 hover:bg-red-800 text-red-400 font-bold px-6 py-3 rounded-xl flex items-center gap-2 whitespace-nowrap transition-colors border border-red-800/30">
+                  className="flex-1 sm:flex-none bg-red-800/50 hover:bg-red-800 text-red-400 font-bold px-4 sm:px-6 py-3 rounded-xl flex items-center justify-center gap-2 whitespace-nowrap transition-colors border border-red-800/30">
                   <StopCircle size={20} /> Finalizar
                 </button>
               </div>
             ) : formData.is_paused ? (
               <button onClick={() => handlePauseResume(false)}
-                className="bg-yellow-600 hover:bg-yellow-700 text-white font-bold px-6 py-3 rounded-xl flex items-center gap-2 whitespace-nowrap shadow-lg shadow-yellow-900/50 transition-colors">
+                className="w-full sm:w-auto bg-yellow-600 hover:bg-yellow-700 text-white font-bold px-6 py-3 rounded-xl flex items-center justify-center gap-2 whitespace-nowrap shadow-lg shadow-yellow-900/50 transition-colors">
                 <PlayCircle size={20} /> Reanudar
               </button>
             ) : (
               <button onClick={() => handleToggleLive(true)}
-                className="bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-3 rounded-xl flex items-center gap-2 whitespace-nowrap shadow-lg shadow-red-900/50 transition-colors">
+                className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white font-bold px-4 sm:px-6 py-3 rounded-xl flex items-center justify-center gap-2 whitespace-nowrap shadow-lg shadow-red-900/50 transition-colors">
                 <PlayCircle size={20} /> {obsConnected ? "Iniciar Transmisión" : "Forzar EN VIVO"}
               </button>
             )}
@@ -669,21 +669,21 @@ const AdminLiveManager = () => {
           ) : (
             lives.map(live => (
               <div key={live.id}
-                className={cn("bg-black/50 border rounded-xl p-4 flex items-center justify-between group transition-all cursor-pointer hover:bg-white/[0.03]", activeLive?.id === live.id ? "border-gold/40 bg-gold/5" : "border-white/10")}
+                className={cn("bg-black/50 border rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 group transition-all cursor-pointer hover:bg-white/[0.03]", activeLive?.id === live.id ? "border-gold/40 bg-gold/5" : "border-white/10")}
                 onClick={() => selectRoom(live)}>
-                <div className="flex items-center gap-4">
-                  <div className={cn("w-3 h-3 rounded-full shrink-0",
+                <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0 flex-1">
+                  <div className={cn("w-3 h-3 rounded-full shrink-0 mt-1.5 sm:mt-0",
                     live.status === "live" && !live.is_paused ? "bg-red-500 animate-pulse shadow-[0_0_10px_red]" :
                     live.is_paused ? "bg-yellow-500 animate-pulse" :
                     live.starts_at ? "bg-gold/50" : "bg-gray-600")} />
                   {live.is_active && (
-                    <span className="text-[8px] font-bold uppercase tracking-wider bg-green-500/15 text-green-400 border border-green-500/30 px-1.5 py-0.5 rounded-full shrink-0">
+                    <span className="text-[8px] font-bold uppercase tracking-wider bg-green-500/15 text-green-400 border border-green-500/30 px-1.5 py-0.5 rounded-full shrink-0 mt-1 sm:mt-0">
                       Activa
                     </span>
                   )}
-                  <div>
-                    <h4 className="text-white font-bold">{live.title || "Sin título"}</h4>
-                    <div className="flex flex-wrap gap-2 mt-1 items-center">
+                  <div className="min-w-0 flex-1">
+                    <h4 className="text-white font-bold text-sm sm:text-base truncate">{live.title || "Sin título"}</h4>
+                    <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-1 items-center">
                       {live.starts_at && (
                         <span className="text-[10px] text-white/40 flex items-center gap-1">
                           <Calendar size={10} /> {new Date(live.starts_at).toLocaleDateString("es-CO", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
@@ -697,7 +697,7 @@ const AdminLiveManager = () => {
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center justify-end gap-2 shrink-0">
                   {/* Toggle Activo/Inactivo */}
                   <button
                     onClick={async e => {
@@ -763,13 +763,13 @@ const AdminLiveManager = () => {
           ) : (
             endedLives.map(live => (
               <div key={live.id}
-                className="bg-darker border border-white/10 rounded-2xl p-6 space-y-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-4">
-                    <div className="w-3 h-3 rounded-full bg-gray-600 shrink-0" />
-                    <div>
-                      <h4 className="text-white font-bold text-lg">{live.title || "Sin título"}</h4>
-                      <div className="flex flex-wrap gap-2 mt-1 items-center text-xs text-textMuted">
+                className="bg-darker border border-white/10 rounded-2xl p-4 sm:p-6 space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4">
+                  <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0 flex-1">
+                    <div className="w-3 h-3 rounded-full bg-gray-600 shrink-0 mt-2 sm:mt-0" />
+                    <div className="min-w-0 flex-1">
+                      <h4 className="text-white font-bold text-base sm:text-lg truncate">{live.title || "Sin título"}</h4>
+                      <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-1 items-center text-xs text-textMuted">
                         {live.starts_at && (
                           <span className="flex items-center gap-1">
                             <Calendar size={12} /> {new Date(live.starts_at).toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}
@@ -779,12 +779,12 @@ const AdminLiveManager = () => {
                       </div>
                     </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2 shrink-0">
                     {live.recording_stream_uid && (
                       <a href={`https://${CF_SUBDOMAIN}/${live.recording_stream_uid}/downloads/`}
                         target="_blank" rel="noopener noreferrer"
-                        className="bg-gold/10 hover:bg-gold/20 border border-gold/20 text-gold px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-bold transition-colors">
-                        <Download size={16} /> Descargar grabación
+                        className="flex-1 sm:flex-none bg-gold/10 hover:bg-gold/20 border border-gold/20 text-gold px-3 sm:px-4 py-2 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-bold transition-colors whitespace-nowrap">
+                        <Download size={16} /> <span className="hidden sm:inline">Descargar grabación</span><span className="sm:hidden">Descargar</span>
                       </a>
                     )}
                     <button onClick={async e => {
@@ -799,11 +799,12 @@ const AdminLiveManager = () => {
                         setActiveTab("editor");
                         toast.success(`"${live.title || "Sala"}" movida a salas activas`);
                       } catch { toast.error("Error al reactivar"); }
-                    }} className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-bold transition-colors">
+                    }} className="flex-1 sm:flex-none bg-white/10 hover:bg-white/20 text-white px-3 sm:px-4 py-2 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-bold transition-colors whitespace-nowrap">
                       <PlayCircle size={16} /> Reactivar
                     </button>
                     <button onClick={e => { e.stopPropagation(); handleDelete(live.id); }}
-                      className="p-2 text-red-500/50 hover:text-red-400 bg-red-500/5 rounded-lg hover:bg-red-500/20 transition-colors">
+                      aria-label="Eliminar"
+                      className="p-2 text-red-500/70 hover:text-red-400 bg-red-500/5 rounded-lg hover:bg-red-500/20 transition-colors shrink-0">
                       <Trash2 size={16} />
                     </button>
                   </div>

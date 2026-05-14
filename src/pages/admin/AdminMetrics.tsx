@@ -107,23 +107,23 @@ const AdminMetrics = () => {
       {/* Header & Filters */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold text-white tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
             Métricas y Analíticas
           </h1>
-          <p className="text-textMuted mt-1">
+          <p className="text-textMuted mt-1 text-sm sm:text-base">
             Resumen de rendimiento de Escuela de la Riqueza.
           </p>
         </div>
-        
-        <div className="flex items-center gap-2 bg-black/40 border border-white/10 rounded-xl p-1">
+
+        <div className="flex items-center gap-1 sm:gap-2 bg-black/40 border border-white/10 rounded-xl p-1 w-full sm:w-auto overflow-x-auto custom-scrollbar">
           {periods.map((p) => (
             <button
               key={p}
               onClick={() => setPeriod(p)}
               className={cn(
-                "px-4 py-2 rounded-lg text-sm font-medium transition-all",
-                period === p 
-                  ? "bg-gold/15 text-gold shadow-[0_0_10px_rgba(204,164,59,0.1)]" 
+                "px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap shrink-0",
+                period === p
+                  ? "bg-gold/15 text-gold shadow-[0_0_10px_rgba(204,164,59,0.1)]"
                   : "text-white/60 hover:text-white hover:bg-white/5"
               )}
             >
@@ -144,16 +144,16 @@ const AdminMetrics = () => {
             className="bg-black/30 border border-white/10 rounded-2xl p-6 hover:bg-white/[0.02] transition-colors relative overflow-hidden group"
           >
             <div className="absolute inset-0 bg-gradient-to-br from-gold/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-            <div className="flex items-start justify-between mb-4">
-              <div className="w-12 h-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white group-hover:border-gold/30 group-hover:text-gold transition-colors">
+            <div className="flex items-start justify-between mb-4 gap-2">
+              <div className="w-12 h-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white group-hover:border-gold/30 group-hover:text-gold transition-colors shrink-0">
                 <kpi.icon size={24} strokeWidth={1.5} />
               </div>
               <div className={cn(
-                "flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full",
+                "flex items-center gap-1 text-[10px] sm:text-xs font-bold px-2 py-1 rounded-full max-w-[60%] truncate",
                 kpi.isPositive ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"
               )}>
-                {kpi.isPositive ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-                {kpi.change}
+                {kpi.isPositive ? <ArrowUpRight size={12} className="shrink-0" /> : <ArrowDownRight size={12} className="shrink-0" />}
+                <span className="truncate">{kpi.change}</span>
               </div>
             </div>
             <div>

@@ -35,18 +35,18 @@ export const HeroCinematic = () => {
   return (
     <section
       id="historia"
-      className="relative min-h-[calc(100svh-4rem)] w-full flex items-center pt-10 pb-24 md:pt-12 md:pb-20 overflow-hidden"
+      className="relative min-h-[calc(100svh-4rem)] w-full flex items-center pt-8 pb-20 sm:pt-10 sm:pb-24 md:pt-12 md:pb-20 overflow-hidden"
     >
-      <div className="relative max-w-7xl mx-auto px-6 w-full grid grid-cols-1 md:grid-cols-12 gap-8 lg:gap-12 items-center">
+      <div className="relative max-w-7xl mx-auto px-5 sm:px-6 w-full grid grid-cols-1 md:grid-cols-12 gap-6 sm:gap-8 lg:gap-12 items-center">
         <div className="md:col-span-7 z-20 flex flex-col items-start text-left order-2 md:order-1">
           <motion.h1
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.9, ease: "easeOut" }}
-            className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-extrabold tracking-tighter mb-8 pb-2 text-white leading-[1.25] drop-shadow-2xl text-balance"
+            className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-extrabold tracking-tight md:tracking-tighter mb-6 sm:mb-8 pb-2 text-white leading-[1.2] sm:leading-[1.25] drop-shadow-2xl text-balance"
           >
             Una escuela de{" "}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-gold via-amber-100 to-goldHover italic pr-5 box-decoration-clone">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-gold via-amber-100 to-goldHover italic pr-3 sm:pr-5 box-decoration-clone">
               rediseño cerebral
             </span>
           </motion.h1>
@@ -55,10 +55,10 @@ export const HeroCinematic = () => {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.3, ease: "easeOut" }}
-            className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold tracking-tight text-white/85 leading-[1.35] max-w-2xl text-pretty pb-2"
+            className="text-base sm:text-xl md:text-2xl lg:text-3xl font-bold tracking-tight text-white/85 leading-[1.35] max-w-2xl text-pretty pb-2"
           >
             para que te conviertas en el{" "}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-gold via-amber-100 to-goldHover italic pr-5 box-decoration-clone">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-gold via-amber-100 to-goldHover italic pr-3 sm:pr-5 box-decoration-clone">
               gigante mental
             </span>{" "}
             que llevas dentro.
@@ -79,7 +79,7 @@ export const HeroCinematic = () => {
             src={IVAN_IMAGE}
             alt="Iván Mazo"
             loading="eager"
-            className="w-[70%] sm:w-[55%] md:w-full max-w-[480px] lg:max-w-[560px] object-contain drop-shadow-[0_0_30px_rgba(204,164,59,0.25)]"
+            className="w-[55%] sm:w-[50%] md:w-full max-w-[360px] sm:max-w-[480px] lg:max-w-[560px] object-contain drop-shadow-[0_0_30px_rgba(204,164,59,0.25)]"
           />
         </motion.div>
       </div>

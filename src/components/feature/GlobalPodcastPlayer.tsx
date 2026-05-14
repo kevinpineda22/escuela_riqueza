@@ -121,52 +121,60 @@ const GlobalPodcastPlayer = () => {
         />
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 h-20 md:h-24 flex items-center justify-between gap-4">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 h-20 md:h-24 flex items-center justify-between gap-2 sm:gap-4">
         {/* Info — Left */}
-        <div className="flex items-center gap-4 flex-1 min-w-0">
-          <div className="w-12 h-12 md:w-16 md:h-16 bg-gold/10 rounded-xl border border-gold/30 flex items-center justify-center shrink-0 shadow-lg relative overflow-hidden">
-            <Headphones className="text-gold w-6 h-6 md:w-8 md:h-8" />
+        <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-16 md:h-16 bg-gold/10 rounded-xl border border-gold/30 flex items-center justify-center shrink-0 shadow-lg relative overflow-hidden">
+            <Headphones className="text-gold w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8" />
             {isPlaying && (
-              <div className="absolute bottom-2 flex gap-0.5 items-end h-3">
+              <div className="absolute bottom-1.5 flex gap-0.5 items-end h-3">
                 <div className="w-0.5 bg-gold h-full animate-[pulse_1s_ease-in-out_infinite]" />
                 <div className="w-0.5 bg-gold h-2/3 animate-[pulse_1s_ease-in-out_infinite_0.2s]" />
                 <div className="w-0.5 bg-gold h-4/5 animate-[pulse_1s_ease-in-out_infinite_0.4s]" />
               </div>
             )}
           </div>
-          <div className="truncate">
-            <h4 className="text-white font-bold text-sm md:text-base truncate">{track.title}</h4>
-            <p className="text-textMuted text-xs md:text-sm truncate uppercase tracking-wider">
-              {track.moduleTitle}
-            </p>
+          <div className="min-w-0 flex-1">
+            <h4 className="text-white font-bold text-xs sm:text-sm md:text-base truncate leading-tight">{track.title}</h4>
+            <div className="flex items-center gap-2 mt-0.5">
+              <p className="text-textMuted text-[10px] sm:text-xs md:text-sm truncate uppercase tracking-wider">
+                {track.moduleTitle}
+              </p>
+              <span className="md:hidden text-[10px] font-mono text-white/40 shrink-0">
+                {formatTime(currentTime)}/{formatTime(duration)}
+              </span>
+            </div>
           </div>
         </div>
 
         {/* Controls — Center */}
-        <div className="flex flex-col items-center justify-center flex-[2] md:flex-1 max-w-md">
-          <div className="flex items-center gap-4 md:gap-6">
+        <div className="flex flex-col items-center justify-center shrink-0 md:flex-1 md:max-w-md">
+          <div className="flex items-center gap-3 sm:gap-4 md:gap-6">
             <button
               onClick={handleSkipBack}
-              className="text-white/50 hover:text-white transition-colors p-2"
+              className="text-white/50 hover:text-white transition-colors p-1.5 sm:p-2"
               title="Retroceder 10s"
+              aria-label="Retroceder 10 segundos"
             >
-              <SkipBack size={20} />
+              <SkipBack size={18} />
             </button>
             <button
               onClick={togglePlay}
-              className="w-10 h-10 md:w-12 md:h-12 bg-white hover:scale-105 text-darker rounded-full flex items-center justify-center transition-all shadow-[0_0_15px_rgba(255,255,255,0.2)]"
+              aria-label={isPlaying ? "Pausar" : "Reproducir"}
+              className="w-9 h-9 sm:w-10 sm:h-10 md:w-12 md:h-12 bg-white hover:scale-105 text-darker rounded-full flex items-center justify-center transition-all shadow-[0_0_15px_rgba(255,255,255,0.2)] shrink-0"
             >
               {isPlaying
-                ? <Pause size={20} className="fill-current" />
-                : <Play size={20} className="fill-current ml-1" />
+                ? <Pause size={18} className="fill-current" />
+                : <Play size={18} className="fill-current ml-0.5" />
               }
             </button>
             <button
               onClick={handleSkipForward}
-              className="text-white/50 hover:text-white transition-colors p-2"
+              className="text-white/50 hover:text-white transition-colors p-1.5 sm:p-2"
               title="Avanzar 10s"
+              aria-label="Avanzar 10 segundos"
             >
-              <SkipForward size={20} />
+              <SkipForward size={18} />
             </button>
           </div>
 
@@ -190,11 +198,12 @@ const GlobalPodcastPlayer = () => {
         </div>
 
         {/* Actions — Right */}
-        <div className="flex items-center justify-end gap-2 md:gap-4 flex-1">
+        <div className="flex items-center justify-end gap-1 sm:gap-2 md:gap-4 shrink-0">
           <div className="hidden md:flex items-center gap-2">
             <button
               onClick={() => setVolume(volume === 0 ? 1 : 0)}
               className="text-white/70 hover:text-white transition-colors"
+              aria-label="Mutear/desmutear"
             >
               {volume === 0 ? <VolumeX size={20} /> : <Volume2 size={20} />}
             </button>
@@ -202,16 +211,18 @@ const GlobalPodcastPlayer = () => {
               type="range" min="0" max="1" step="0.05"
               value={volume}
               onChange={(e) => setVolume(Number(e.target.value))}
+              aria-label="Volumen"
               className="w-20 accent-gold bg-white/20 h-1 rounded-full cursor-pointer appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full"
             />
           </div>
           <div className="w-px h-8 bg-white/10 mx-2 hidden md:block" />
           <button
             onClick={handleClose}
-            className="p-2 text-white/50 hover:text-red-400 transition-colors"
+            className="p-1.5 sm:p-2 text-white/50 hover:text-red-400 transition-colors"
             title="Cerrar reproductor"
+            aria-label="Cerrar reproductor"
           >
-            <X size={24} />
+            <X size={20} />
           </button>
         </div>
       </div>
