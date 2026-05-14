@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 export interface PodcastTrack {
-  id: number;
+  id: string | number;
   title: string;
   moduleTitle: string;
   videoId: string;

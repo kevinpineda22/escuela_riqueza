@@ -30,6 +30,7 @@ import { PLANS } from "@/types/user";
 import { supabase } from "@/lib/supabase";
 import { fetchModules, fetchLessons, type Module as DBModule, type Lesson as DBLesson } from "@/lib/api/stream/content";
 import { fetchActiveLive, type LiveEvent } from "@/lib/api/stream/lives";
+import { fetchAllUserProgress } from "@/lib/api/stream/progress";
 
 type TabId = "modulos" | "notas" | "certificados" | "comunidad" | "perfil";
 
@@ -69,6 +70,7 @@ const StudentDashboard = () => {
   const [activeLesson, setActiveLesson] = useState<DBLesson | null>(null);
   const [dbModules, setDbModules] = useState<DBModule[]>([]);
   const [dbLessonsMap, setDbLessonsMap] = useState<Record<string, DBLesson[]>>({});
+  const [userProgress, setUserProgress] = useState<{ lesson_id: string, is_completed: boolean }[]>([]);
   const [isLoadingContent, setIsLoadingContent] = useState(true);
   const [liveEvent, setLiveEvent] = useState<LiveEvent | null>(null);
 
@@ -81,6 +83,18 @@ const StudentDashboard = () => {
       }
     }).catch(() => setLiveEvent(null));
   }, [user?.plan]);
+
+  // Progress calculations
+  const getModuleProgress = (moduleId: string) => {
+    const lessons = dbLessonsMap[moduleId] || [];
+    if (lessons.length === 0) return 0;
+    
+    const completedCount = lessons.filter(l => 
+      userProgress.some(p => p.lesson_id === l.id && p.is_completed)
+    ).length;
+    
+    return Math.round((completedCount / lessons.length) * 100);
+  };
 
   // Load content
   useEffect(() => {
@@ -98,9 +112,11 @@ const StudentDashboard = () => {
         }
         setDbLessonsMap(lessonsMap);
         
-        // No auto-select module anymore, show the grid first.
-      } catch (error) {
-        console.error("Error loading content:", error);
+        const progress = await fetchAllUserProgress();
+        setUserProgress(progress);
+        
+      } catch (err) {
+        toast.error("Error", { description: "No se pudo cargar el contenido" });
       } finally {
         setIsLoadingContent(false);
         setTimeout(() => window.scrollTo(0, 0), 50);
@@ -410,10 +426,23 @@ const StudentDashboard = () => {
                             <p className="text-textMuted text-sm mb-6 flex-1 relative z-10 line-clamp-3">
                               {mod.description || "Explora el contenido de este módulo y avanza en tu camino."}
                             </p>
-                            <div className="flex items-center justify-between text-sm font-medium pt-4 border-t border-white/5 relative z-10 mt-auto">
-                              <span className="text-white/50 flex items-center gap-1.5"><PlayCircle size={14}/> {dbLessonsMap[mod.id]?.length || 0} Clases</span>
-                              <span className="text-gold group-hover:underline flex items-center gap-1">Entrar <ArrowLeft size={14} className="rotate-180" /></span>
-                            </div>
+                              <div className="flex items-center justify-between text-sm font-medium pt-4 border-t border-white/5 relative z-10 mt-auto">
+                                <div className="flex flex-col gap-1 w-1/2">
+                                  <span className="text-white/50 flex items-center gap-1.5"><PlayCircle size={14}/> {dbLessonsMap[mod.id]?.length || 0} Clases</span>
+                                  {getModuleProgress(mod.id) > 0 && (
+                                    <div className="flex items-center gap-2 w-full mt-1">
+                                      <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                                        <div 
+                                          className="h-full bg-gold rounded-full" 
+                                          style={{ width: `${getModuleProgress(mod.id)}%` }} 
+                                        />
+                                      </div>
+                                      <span className="text-[10px] text-gold">{getModuleProgress(mod.id)}%</span>
+                                    </div>
+                                  )}
+                                </div>
+                                <span className="text-gold group-hover:underline flex items-center gap-1">Entrar <ArrowLeft size={14} className="rotate-180" /></span>
+                              </div>
                           </motion.div>
                         ))}
                       </div>
@@ -502,12 +531,12 @@ const StudentDashboard = () => {
                               </h3>
                             </div>
                             
-                            <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
-                              {dbLessonsMap[selectedModule].map((lesson, index) => {
-                                const isActive = activeLesson.id === lesson.id;
-                                const isCompleted = index === 0; // Mock temporal
-                                
-                                return (
+                              <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+                                {dbLessonsMap[selectedModule].map((lesson, index) => {
+                                  const isActive = activeLesson.id === lesson.id;
+                                  const isCompleted = userProgress.some(p => p.lesson_id === lesson.id && p.is_completed);
+                                  
+                                  return (
                                   <button
                                     key={lesson.id}
                                     onClick={() => setActiveLesson(lesson)}
@@ -672,15 +701,63 @@ const StudentDashboard = () => {
             )}
 
             {activeTab === "certificados" && (
-              <motion.div key="certificados" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
-                <EmptyState 
-                  icon={Award}
-                  title="Logros Desbloqueados"
-                  description="Termina el 100% de un módulo para obtener tu aval digital."
-                  className="h-80"
-                />
-              </motion.div>
-            )}
+                <motion.div key="certificados" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
+                  <div className="mb-6">
+                    <h2 className="text-3xl font-extrabold text-white tracking-tight">Tus Insignias</h2>
+                    <p className="text-textMuted mt-1">Completa el 100% de cada módulo para desbloquear su aval.</p>
+                  </div>
+                  
+                  {dbModules.length === 0 ? (
+                    <EmptyState 
+                      icon={Award}
+                      title="Logros Desbloqueados"
+                      description="Termina el 100% de un módulo para obtener tu aval digital."
+                      className="h-80"
+                    />
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                      {dbModules.map((mod, idx) => {
+                        const isUnlocked = getModuleProgress(mod.id) === 100 && dbLessonsMap[mod.id]?.length > 0;
+                        return (
+                          <motion.div
+                            key={mod.id}
+                            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: idx * 0.05 }}
+                            className={cn(
+                              "border rounded-2xl p-6 relative overflow-hidden transition-all flex flex-col items-center text-center",
+                              isUnlocked ? "bg-black/40 border-gold/40 shadow-[0_0_20px_rgba(204,164,59,0.15)]" : "bg-white/[0.02] border-white/5 opacity-50 grayscale"
+                            )}
+                          >
+                            {isUnlocked && (
+                              <div className="absolute top-0 right-0 w-32 h-32 bg-gold/10 rounded-full blur-3xl -mr-10 -mt-10" />
+                            )}
+                            <div className={cn(
+                              "w-16 h-16 rounded-full flex items-center justify-center mb-4 relative z-10 border-2",
+                              isUnlocked ? "bg-gold/20 text-gold border-gold shadow-[0_0_15px_rgba(204,164,59,0.3)]" : "bg-white/10 text-white/40 border-white/10"
+                            )}>
+                              {isUnlocked ? <CheckCircle2 size={32} /> : <Award size={32} />}
+                            </div>
+                            <h3 className={cn("text-lg font-bold mb-2 relative z-10", isUnlocked ? "text-gold" : "text-white/60")}>
+                              {isUnlocked ? "¡Módulo Completado!" : "Bloqueado"}
+                            </h3>
+                            <p className="text-sm font-medium text-white/80 line-clamp-2 relative z-10">
+                              {mod.title}
+                            </p>
+                            
+                            {!isUnlocked && (
+                              <div className="mt-4 w-full relative z-10">
+                                <div className="text-xs text-white/40 mb-1">{getModuleProgress(mod.id)}% completado</div>
+                                <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                                  <div className="h-full bg-white/30 rounded-full" style={{ width: `${getModuleProgress(mod.id)}%` }} />
+                                </div>
+                              </div>
+                            )}
+                          </motion.div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </motion.div>
+              )}
 
             {activeTab === "comunidad" && (
               <motion.div 

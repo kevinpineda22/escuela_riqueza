@@ -30,18 +30,17 @@ const columns: FooterColumn[] = [
   {
     title: "Plataforma",
     links: [
-      { label: "Nuestra historia", href: "/#historia" },
-      { label: "Las 6 inteligencias", href: "/#modulos" },
+      { label: "Nuestra historia", href: "/historia" },
       { label: "Tu camino", href: "/#camino" },
-      { label: "Planes y precios", href: "/planes" },
+      { label: "Planes y precios", href: "/planes#planes" },
     ],
   },
   {
     title: "Ayuda",
     links: [
       { label: "Soporte técnico", href: "/dashboard" },
-      { label: "Preguntas frecuentes", href: "/planes" },
-      { label: "Contacto", href: "mailto:soporte@escuelariqueza.com", icon: Mail, external: true },
+      { label: "Preguntas frecuentes", href: "/planes#faq" },
+      { label: "Contacto", href: "mailto:escueladelariquezaweb@gmail.com", icon: Mail, external: true },
     ],
   },
   {
@@ -54,8 +53,8 @@ const columns: FooterColumn[] = [
 ];
 
 const socials = [
-  { label: "Instagram", href: "https://instagram.com/", Icon: IgIcon },
-  { label: "YouTube", href: "https://youtube.com/", Icon: YtIcon },
+  { label: "Instagram", href: "https://www.instagram.com/escueladelariqueza/", Icon: IgIcon },
+  { label: "YouTube", href: "https://www.youtube.com/@EscuelaDeLaRiqueza", Icon: YtIcon },
 ];
 
 const Footer = () => {

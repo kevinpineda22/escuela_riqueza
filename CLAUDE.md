@@ -235,7 +235,7 @@ for select using (
 
 ---
 
-## 10. Estado del proyecto (Actualizado 2026-05-11)
+## 10. Estado del proyecto (Actualizado 2026-05-14)
 
 ### 10.1 Funcionalidad implementada
 
@@ -253,9 +253,17 @@ for select using (
 - `LessonPlayer.tsx`: pre-roll con `<Stream>` de Cloudflare, skip a los 30s. Cuando el modo podcast está activo, NO renderiza el `<Stream>` del video para evitar que haya dos iframes del mismo video UID en el DOM (eso corrompía la sesión de Cloudflare).
 - `PodcastEngine.tsx`: motor de audio del modo podcast, montado en `main.tsx` **fuera** de `BrowserRouter`, `AuthBootstrap` y todos los providers. Nunca se desmonta una vez activado. Contiene el único `<Stream>` de Cloudflare para el podcast.
 - `GlobalPodcastPlayer.tsx`: solo UI — barra de controles inferior (play/pause, seek, volumen, skip ±10s, cerrar). Lee tiempo/progreso desde `podcastStreamRef` (ref global exportada por `PodcastEngine`). No contiene ningún iframe.
-- `player.store.ts`: store Zustand con `persist`. Persiste: `track`, `isPodcastMode`, `volume`, `lastKnownTime`, `lastVideoId`. NO persiste: `isPlaying` (para respetar autoplay policies del navegador al recargar).
+- `player.store.ts`: store Zustand con `persist`. Persiste: `track`, `isPodcastMode`, `volume`, `lastKnownTime`, `lastVideoId`. NO persiste: `isPlaying` (para respetar autoplay policies del navegador al recargar). `PodcastTrack.id` tipo `string | number`.
 - `LessonViewer.tsx`: modo podcast + notas + playlist por módulo.
 - Lógica de planes: columna `allowed_plans` (array) en `modules`, `lessons`, `lives`. Filtrado estricto en `StudentDashboard.tsx` por `user.plan`.
+
+**Progreso de lecciones y certificados**
+- Tabla `user_lesson_progress` en Supabase con RLS (`user_id`, `lesson_id`, `progress_seconds`, `is_completed`). FK a `auth.users` y `lessons`.
+- `src/lib/api/stream/progress.ts`: API completa (fetchUserProgress, saveUserProgress, fetchAllUserProgress) con upsert por conflicto `(user_id, lesson_id)`.
+- `LessonPlayer.tsx`: auto-guardado cada 10s en Supabase vía `handleTimeUpdate`. Marca `is_completed: true` al alcanzar 90% del video.
+- Modal de retomo: si el usuario vuelve a una lección con progreso >5s y no completada, sale un Dialog premium con "Continuar viendo" (seek al segundo exacto) o "Iniciar de nuevo".
+- `StudentDashboard.tsx`: barras de progreso doradas por módulo en la vista de grilla. Lecciones con check verde en la playlist. Pestaña Certificados reconstruida con cards por módulo (brilla dorado si 100%, gris/bloqueado si menos).
+- Mutex video/podcast: `podcastTrack.id` cambiado a `string | number` para compatibilidad con UUIDs reales.
 
 **Lives**
 - `AdminLiveManager.tsx`: CRUD de salas con schema real (`starts_at`, `status`, `stream_live_input_id`, `allowed_plans`, `required_plan`, `is_active`). Timezone auto-detected con badge. Drag & drop de imagen de fondo a Supabase Storage (bucket `backgrounds`). Botón "Forzar EN VIVO" con mutex. Botón Activar/Inactivar por sala (columna `is_active`). Guía OBS con pasos para baja latencia y activación WebRTC.
@@ -289,9 +297,12 @@ for select using (
 - `NotFound.tsx` (404 cinemático), `ErrorBoundary` (UI premium con retry), `AuthSplash` (logo halo + ring).
 - `AdminLayout.tsx` y `AdminVideoUpload.tsx`.
 - `AdminMetrics.tsx`, `AdminUsers.tsx`, `AdminSettings.tsx` (Fase 3 completada con recharts y mocks).
-- `StudentDashboard.tsx` (Fase 4 parcial: rediseño UX mobile-first, grid de módulos, drill-down, transiciones AnimatePresence).
+- `StudentDashboard.tsx` (Fase 4 completada con progreso real, módulos conectados a DB, insignias y certificados por módulo).
 - `VIPLiveRoom.tsx` (flujo completo: countdown → intro cinemática → WebRTC <1s + chat real).
 - `AdminLiveManager.tsx` (CRUD completo con schema real, drag-drop imagen, timezone Colombia, guía OBS + WebRTC).
+- `Plans.tsx` (página pública `/planes` completa con FAQ interactivo y tabla comparativa).
+- `HistoryPage.tsx` (página `/historia` con video Cloudflare Stream embebido y copia profesional).
+- `TermsPage.tsx` y `PrivacyPage.tsx` (páginas legales profesionales con contactos formales).
 
 **🟡 DECENT (gold/dark aplicado pero falta polish)**
 - `Header.tsx` — falta: menú mobile funcional (botón existe pero no abre nada).
@@ -307,7 +318,6 @@ for select using (
 **⚫ Pantallas que aún no existen**
 - "Cuenta verificada / Email confirmado" post-signup (Supabase email link).
 - Detalle de usuario en admin (drill-down desde `AdminUsers`).
-- Página pública `/planes` (hoy solo el acto del landing).
 
 ### 10.4 Sistemas transversales
 
@@ -450,6 +460,7 @@ Esto garantiza que solo haya UN `<Stream>` de Cloudflare en el DOM (el de `Podca
 | Podcast se pausa al navegar (segundo intento) | El audio seguía cortándose pese al fix anterior | `LessonPlayer` mantenía un segundo `<Stream>` del mismo video UID con `opacity-0` (para "no perder el SDK"). Al navegar, este iframe se destruía y Cloudflare cortaba la sesión compartida | Eliminar el `<Stream>` del `LessonPlayer` cuando `isPlayingThisInPodcast` es true |
 | Podcast no se reanuda tras volver a la pestaña | El audio quedaba en pausa al volver de otra pestaña | `onPause` del Stream no se disparaba siempre. El closure de React tenía valores stale de `isPlaying`/`isPodcastMode` | Watchdog 1s + refs sincronizadas + visibilitychange listener |
 | Contenedor del iframe tenía posición estática | Warning de Cloudflare Stream | El SDK require `position: non-static` para calcular offset | `position: fixed` en el contenedor del engine |
+| Podcast se reinicia al activar modo podcast | Al togglear a podcast, el audio volvía a empezar desde 0 en vez de retomar la posición actual | `onTimeUpdate` del iframe recién cargado disparaba `currentTime: 0` antes de que `onCanPlay` hiciera el seek. Ese 0 sobreescribía `lastKnownTime`. | Guard `if (!initializedRef.current) return;` en `handleTimeUpdate` de `PodcastEngine`. Además se agregaron `lastKnownTimeRef`, `trackRef`, `lastVideoIdRef` sincronizados para evitar stale closures en handlers del Stream. |
 
 #### 10.7.8 Reglas para no romper el modo podcast
 
@@ -530,7 +541,7 @@ Esto garantiza que solo haya UN `<Stream>` de Cloudflare en el DOM (el de `Podca
 - **Chat siempre visible**: en estados scheduled, live, ended y hasta que la sala se desactive.
 - **Badges dinámicos**: "EN VIVO" (rojo), "EN ESPERA" (dorado, OBS conectado o starts_at pasado), "PRÓXIMAMENTE" (antes de starts_at), "FINALIZADO" (gris).
 
-### 10.11 Historial de cambios — 2026-05-14
+### 10.11 Historial de cambios — 2026-05-14 (Sesión 1)
 
 #### Arquitectura robusta del Modo Podcast (Autoplay + Lock Screen)
 - **Desbloqueo de Autoplay en Móviles (Safari/Chrome)**: Modificado `PodcastEngine` para que SIEMPRE renderice el `<Stream>` (usando un video de Cloudflare silenciado como placeholder). Esto garantiza que el iframe exista en el DOM antes del gesto del usuario, permitiendo que `internalRef.current.play()` ocurra de forma síncrona sin ser bloqueado por los navegadores móviles.
@@ -538,7 +549,29 @@ Esto garantiza que solo haya UN `<Stream>` de Cloudflare en el DOM (el de `Podca
 - **Loop de Re-afirmación**: Añadido un intervalo cada 5 segundos que re-produce el secuestrador silencioso y actualiza la metadata, previniendo que iOS/Android le devuelvan el control al iframe al navegar o tras mucho tiempo.
 - **Mutex Video vs Podcast**: Modificado `LessonPlayer` para prevenir audios superpuestos. Si un usuario tiene el podcast en segundo plano e intenta darle "Play" a cualquier lección visual normal, el sistema automáticamente hace `closePlayer()` sobre el estado global del podcast antes de arrancar el video.
 
-### 10.12 Reglas operativas para retomar
+### 10.12 Historial de cambios — 2026-05-14 (Sesión 2 — Footer, Páginas, Progreso)
+
+#### Footer actualizado + páginas estáticas
+- **Redes Sociales**: URLs de Instagram y YouTube corregidas a las oficiales (`instagram.com/escueladelariqueza`, `youtube.com/@EscuelaDeLaRiqueza`). Eliminado "Las 6 inteligencias" del footer.
+- **Hash scrolling funcional**: Creado `useScrollToHash` hook en `src/hooks/useScrollToHash.ts`. Se invoca en `routes.tsx` y escucha cambios de `pathname` + `hash`. Cuando el hash cambia, hace `window.scrollTo` con offset -100px para respetar headers fijos. Timeout de 500ms para esperar transiciones de AnimatePresence.
+- **Links del footer reparados**: "Planes y precios" → `/planes#planes`, "Preguntas frecuentes" → `/planes#faq`. Se agregaron `id="planes"` y `id="faq"` en `Plans.tsx`.
+- **Nuevas páginas públicas**: `HistoryPage.tsx` (`/historia`) con video Cloudflare Stream embebido + copia profesional. `TermsPage.tsx` (`/terminos`) y `PrivacyPage.tsx` (`/privacidad`) con texto legal completo.
+- **Email de contacto**: Actualizado de `soporte@escuelariqueza.com` a `escueladelariquezaweb@gmail.com` en Footer, TermsPage y PrivacyPage.
+
+#### Sistema de progreso de lecciones (user_lesson_progress)
+- **Tabla SQL en Supabase**: `user_lesson_progress` con columnas `user_id` (FK auth.users), `lesson_id` (FK lessons UUID), `progress_seconds`, `is_completed`, timestamps. RLS habilitado con políticas estrictas de select/insert/update solo para el propio usuario.
+- **`src/lib/api/stream/progress.ts`**: API completa (`fetchUserProgress`, `saveUserProgress`, `fetchAllUserProgress`) usando `upsert` con `onConflict: 'user_id,lesson_id'`.
+- **Auto-guardado en LessonPlayer**: cada 10s durante `onTimeUpdate` se llama `saveUserProgress()` con el `currentTime` actual. Throttle mínimo de 5s entre llamadas para no saturar Supabase.
+- **Regla del 90%**: si `currentTime / duration >= 0.9`, se marca `is_completed: true` automáticamente.
+- **Modal de retomo (Resume Modal)**: Al cargar una lección, se llama `fetchUserProgress()`. Si `progress_seconds > 5` y `!is_completed`, se muestra un Dialog (shadcn) premium con "Continuar viendo" (usa `pendingSeekRef` para hacer seek) o "Iniciar de nuevo".
+- **Progreso en StudentDashboard**: Barra dorada de progreso por módulo usando `completed-lessons / total-lessons * 100`. Checks verdes en la playlist de lecciones. Pestaña Certificados ahora muestra tarjetas por módulo: dorado + check si 100%, gris + bloqueado + barra de progreso si menos.
+
+#### Fix PodcastEngine — stale closures en handlers del Stream
+- **Problema**: Al activar modo podcast, el iframe de Cloudflare se recargaba y su primer `onTimeUpdate` (con `currentTime: 0`) sobreescribía `lastKnownTime` en el store ANTES de que `onCanPlay` buscara restaurar la posición.
+- **Solución**: Se agregaron `lastKnownTimeRef`, `trackRef`, `lastVideoIdRef` sincronizados con `useEffect`. `handleTimeUpdate` ahora ignora eventos si `!initializedRef.current` (guard para evitar que el `onTimeUpdate` del iframe recién cargado pise el seek). `handleCanPlay`, `handlePlayEvent`, `handleTimeUpdate` leen desde las refs en vez del closure stale.
+- **Cambio en player.store**: `PodcastTrack.id` cambiado de `number` a `string | number` para soportar UUIDs reales de Supabase.
+
+### 10.13 Reglas operativas para retomar
 
 - Después de cada módulo terminado: correr `npm run typecheck` + `npx vitest run <files>` antes de cerrar la tarea.
 - Mantener el inventario de tareas vivo (`TaskCreate`/`TaskUpdate`) en cada sesión nueva.
@@ -560,5 +593,7 @@ Esto garantiza que solo haya UN `<Stream>` de Cloudflare en el DOM (el de `Podca
 - Conservar la paleta gold/dark — el diseño actual es del cliente.
 - **SPA en Vercel**: cualquier ruta que no sea `/` requiere `vercel.json` con `rewrites: [{ "source": "/(.*)", "destination": "/index.html" }]`. Sin esto, recargar cualquier página (dashboard, VIP-live, admin) devuelve 404 NOT_FOUND. También afecta links con `<a href>` (navegación dura): aunque el link funcione en dev, en producción Vercel no conoce la ruta y devuelve 404.
 - **Grabaciones de lives**: columna `recording_stream_uid` en tabla `lives`. Al hacer clic en "Finalizar", el sistema intenta obtener la grabación automáticamente desde Cloudflare via `/api/stream/recording.ts` (Vercel Function). También hay botón "Obtener grabación" manual en el editor. En la pestaña "Finalizados" se muestra iframe embebido + botón descarga + botón "Reactivar".
-- **Footer enlaces funcionales**: hash links con `/` prefijo para navegación cross-ruta (`/#historia`, `/#modulos`, `/#planes`). Links directos a `/login`, `/registro`, `/dashboard` con iconos lucide.
+- **Footer enlaces funcionales**: navegación con rutas absolutas + hash (`/planes#planes`, `/planes#faq`, `/historia`). `useScrollToHash` hook escucha `pathname + hash` y hace smooth scroll con offset -100px tras 500ms de timeout (para esperar transiciones de AnimatePresence).
 - **Selector de Input ID**: dropdown con preset `950f6b77844e5a369bbeea208b2c428e` + opción "Personalizado" que muestra input libre. Estado `customInputId` controla si se muestra input editable o select.
+- **Progreso de lecciones**: tabla `user_lesson_progress` con RLS estricto (cada usuario solo ve/edita su propio progreso). Auto-guardado cada 10s desde `LessonPlayer`. Regla del 90% para marcar completado. Modal de retomo si hay progreso >5s y no completado.
+- **Nuevas páginas estáticas**: registrar en `routes.tsx` con `PageTransition` wrapper. Usar mismo patrón: Header + main + Footer, con enlace "Volver al inicio" y badge de sección.

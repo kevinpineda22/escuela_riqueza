@@ -4,11 +4,14 @@ import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player.store";
 import { podcastStreamRef } from "@/components/feature/PodcastEngine";
 import { Stream } from "@cloudflare/stream-react";
+import { fetchUserProgress, saveUserProgress } from "@/lib/api/stream/progress";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface LessonPlayerProps {
   videoSrc?: string;
   isPremium: boolean;
-  lesson?: { id: number; titulo: string; modId: number };
+  lesson?: { id: string | number; titulo: string; modId: string | number };
   moduleTitle?: string;
 }
 
@@ -28,6 +31,12 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
 
   const [playRequested, setPlayRequested] = useState(false);
   const initializedTimeRef = useRef(false);
+
+  // Progreso guardado en base de datos
+  const [showResumeModal, setShowResumeModal] = useState(false);
+  const [savedProgressSeconds, setSavedProgressSeconds] = useState(0);
+  const lastSavedTimeRef = useRef(0);
+  const lastSaveCallTimeRef = useRef(Date.now());
 
   const [showAd, setShowAd] = useState(false);
   const [hasAdPlayed, setHasAdPlayed] = useState(false);
@@ -51,21 +60,56 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
     setPlayRequested(false);
     setShowAd(false);
     setHasAdPlayed(false);
-    setAdCurrentTime(0);
-    initializedTimeRef.current = false;
-  }, [videoSrc]); // eslint-disable-line react-hooks/exhaustive-deps
+      setAdCurrentTime(0);
+      initializedTimeRef.current = false;
+      lastSavedTimeRef.current = 0;
+      
+      // Buscar progreso real
+      const loadProgress = async () => {
+        if (!lesson || !videoSrc) return;
+        const progress = await fetchUserProgress(String(lesson.id));
+        if (progress && progress.progress_seconds > 5 && !progress.is_completed) {
+          setSavedProgressSeconds(progress.progress_seconds);
+        } else {
+          setSavedProgressSeconds(0);
+        }
+      };
+      loadProgress();
+    }, [videoSrc, lesson?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handlePlayRequest = () => {
-    // Si el usuario decide reproducir un video normal, apagamos el podcast global para evitar audios superpuestos
     if (isPodcastMode) {
       closePlayer();
     }
     
+    if (savedProgressSeconds > 0) {
+      setShowResumeModal(true);
+      return;
+    }
+    
+    startPlayback();
+  };
+
+  const startPlayback = () => {
     setPlayRequested(true);
     if (!isPremium && !hasAdPlayed) {
       setShowAd(true);
       setAdCurrentTime(0);
     }
+  };
+
+  const handleResume = () => {
+    setShowResumeModal(false);
+    pendingSeekRef.current = savedProgressSeconds;
+    setSavedProgressSeconds(0);
+    startPlayback();
+  };
+
+  const handleStartOver = () => {
+    setShowResumeModal(false);
+    pendingSeekRef.current = 0;
+    setSavedProgressSeconds(0);
+    startPlayback();
   };
 
   const handleAdEnd = () => {
@@ -135,8 +179,25 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
     }
 
     const currentTime = streamRef.current.currentTime;
+    const duration = streamRef.current.duration;
+    
     if (Math.abs(currentTime - lastKnownTime) > 1 && videoSrc) {
       setPlaybackProgress(videoSrc, currentTime);
+    }
+
+    // Auto-guardado en Supabase cada 10 segundos
+    if (lesson && currentTime > 0 && Math.abs(currentTime - lastSavedTimeRef.current) >= 10) {
+      const now = Date.now();
+      // Throttle extra por seguridad (max 1 llamada cada 5s)
+      if (now - lastSaveCallTimeRef.current > 5000) {
+        lastSavedTimeRef.current = currentTime;
+        lastSaveCallTimeRef.current = now;
+        
+        // Asumimos completado si vio ms del 90%
+        const isCompleted = duration > 0 && (currentTime / duration) >= 0.9;
+        
+        saveUserProgress(String(lesson.id), currentTime, isCompleted).catch(() => {});
+      }
     }
   };
 
@@ -280,6 +341,25 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
           </div>
         )}
       </div>
+
+      <Dialog open={showResumeModal} onOpenChange={setShowResumeModal}>
+        <DialogContent className="bg-darker border-white/10 sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-white">Retomar Lección</DialogTitle>
+            <DialogDescription className="text-textMuted">
+              Parece que dejaste esta lección en el minuto {Math.floor(savedProgressSeconds / 60)}:{(Math.floor(savedProgressSeconds % 60)).toString().padStart(2, '0')}. ¿Qué deseas hacer?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2 sm:justify-end mt-4">
+            <Button variant="outline" onClick={handleStartOver} className="bg-white/5 text-white hover:bg-white/10 border-white/10">
+              Iniciar de nuevo
+            </Button>
+            <Button onClick={handleResume} className="bg-gold text-darker hover:bg-goldHover">
+              <Play className="w-4 h-4 mr-2" /> Continuar viendo
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
