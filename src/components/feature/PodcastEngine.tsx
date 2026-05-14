@@ -29,8 +29,45 @@ function setMediaMetadata(title: string, artist: string) {
   navigator.mediaSession.metadata = new MediaMetadata({
     title,
     artist,
-    artwork: [{ src: LOGO_URL, sizes: "512x512", type: "image/png" }],
+    album: "Escuela de la Riqueza",
+    artwork: [
+      { src: LOGO_URL, sizes: "96x96", type: "image/png" },
+      { src: LOGO_URL, sizes: "192x192", type: "image/png" },
+      { src: LOGO_URL, sizes: "256x256", type: "image/png" },
+      { src: LOGO_URL, sizes: "384x384", type: "image/png" },
+      { src: LOGO_URL, sizes: "512x512", type: "image/png" },
+    ],
   });
+}
+
+// Genera un WAV silencioso real con duración válida.
+// El data URL anterior estaba truncado (~50 bytes) y iOS lo descartaba,
+// por eso Cloudflare se quedaba como dueño del MediaSession ("Stream").
+function writeString(view: DataView, offset: number, str: string) {
+  for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+}
+
+function createSilentWavObjectURL(durationSec = 60): string {
+  const sampleRate = 44100;
+  const numSamples = sampleRate * durationSec;
+  const dataSize = numSamples * 2;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+  writeString(view, 0, "RIFF");
+  view.setUint32(4, 36 + dataSize, true);
+  writeString(view, 8, "WAVE");
+  writeString(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(view, 36, "data");
+  view.setUint32(40, dataSize, true);
+  const blob = new Blob([buffer], { type: "audio/wav" });
+  return URL.createObjectURL(blob);
 }
 
 const CONTAINER_STYLE: React.CSSProperties = {
@@ -65,6 +102,15 @@ const PodcastEngine = () => {
   // Una vez que el engine se activa (primer track), NUNCA se desactiva.
   // El Stream se monta y no se desmonta jamǭs.
   const [everActivated, setEverActivated] = useState(false);
+  const [silentSrc, setSilentSrc] = useState<string>("");
+
+  // Generar WAV silencioso real (60s) para el hijacker.
+  // Sin esto iOS descarta el audio y Cloudflare se queda con el MediaSession.
+  useEffect(() => {
+    const url = createSilentWavObjectURL(60);
+    setSilentSrc(url);
+    return () => URL.revokeObjectURL(url);
+  }, []);
 
   const {
     track,
@@ -213,12 +259,16 @@ const PodcastEngine = () => {
   useEffect(() => {
     const audioEl = hijackerRef.current;
     if (!audioEl) return;
+    // iOS Safari ignora elementos muted para "now playing".
+    // Mantenerlo unmuted con volumen casi-cero garantiza el control sin sonido audible.
+    audioEl.muted = false;
+    audioEl.volume = 0.0001;
     if (isPlaying && isPodcastMode) {
       audioEl.play().catch(() => {});
     } else {
       audioEl.pause();
     }
-  }, [isPlaying, isPodcastMode]);
+  }, [isPlaying, isPodcastMode, silentSrc]);
 
   // Intervalo periódico para re-afirmar el control del MediaSession.
   // iOS/Android pueden devolverle el control al iframe después de unos segundos;
@@ -280,8 +330,24 @@ const PodcastEngine = () => {
     // (currentTime ≈ 0) pisaría lastKnownTime y arruinaría la restauración.
     if (!initializedRef.current) return;
     const currentTrack = trackRef.current;
-    if (!internalRef.current || !currentTrack) return;
-    setPlaybackProgress(currentTrack.videoId, internalRef.current.currentTime);
+    const el = internalRef.current;
+    if (!el || !currentTrack) return;
+    setPlaybackProgress(currentTrack.videoId, el.currentTime);
+
+    // Mantener actualizada la barra de progreso del lock screen del OS.
+    if ("mediaSession" in navigator && "setPositionState" in navigator.mediaSession) {
+      const dur = Number(el.duration);
+      const pos = Number(el.currentTime);
+      if (isFinite(dur) && dur > 0 && isFinite(pos) && pos >= 0 && pos <= dur) {
+        try {
+          navigator.mediaSession.setPositionState({
+            duration: dur,
+            playbackRate: 1,
+            position: pos,
+          });
+        } catch { /* iOS antiguos pueden rechazar valores fuera de rango */ }
+      }
+    }
   };
 
   const handlePause = () => {
@@ -321,13 +387,17 @@ const PodcastEngine = () => {
         onPause={handlePause}
         onEnded={handleEnded}
       />
-      {/* Audio silencioso para secuestrar el MediaSession del OS y sobrescribir el del iframe */}
-      <audio
-        ref={hijackerRef}
-        src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"
-        loop
-        playsInline
-      />
+      {/* Audio silencioso para secuestrar el MediaSession del OS y sobrescribir el del iframe.
+          Volumen 0.0001 (no muted) — iOS solo otorga "now playing" a elementos UNMUTED. */}
+      {silentSrc && (
+        <audio
+          ref={hijackerRef}
+          src={silentSrc}
+          loop
+          playsInline
+          preload="auto"
+        />
+      )}
     </div>
   );
 };

@@ -55,11 +55,19 @@ const AdminLiveManager = () => {
 
   useEffect(() => {
     if (!activeLive?.stream_live_input_id || activeLive.status === "ended") return;
+    let failCount = 0;
+    let poll: ReturnType<typeof setInterval>;
     const check = async () => {
-      const { connected } = await checkLiveInputStatus(activeLive.stream_live_input_id!);
+      const { connected, isError, disabled } = await checkLiveInputStatus(activeLive.stream_live_input_id!);
+      if (disabled) { clearInterval(poll); return; }
+      if (isError) {
+        failCount++;
+        if (failCount >= 3) { clearInterval(poll); return; }
+      } else {
+        failCount = 0;
+      }
       setObsConnected(prev => connected !== prev ? connected : prev);
-      
-      // Auto-live if OBS is streaming and status is scheduled
+
       if (connected && activeLive.status === "scheduled") {
         try {
           const updated = await updateLive(activeLive.id, { status: "live", is_paused: false });
@@ -73,7 +81,7 @@ const AdminLiveManager = () => {
       }
     };
     check();
-    const poll = setInterval(check, 10000);
+    poll = setInterval(check, 10000);
     return () => clearInterval(poll);
   }, [activeLive?.id, activeLive?.stream_live_input_id, activeLive?.status]);
 

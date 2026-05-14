@@ -86,18 +86,17 @@ const VIPLiveRoom = () => {
     let poll: ReturnType<typeof setInterval>;
     
     const check = async () => {
-      const { connected, isError } = await checkLiveInputStatus(live.stream_live_input_id!);
-      
+      const { connected, isError, disabled } = await checkLiveInputStatus(live.stream_live_input_id!);
+      if (disabled) { clearInterval(poll); return; }
       if (isError) {
         failCount++;
         if (failCount >= 3) {
-          // Si el endpoint proxy no funciona (ej. HTTP 502 localmente), abortar el polling
           clearInterval(poll);
+          return;
         }
       } else {
         failCount = 0;
       }
-      
       setLiveInputConnected(prev => connected !== prev ? connected : prev);
     };
     
