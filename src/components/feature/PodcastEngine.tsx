@@ -21,6 +21,18 @@ import { usePlayerStore } from "@/stores/player.store";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export let podcastStreamRef: { current: any } = { current: null };
 
+const LOGO_URL =
+  "https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/18dc9190-6625-4b89-8f1e-3f221e96b500/public";
+
+function setMediaMetadata(title: string, artist: string) {
+  if (!("mediaSession" in navigator)) return;
+  navigator.mediaSession.metadata = new MediaMetadata({
+    title,
+    artist,
+    artwork: [{ src: LOGO_URL, sizes: "512x512", type: "image/png" }],
+  });
+}
+
 const CONTAINER_STYLE: React.CSSProperties = {
   position: "fixed",
   // 320×180 — dimensiones reales para que el browser NO clasifique
@@ -46,6 +58,9 @@ const PodcastEngine = () => {
   const isPlayingRef = useRef(false);
   const isPodcastModeRef = useRef(false);
   const initializedRef = useRef(false);
+  const userInteractedRef = useRef(false);
+  const hijackerRef = useRef<HTMLAudioElement | null>(null);
+  const mediaSessionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Una vez que el engine se activa (primer track), NUNCA se desactiva.
   // El Stream se monta y no se desmonta jamás.
@@ -71,12 +86,10 @@ const PodcastEngine = () => {
     podcastStreamRef = internalRef;
   }, []);
 
-  // Activar el engine permanentemente al primer track
+  // Activar el engine permanentemente
   useEffect(() => {
-    if (track && !everActivated) {
-      setEverActivated(true);
-    }
-  }, [track, everActivated]);
+    setEverActivated(true);
+  }, []);
 
   // Sincronizar volumen
   useEffect(() => {
@@ -85,13 +98,12 @@ const PodcastEngine = () => {
     }
   }, [volume]);
 
-  // Sincronizar play / pause
+  // Sincronizar play / pause — sin timeout porque en móvil
+  // el gesto del usuario se pierde si diferimos la llamada
   useEffect(() => {
     if (!internalRef.current || !isPodcastMode || !track) return;
     if (isPlaying) {
-      setTimeout(() => {
-        internalRef.current?.play().catch(() => {});
-      }, 50);
+      internalRef.current?.play().catch(() => {});
     } else {
       internalRef.current?.pause();
     }
@@ -123,12 +135,109 @@ const PodcastEngine = () => {
       if (document.visibilityState === "visible" && isPlayingRef.current && isPodcastModeRef.current) {
         setTimeout(() => {
           internalRef.current?.play().catch(() => {});
+          hijackerRef.current?.play().catch(() => {});
         }, 200);
       }
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, []);
+
+  // Unlock audio en móvil: la primera interacción del usuario con la página
+  // crea un AudioContext que desbloquea la reproducción de audio para toda la sesión
+  useEffect(() => {
+    const unlock = () => {
+      if (userInteractedRef.current) return;
+      userInteractedRef.current = true;
+      try {
+        const ACtx = (window.AudioContext || (window as any).webkitAudioContext);
+        if (ACtx) {
+          const ctx = new ACtx();
+          if (ctx.state === "suspended") ctx.resume();
+          const src = ctx.createOscillator();
+          src.connect(ctx.destination);
+          src.start(0);
+          src.stop(0.001);
+          setTimeout(() => ctx.close(), 200);
+        }
+      } catch { /* not all browsers support Web Audio */ }
+      document.removeEventListener("pointerdown", unlock);
+      document.removeEventListener("touchstart", unlock);
+    };
+    document.addEventListener("pointerdown", unlock, { once: true });
+    document.addEventListener("touchstart", unlock, { once: true });
+    return () => {
+      document.removeEventListener("pointerdown", unlock);
+      document.removeEventListener("touchstart", unlock);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!track || !isPodcastMode || !("mediaSession" in navigator)) return;
+
+    setMediaMetadata(track.title || "Lección", track.moduleTitle || "Escuela de la Riqueza");
+
+    navigator.mediaSession.setActionHandler("play", () => setIsPlaying(true));
+    navigator.mediaSession.setActionHandler("pause", () => setIsPlaying(false));
+    navigator.mediaSession.setActionHandler("seekbackward", () => {
+      if (internalRef.current) internalRef.current.currentTime = Math.max(0, internalRef.current.currentTime - 10);
+    });
+    navigator.mediaSession.setActionHandler("seekforward", () => {
+      if (internalRef.current) internalRef.current.currentTime += 10;
+    });
+    navigator.mediaSession.setActionHandler("seekto", (details) => {
+      if (details.seekTime && internalRef.current) internalRef.current.currentTime = details.seekTime;
+    });
+
+    return () => {
+      navigator.mediaSession.metadata = null;
+      navigator.mediaSession.setActionHandler("play", null);
+      navigator.mediaSession.setActionHandler("pause", null);
+      navigator.mediaSession.setActionHandler("seekbackward", null);
+      navigator.mediaSession.setActionHandler("seekforward", null);
+      navigator.mediaSession.setActionHandler("seekto", null);
+    };
+  }, [track, isPodcastMode, setIsPlaying]);
+
+  // ── Secuestrador de MediaSession ─────────────────────────────────────────
+  // Cada vez que cambia isPlaying, controlamos el audio silencioso
+  useEffect(() => {
+    const audioEl = hijackerRef.current;
+    if (!audioEl) return;
+    if (isPlaying && isPodcastMode) {
+      audioEl.play().catch(() => {});
+    } else {
+      audioEl.pause();
+    }
+  }, [isPlaying, isPodcastMode]);
+
+  // Intervalo periódico para re-afirmar el control del MediaSession.
+  // iOS/Android pueden devolverle el control al iframe después de unos segundos;
+  // este loop re-asserta nuestra metadata cada 5s.
+  useEffect(() => {
+    if (!isPlaying || !isPodcastMode || !track) {
+      if (mediaSessionIntervalRef.current) {
+        clearInterval(mediaSessionIntervalRef.current);
+        mediaSessionIntervalRef.current = null;
+      }
+      return;
+    }
+
+    mediaSessionIntervalRef.current = setInterval(() => {
+      const audioEl = hijackerRef.current;
+      if (audioEl && track) {
+        audioEl.play().catch(() => {});
+        setMediaMetadata(track.title || "Lección", track.moduleTitle || "Escuela de la Riqueza");
+      }
+    }, 5000);
+
+    return () => {
+      if (mediaSessionIntervalRef.current) {
+        clearInterval(mediaSessionIntervalRef.current);
+        mediaSessionIntervalRef.current = null;
+      }
+    };
+  }, [isPlaying, isPodcastMode, track]);
 
   // ── Handlers del Stream ──────────────────────────────────────────────────
 
@@ -142,6 +251,16 @@ const PodcastEngine = () => {
     if (isPlayingRef.current && isPodcastModeRef.current) {
       internalRef.current?.play().catch(() => {});
     }
+  };
+
+  const handlePlayEvent = () => {
+    setTimeout(() => {
+      const audioEl = hijackerRef.current;
+      if (audioEl && track) {
+        audioEl.play().catch(() => {});
+        setMediaMetadata(track.title || "Lección en Audio", track.moduleTitle || "Escuela de la Riqueza");
+      }
+    }, 100);
   };
 
   const handleTimeUpdate = () => {
@@ -164,20 +283,35 @@ const PodcastEngine = () => {
   // Mientras no se haya activado nunca, no renderizar nada (no hay necesidad)
   if (!everActivated) return null;
 
+  // Renderizamos el Stream SIEMPRE para que el iframe exista antes del primer clic.
+  // Si no hay track, usamos un AD_VIDEO_ID de placeholder para que Cloudflare no falle,
+  // pero lo mantenemos silenciado y en pausa.
+  const streamSrc = track?.videoId || "6175f36e4f305cfcbb79a952802edfc2";
+
   return (
     <div aria-hidden="true" style={CONTAINER_STYLE}>
-      {track && (
-        <Stream
-          streamRef={internalRef}
-          src={track.videoId}
-          controls={false}
-          preload="auto"
-          onCanPlay={handleCanPlay}
-          onTimeUpdate={handleTimeUpdate}
-          onPause={handlePause}
-          onEnded={handleEnded}
-        />
-      )}
+      <Stream
+        streamRef={internalRef}
+        src={streamSrc}
+        title={track?.title || "Escuela de la Riqueza"}
+        poster="https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/18dc9190-6625-4b89-8f1e-3f221e96b500/public"
+        controls={false}
+        autoplay={false}
+        preload="auto"
+        muted={!track} // Muted si es el placeholder
+        onCanPlay={handleCanPlay}
+        onPlay={handlePlayEvent}
+        onTimeUpdate={handleTimeUpdate}
+        onPause={handlePause}
+        onEnded={handleEnded}
+      />
+      {/* Audio silencioso para secuestrar el MediaSession del OS y sobrescribir el del iframe */}
+      <audio
+        ref={hijackerRef}
+        src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"
+        loop
+        playsInline
+      />
     </div>
   );
 };

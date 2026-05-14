@@ -528,7 +528,15 @@ Esto garantiza que solo haya UN `<Stream>` de Cloudflare en el DOM (el de `Podca
 - **Chat siempre visible**: en estados scheduled, live, ended y hasta que la sala se desactive.
 - **Badges dinámicos**: "EN VIVO" (rojo), "EN ESPERA" (dorado, OBS conectado o starts_at pasado), "PRÓXIMAMENTE" (antes de starts_at), "FINALIZADO" (gris).
 
-### 10.11 Reglas operativas para retomar
+### 10.11 Historial de cambios — 2026-05-14
+
+#### Arquitectura robusta del Modo Podcast (Autoplay + Lock Screen)
+- **Desbloqueo de Autoplay en Móviles (Safari/Chrome)**: Modificado `PodcastEngine` para que SIEMPRE renderice el `<Stream>` (usando un video de Cloudflare silenciado como placeholder). Esto garantiza que el iframe exista en el DOM antes del gesto del usuario, permitiendo que `internalRef.current.play()` ocurra de forma síncrona sin ser bloqueado por los navegadores móviles.
+- **Secuestro de MediaSession (El fix "Stream" en Lock Screen)**: Cloudflare Stream sobreescribe la metadata del sistema operativo por defecto. Se implementó una técnica de "secuestro" ("hijacking") utilizando un elemento `<audio id="media-session-hijacker">` invisible (con una pista silenciosa `data:audio/wav`). Cuando el iframe emite el evento `onPlay`, se espera 100ms e inmediatamente se reproduce el audio silencioso para "robarle" el foco del reproductor al sistema operativo e inyectar la metadata real (`track.title`, "Escuela de la Riqueza" y el logo de la marca desde el CDN).
+- **Loop de Re-afirmación**: Añadido un intervalo cada 5 segundos que re-produce el secuestrador silencioso y actualiza la metadata, previniendo que iOS/Android le devuelvan el control al iframe al navegar o tras mucho tiempo.
+- **Mutex Video vs Podcast**: Modificado `LessonPlayer` para prevenir audios superpuestos. Si un usuario tiene el podcast en segundo plano e intenta darle "Play" a cualquier lección visual normal, el sistema automáticamente hace `closePlayer()` sobre el estado global del podcast antes de arrancar el video.
+
+### 10.12 Reglas operativas para retomar
 
 - Después de cada módulo terminado: correr `npm run typecheck` + `npx vitest run <files>` antes de cerrar la tarea.
 - Mantener el inventario de tareas vivo (`TaskCreate`/`TaskUpdate`) en cada sesión nueva.

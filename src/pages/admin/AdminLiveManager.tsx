@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Radio, Image as ImageIcon, Settings2, Save, Plus, Trash2, PlayCircle, StopCircle, Calendar, Clock, Monitor, Copy, Upload, Download, Video } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { fetchLives, fetchEndedLives, fetchRecording, createLive, updateLive, deleteLive, setActiveLive as apiSetActiveLive, checkLiveInputStatus, type LiveEvent } from "@/lib/api/stream/lives";
+import { fetchLives, fetchEndedLives, fetchRecording, createLive, updateLive, deleteLive, setActiveLive as apiSetActiveLive, deactivateAllLives, checkLiveInputStatus, type LiveEvent } from "@/lib/api/stream/lives";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toaster";
 
@@ -208,10 +208,13 @@ const AdminLiveManager = () => {
   const handleCreateNew = async () => {
     try {
       setIsSaving(true);
+      // Al crear nueva sala, usar el Input ID principal por defecto
+      const defaultInputId = PRESET_INPUT_IDS[0]?.value || "";
+      setCustomInputId(false);
       const newLive = await createLive({
         title: "Nuevo Evento",
         description: "",
-        stream_live_input_id: "",
+        stream_live_input_id: defaultInputId,
         recording_stream_uid: "",
         starts_at: new Date(Date.now() + 86400000).toISOString(),
         background_image_url: "",
@@ -248,10 +251,11 @@ const AdminLiveManager = () => {
         } else {
           setActiveLive(null);
           setFormData({
-            title: "", description: "", stream_live_input_id: "", starts_at: "",
+            title: "", description: "", stream_live_input_id: PRESET_INPUT_IDS[0]?.value || "", starts_at: "",
             background_image_url: "", allowed_plans: ["vip"], status: "scheduled",
-            required_plan: "vip", duration_minutes: null,
+            required_plan: "vip", duration_minutes: null, is_active: false, is_paused: false,
           });
+          setCustomInputId(false);
         }
       }
       toast.success("Sala eliminada");
@@ -265,7 +269,22 @@ const AdminLiveManager = () => {
     toast.success(`${label} copiado`);
   };
 
-  if (loading) return <div className="text-white text-center py-20">Cargando salas...</div>;
+  if (loading) return (
+    <div className="max-w-5xl mx-auto pb-20">
+      <div className="animate-pulse space-y-6">
+        <div className="flex justify-between items-start mb-8">
+          <div className="space-y-3">
+            <div className="h-8 w-64 bg-white/10 rounded-lg" />
+            <div className="h-4 w-48 bg-white/5 rounded-lg" />
+          </div>
+          <div className="h-10 w-28 bg-white/10 rounded-xl" />
+        </div>
+        <div className="h-12 bg-white/5 rounded-xl" />
+        <div className="h-64 bg-white/5 rounded-2xl" />
+        <div className="h-48 bg-white/5 rounded-2xl" />
+      </div>
+    </div>
+  );
 
   const isLive = formData.status === "live" && !formData.is_paused;
 
@@ -346,23 +365,36 @@ const AdminLiveManager = () => {
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-textMuted">Planes con acceso</label>
-                <div className="flex items-center gap-4 bg-black/50 border border-white/10 rounded-xl px-4 py-3 h-[50px]">
-                  {["free", "individual", "vip"].map(plan => (
-                    <label key={plan} className="flex items-center gap-2 cursor-pointer text-white text-sm">
-                      <input type="checkbox" checked={formData.allowed_plans?.includes(plan as "free" | "individual" | "vip")}
-                        onChange={e => {
+                <div className="flex flex-wrap items-center gap-2 bg-black/50 border border-white/10 rounded-xl px-4 py-3 min-h-[50px]">
+                  {["free", "individual", "vip"].map(plan => {
+                    const isSelected = formData.allowed_plans?.includes(plan as "free" | "individual" | "vip");
+                    return (
+                      <button
+                        key={plan}
+                        type="button"
+                        onClick={() => {
                           const plans = formData.allowed_plans || [];
                           const p = plan as "free" | "individual" | "vip";
-                          const next = e.target.checked ? [...plans, p] : plans.filter(x => x !== p);
+                          const next = plans.includes(p) ? plans.filter(x => x !== p) : [...plans, p];
                           setFormData({ ...formData, allowed_plans: next });
                         }}
-                        className="accent-gold w-4 h-4" />
-                      <span className="capitalize">{plan}</span>
-                    </label>
-                  ))}
+                        className={cn(
+                          "px-4 py-2 rounded-lg text-sm font-bold transition-all border",
+                          isSelected
+                            ? plan === "free" ? "bg-green-500/15 text-green-400 border-green-500/30 shadow-[0_0_10px_rgba(34,197,94,0.1)]"
+                              : plan === "individual" ? "bg-blue-500/15 text-blue-400 border-blue-500/30 shadow-[0_0_10px_rgba(59,130,246,0.1)]"
+                              : "bg-purple-500/15 text-purple-400 border-purple-500/30 shadow-[0_0_10px_rgba(168,85,247,0.1)]"
+                            : "bg-white/5 text-white/40 border-white/10 hover:border-white/30 hover:text-white/70"
+                        )}
+                      >
+                        {plan === "free" ? "Gratuito" : plan === "individual" ? "Individual" : "VIP"}
+                      </button>
+                    );
+                  })}
                 </div>
-                <p className="text-[10px] text-textMuted/50">
-                  El plan más alto seleccionado se usa como <code>required_plan</code> automáticamente.
+                <p className="text-[10px] text-textMuted/50 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-gold/50" />
+                  El plan más alto seleccionado se usa como <code className="text-gold">required_plan</code> automáticamente.
                 </p>
               </div>
             </div>
@@ -374,7 +406,19 @@ const AdminLiveManager = () => {
               <Monitor size={18} className="text-gold" /> Configuración de Transmisión (OBS)
             </h3>
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-textMuted">Cloudflare Live Input ID</label>
+              <label className="text-sm font-semibold text-textMuted flex items-center justify-between">
+                Cloudflare Live Input ID
+                {!customInputId && formData.stream_live_input_id === PRESET_INPUT_IDS[0]?.value && (
+                  <span className="text-[10px] bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-0.5 rounded-full font-mono">
+                    ✓ Predeterminado
+                  </span>
+                )}
+                {customInputId && (
+                  <span className="text-[10px] bg-gold/10 text-gold border border-gold/20 px-2 py-0.5 rounded-full font-mono">
+                    Personalizado
+                  </span>
+                )}
+              </label>
               <select value={customInputId ? "__custom__" : (formData.stream_live_input_id || "")}
                 onChange={e => {
                   if (e.target.value === "__custom__") {
@@ -397,6 +441,10 @@ const AdminLiveManager = () => {
                   onChange={e => setFormData({ ...formData, stream_live_input_id: e.target.value })}
                   className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-gold font-mono text-sm mt-2" />
               )}
+              <p className="text-[10px] text-textMuted/50 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500/50" /> 
+                El Input ID principal está preconfigurado. Usá "Personalizado" solo si creaste otro Live Input en Cloudflare.
+              </p>
             </div>
 
             <div className="space-y-2 mt-4 pt-4 border-t border-white/10">
@@ -559,7 +607,7 @@ const AdminLiveManager = () => {
                     const updated = await updateLive(activeLive!.id, { status: "ended", recording_stream_uid: recordingUid || formData.recording_stream_uid });
                     setLives(prev => prev.map(l => l.id === updated.id ? updated : l).filter(l => l.status !== "ended"));
                     setActiveLive(null);
-                    setFormData({ title: "", description: "", stream_live_input_id: "", recording_stream_uid: "", starts_at: "", background_image_url: "", allowed_plans: ["vip"], status: "scheduled", required_plan: "vip", duration_minutes: null, is_active: false });
+                    setFormData({ title: "", description: "", stream_live_input_id: PRESET_INPUT_IDS[0]?.value || "", recording_stream_uid: "", starts_at: "", background_image_url: "", allowed_plans: ["vip"], status: "scheduled", required_plan: "vip", duration_minutes: null, is_active: false });
                     const ended = await fetchEndedLives();
                     setEndedLives(ended);
                     setActiveTab("ended");
@@ -590,15 +638,30 @@ const AdminLiveManager = () => {
       )}
 
       {activeTab === "editor" && !activeLive && (
-        <div className="text-center py-20 text-textMuted bg-darker rounded-2xl border border-white/5">
-          <Radio size={40} className="mx-auto mb-4 opacity-30" />
-          <p className="text-lg font-semibold text-white/70">No hay salas</p>
-          <p className="text-sm mt-1">Crea una nueva sala para empezar.</p>
+        <div className="text-center py-20 text-textMuted bg-darker rounded-2xl border border-white/5 relative overflow-hidden group">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-gold/5 rounded-full blur-3xl group-hover:bg-gold/10 transition-colors" />
+          <div className="relative z-10">
+            <Radio size={48} className="mx-auto mb-4 opacity-30 text-white/30" />
+            <p className="text-lg font-semibold text-white/70">No hay salas activas</p>
+            <p className="text-sm mt-2 max-w-sm mx-auto">
+              Seleccioná una sala de la pestaña <strong className="text-white/50">Salas</strong> o creá una nueva para empezar.
+            </p>
+            <button onClick={handleCreateNew} disabled={isSaving}
+              className="mt-6 bg-gold hover:bg-goldHover text-darker px-6 py-3 rounded-xl font-bold inline-flex items-center gap-2 transition-all shadow-lg shadow-gold/20">
+              <Plus size={18} /> Crear primera sala
+            </button>
+          </div>
         </div>
       )}
 
       {activeTab === "rooms" && (
         <div className="space-y-3">
+          <div className="flex items-center gap-2 px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-xs text-textMuted">
+            <Radio size={14} className="text-gold shrink-0" />
+            Solo <strong className="text-white/80 mx-1">una sala</strong> puede estar <strong className="text-green-400 mx-1">Activa</strong> a la vez.
+            La sala activa es la que ven los usuarios en su dashboard y en <code className="text-gold mx-1">/vip-live</code>.
+            Hacé clic en <strong className="text-white/80 mx-1">Activa/Inactiva</strong> para cambiar.
+          </div>
           {lives.length === 0 ? (
             <div className="text-center py-12 text-textMuted bg-darker rounded-xl border border-white/5">
               No hay salas creadas
@@ -613,6 +676,11 @@ const AdminLiveManager = () => {
                     live.status === "live" && !live.is_paused ? "bg-red-500 animate-pulse shadow-[0_0_10px_red]" :
                     live.is_paused ? "bg-yellow-500 animate-pulse" :
                     live.starts_at ? "bg-gold/50" : "bg-gray-600")} />
+                  {live.is_active && (
+                    <span className="text-[8px] font-bold uppercase tracking-wider bg-green-500/15 text-green-400 border border-green-500/30 px-1.5 py-0.5 rounded-full shrink-0">
+                      Activa
+                    </span>
+                  )}
                   <div>
                     <h4 className="text-white font-bold">{live.title || "Sin título"}</h4>
                     <div className="flex flex-wrap gap-2 mt-1 items-center">
@@ -629,23 +697,49 @@ const AdminLiveManager = () => {
                     </div>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <button onClick={async e => {
-                    e.stopPropagation();
-                    try {
-                      const updated = await apiSetActiveLive(live.id);
-                      setLives(prev => prev.map(l => ({ ...l, is_active: l.id === updated.id })));
-                      setActiveLive(updated);
-                      setFormData(updated);
-                      toast.success(`"${live.title || "Sala"}" activada`);
-                    } catch (err) {
-                      console.error(err);
-                      toast.error("Error al activar sala");
-                    }
-                  }}
-                    className={cn("p-2 rounded-lg transition-colors", live.is_active ? "text-gold bg-gold/10" : "text-white/30 hover:text-gold hover:bg-gold/10")}
-                    title={live.is_active ? "Sala activa" : "Activar sala"}>
-                    <Radio size={16} />
+                <div className="flex items-center gap-2">
+                  {/* Toggle Activo/Inactivo */}
+                  <button
+                    onClick={async e => {
+                      e.stopPropagation();
+                      if (live.is_active) {
+                        // Desactivar esta sala
+                        try {
+                          await deactivateAllLives();
+                          setLives(prev => prev.map(l => ({ ...l, is_active: false })));
+                          if (activeLive?.id === live.id) {
+                            setActiveLive(null);
+                            setFormData({
+                              title: "", description: "", stream_live_input_id: PRESET_INPUT_IDS[0]?.value || "", starts_at: "",
+                              background_image_url: "", allowed_plans: ["vip"], status: "scheduled",
+                              required_plan: "vip", duration_minutes: null, is_active: false, is_paused: false,
+                            });
+                            setCustomInputId(false);
+                          }
+                          toast.success(`"${live.title || "Sala"}" desactivada`);
+                        } catch { toast.error("Error al desactivar"); }
+                      } else {
+                        // Activar esta sala
+                        try {
+                          const updated = await apiSetActiveLive(live.id);
+                          setLives(prev => prev.map(l => ({ ...l, is_active: l.id === updated.id })));
+                          setActiveLive(updated);
+                          setFormData(updated);
+                          setCustomInputId(!PRESET_INPUT_IDS.some(p => p.value === updated.stream_live_input_id));
+                          toast.success(`"${live.title || "Sala"}" activada`);
+                        } catch { toast.error("Error al activar sala"); }
+                      }
+                    }}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border",
+                      live.is_active
+                        ? "bg-green-500/15 text-green-400 border-green-500/30 shadow-[0_0_10px_rgba(34,197,94,0.1)]"
+                        : "bg-white/5 text-white/40 border-white/10 hover:border-white/30 hover:text-white/70"
+                    )}
+                    title={live.is_active ? "Desactivar sala" : "Activar sala"}
+                  >
+                    <span className={cn("w-2 h-2 rounded-full", live.is_active ? "bg-green-400 shadow-[0_0_6px_rgba(34,197,94,0.5)]" : "bg-white/20")} />
+                    {live.is_active ? "Activa" : "Inactiva"}
                   </button>
                   <button onClick={e => { e.stopPropagation(); handleDelete(live.id); }}
                     className="p-2 text-red-500/50 hover:text-red-400 bg-red-500/5 rounded-lg hover:bg-red-500/20 transition-colors">

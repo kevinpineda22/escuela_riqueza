@@ -56,6 +56,11 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
   }, [videoSrc]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handlePlayRequest = () => {
+    // Si el usuario decide reproducir un video normal, apagamos el podcast global para evitar audios superpuestos
+    if (isPodcastMode) {
+      closePlayer();
+    }
+    
     setPlayRequested(true);
     if (!isPremium && !hasAdPlayed) {
       setShowAd(true);
@@ -80,6 +85,27 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
     } else if (videoSrc && lesson && moduleTitle) {
       setPlayRequested(false);
       const currentTimeToPass = streamRef.current?.currentTime ?? lastKnownTime;
+
+      // En móvil: desbloquear audio creando un AudioContext dentro del gesto del usuario.
+      // Esto permite que PodcastEngine pueda hacer play() sin ser bloqueado por el navegador.
+      try {
+        const ACtx = (window.AudioContext || (window as any).webkitAudioContext);
+        if (ACtx) {
+          const ctx = new ACtx();
+          if (ctx.state === "suspended") ctx.resume();
+          const osc = ctx.createOscillator();
+          osc.connect(ctx.destination);
+          osc.start(0);
+          osc.stop(0.001);
+          setTimeout(() => ctx.close(), 200);
+        }
+      } catch { /* fallback silencioso */ }
+
+      // Intento forzado de desbloquear el autoplay del iframe enviando play en el call stack
+      if (podcastStreamRef.current) {
+        podcastStreamRef.current.play().catch(() => {});
+      }
+
       playTrack({
         id: lesson.id,
         title: lesson.titulo,

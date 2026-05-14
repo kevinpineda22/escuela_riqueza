@@ -15,6 +15,7 @@ import {
   ArrowLeft,
   Crown,
   Radio,
+  Trash2,
 } from "lucide-react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
@@ -24,6 +25,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { toast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth.store";
+import { usePlayerStore } from "@/stores/player.store";
 import { PLANS } from "@/types/user";
 import { supabase } from "@/lib/supabase";
 import { fetchModules, fetchLessons, type Module as DBModule, type Lesson as DBLesson } from "@/lib/api/stream/content";
@@ -168,6 +170,23 @@ const StudentDashboard = () => {
     setAvatarPreview(URL.createObjectURL(file));
   };
 
+  const handleDeleteAvatar = async () => {
+    if (!user) return;
+    setIsUpdatingProfile(true);
+    try {
+      const { error } = await supabase.from("profiles").update({ avatar_url: null }).eq("id", user.id);
+      if (error) throw error;
+      setUser({ ...user, avatarUrl: null });
+      setAvatarPreview(null);
+      setAvatarFile(null);
+      toast.success("Foto eliminada", { description: "Tu perfil ahora usa la imagen por defecto." });
+    } catch (err) {
+      toast.error("Error al eliminar foto", { description: (err as any).message });
+    } finally {
+      setIsUpdatingProfile(false);
+    }
+  };
+
   const handleUpdateProfile = async () => {
     if (!user) return;
     setIsUpdatingProfile(true);
@@ -193,7 +212,7 @@ const StudentDashboard = () => {
   };
 
   const isPremium = user?.plan === PLANS.INDIVIDUAL || user?.plan === PLANS.VIP;
-  const isPodcastMode = localStorage.getItem("podcast_active") === "true";
+  const isPodcastMode = usePlayerStore((s) => s.isPodcastMode && !!s.track);
 
   const NAV_ITEMS = useMemo(() => [
     { id: "modulos", icon: PlayCircle, label: "Módulos" },
@@ -729,6 +748,16 @@ const StudentDashboard = () => {
                           <p className="text-white/90 font-medium mb-1">Actualiza tu avatar</p>
                           <p className="text-xs">Haz clic en la imagen para subir una nueva.</p>
                           <p className="text-xs mt-1 text-white/40">Recomendado: 400x400px (JPG, PNG. Max 2MB)</p>
+                          {avatarPreview && (
+                            <button
+                              type="button"
+                              onClick={handleDeleteAvatar}
+                              disabled={isUpdatingProfile}
+                              className="mt-3 flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                            >
+                              <Trash2 size={12} /> Eliminar foto
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>

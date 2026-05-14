@@ -117,6 +117,17 @@ export async function setActiveLive(id: string): Promise<LiveEvent> {
   return data as LiveEvent;
 }
 
+export async function deactivateAllLives(): Promise<void> {
+  const { error } = await supabase
+    .from("lives")
+    .update({ is_active: false })
+    .in("status", ["scheduled", "live"]);
+  if (error) {
+    console.error("[deactivateAllLives] Supabase error:", error);
+    throw error;
+  }
+}
+
 export async function fetchEndedLives(): Promise<LiveEvent[]> {
   const { data, error } = await supabase
     .from("lives")
