@@ -8,6 +8,7 @@ import { usePlayerStore } from "@/stores/player.store";
 import { useAuthStore } from "@/stores/auth.store";
 import { supabase } from "@/lib/supabase";
 import { fetchActiveLive, checkLiveInputStatus, type LiveEvent } from "@/lib/api/stream/lives";
+import { useIsDesktop } from "@/hooks/useMediaQuery";
 
 const CF_SUBDOMAIN = import.meta.env.VITE_CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN || "";
 
@@ -20,6 +21,7 @@ const VIPLiveRoom = () => {
   const [timeLeft, setTimeLeft] = useState({ hours: 0, minutes: 0, seconds: 0 });
   const [liveInputConnected, setLiveInputConnected] = useState(false);
   const [isChatOpenMobile, setIsChatOpenMobile] = useState(false);
+  const isDesktop = useIsDesktop();
   const { clearPlayer } = usePlayerStore();
 
   useEffect(() => { clearPlayer(); }, [clearPlayer]);
@@ -410,59 +412,65 @@ const VIPLiveRoom = () => {
         </div>
       </div>
 
-      {/* Chat — sidebar fijo en desktop, drawer overlay en mobile */}
-      <div className="hidden md:flex md:w-80 lg:w-[400px] md:h-screen bg-darker shrink-0 z-50 overflow-hidden">
-        <LiveChat liveId={live.id} />
-      </div>
+      {/* Chat — sidebar fijo SOLO en desktop. En mobile NO se monta para evitar
+          duplicar la suscripción Realtime a Supabase (eso colapsa el canal). */}
+      {isDesktop && (
+        <div className="md:flex md:w-80 lg:w-[400px] md:h-screen bg-darker shrink-0 z-50 overflow-hidden">
+          <LiveChat liveId={live.id} />
+        </div>
+      )}
 
-      {/* FAB del chat (solo mobile) — z-40 para no competir con sheets z-50 */}
-      <button
-        onClick={() => setIsChatOpenMobile(true)}
-        aria-label="Abrir chat"
-        className="md:hidden fixed bottom-5 right-5 z-40 w-14 h-14 rounded-full bg-gold hover:bg-goldHover text-darker flex items-center justify-center shadow-[0_10px_30px_-5px_rgba(204,164,59,0.6)] active:scale-95 transition-transform"
-      >
-        <MessageSquare size={22} />
-        <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse border-2 border-darker" />
-      </button>
+      {/* FAB y drawer del chat — SOLO en mobile */}
+      {!isDesktop && (
+        <>
+          <button
+            onClick={() => setIsChatOpenMobile(true)}
+            aria-label="Abrir chat"
+            className="fixed bottom-5 right-5 z-40 w-14 h-14 rounded-full bg-gold hover:bg-goldHover text-darker flex items-center justify-center shadow-[0_10px_30px_-5px_rgba(204,164,59,0.6)] active:scale-95 transition-transform"
+          >
+            <MessageSquare size={22} />
+            <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse border-2 border-darker" />
+          </button>
 
-      {/* Chat drawer (mobile) */}
-      <AnimatePresence>
-        {isChatOpenMobile && (
-          <>
-            <motion.button
-              type="button"
-              aria-label="Cerrar chat"
-              onClick={() => setIsChatOpenMobile(false)}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="md:hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-[60]"
-            />
-            <motion.div
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              transition={{ type: "spring", damping: 30, stiffness: 280 }}
-              className="md:hidden fixed bottom-0 left-0 right-0 h-[85dvh] z-[70] bg-darker rounded-t-3xl overflow-hidden shadow-[0_-20px_40px_-10px_rgba(0,0,0,0.8)] flex flex-col"
-            >
-              <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-black/40 shrink-0">
-                <div className="w-10 h-1 bg-white/20 rounded-full absolute left-1/2 -translate-x-1/2 top-2" />
-                <h3 className="text-sm font-bold text-white pt-2">Comunidad VIP</h3>
-                <button
+          <AnimatePresence>
+            {isChatOpenMobile && (
+              <>
+                <motion.div
+                  key="chat-overlay"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
                   onClick={() => setIsChatOpenMobile(false)}
-                  aria-label="Cerrar chat"
-                  className="p-2.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+                  className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60]"
+                />
+                <motion.div
+                  key="chat-drawer"
+                  initial={{ y: "100%" }}
+                  animate={{ y: 0 }}
+                  exit={{ y: "100%" }}
+                  transition={{ type: "spring", damping: 30, stiffness: 280 }}
+                  className="fixed bottom-0 left-0 right-0 h-[85dvh] z-[70] bg-darker rounded-t-3xl overflow-hidden shadow-[0_-20px_40px_-10px_rgba(0,0,0,0.8)] flex flex-col"
                 >
-                  <X size={20} />
-                </button>
-              </div>
-              <div className="flex-1 min-h-0">
-                <LiveChat liveId={live.id} />
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+                  <div className="relative flex items-center justify-between px-4 py-3 pt-5 border-b border-white/10 bg-black/40 shrink-0">
+                    <div className="w-10 h-1 bg-white/20 rounded-full absolute left-1/2 -translate-x-1/2 top-2" />
+                    <h3 className="text-sm font-bold text-white">Comunidad VIP</h3>
+                    <button
+                      onClick={() => setIsChatOpenMobile(false)}
+                      aria-label="Cerrar chat"
+                      className="p-2.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+                  <div className="flex-1 min-h-0">
+                    <LiveChat liveId={live.id} />
+                  </div>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+        </>
+      )}
     </div>
   );
 };

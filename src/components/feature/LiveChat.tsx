@@ -31,9 +31,15 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000" }: { liveId?
   const [newMessage, setNewMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll al último mensaje
+  // Auto-scroll al último mensaje.
+  // Safari iOS < 16 puede tirar al usar { behavior: "smooth" } si el elemento
+  // está dentro de un contenedor que cambió de tamaño recientemente.
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    try {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    } catch {
+      messagesEndRef.current?.scrollIntoView(false);
+    }
   };
 
   useEffect(() => {

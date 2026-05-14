@@ -19,9 +19,9 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    if (import.meta.env.DEV) {
-      console.error("[ErrorBoundary]", error, info);
-    }
+    // Loguear SIEMPRE (incluso en prod) para poder diagnosticar crashes desde el
+    // Web Inspector de Safari iOS conectado por USB.
+    console.error("[ErrorBoundary]", error, info);
   }
 
   reset = () => this.setState({ hasError: false, error: null });
