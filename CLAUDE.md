@@ -677,3 +677,47 @@ Esto garantiza que solo haya UN `<Stream>` de Cloudflare en el DOM (el de `Podca
 - **Selector de Input ID**: dropdown con preset `950f6b77844e5a369bbeea208b2c428e` + opción "Personalizado" que muestra input libre. Estado `customInputId` controla si se muestra input editable o select.
 - **Progreso de lecciones**: tabla `user_lesson_progress` con RLS estricto (cada usuario solo ve/edita su propio progreso). Auto-guardado cada 10s desde `LessonPlayer`. Regla del 90% para marcar completado. Modal de retomo si hay progreso >5s y no completado.
 - **Nuevas páginas estáticas**: registrar en `routes.tsx` con `PageTransition` wrapper. Usar mismo patrón: Header + main + Footer, con enlace "Volver al inicio" y badge de sección.
+
+---
+
+## 12. Historial de cambios — 2026-05-15
+
+### Fix: Upload de videos a Cloudflare Stream (CORS + "Video has no name")
+
+**Problema**: El upload usaba `XMLHttpRequest` + `FormData` contra `upload.cloudflarestream.com/{uid}`. Cloudflare Stream no habilita CORS para POST multipart/form-data desde navegadores. El preflight fallaba silenciosamente, el archivo nunca se subía, y Cloudflare mostraba "Video has no name" / "Pending Upload" para siempre.
+
+**Solución**: Reemplazado el mecanismo de upload por **TUS protocol** usando `tus-js-client` (librería oficial que Cloudflare recomienda para uploads desde browser).
+
+**Cambios técnicos:**
+- `src/lib/api/stream/content.ts` — `uploadFileWithProgress()` reescrito con `tus.Upload`. Envía `filename` y `filetype` como metadata TUS. Reintentos automáticos [0, 3s, 5s, 10s, 20s]. Manejo de errores con `tus.DetailedError`.
+- `api/stream/upload-url.ts` — Agregado manejo de OPTIONS preflight con CORS headers (`Access-Control-Allow-Origin: *`). Soporte para `req.body.name` para nombrar el video en Cloudflare. Errores más claros.
+
+### Cleanup: Eliminación de código muerto
+
+Se eliminaron 10 archivos que eran mocks/data quemados sin uso real:
+
+| Archivo | Motivo |
+|---|---|
+| `src/mocks/courses.ts` | Datos mock, no importado por ningún componente real |
+| `src/mocks/lives.ts` | Idem |
+| `src/mocks/users.ts` | Idem |
+| `src/mocks/` (directorio) | Quedó vacío |
+| `src/lib/api/courses.ts` | API mock envuelve mocks, no importada |
+| `src/lib/api/lives.ts` | Idem |
+| `src/lib/api/billing.ts` | Idem |
+| `src/pages/admin/AdminVideoUpload.tsx` | No enrutado en routes.tsx, reemplazado por AdminContentManager |
+| `src/types/course.ts` | Solo usado por mocks/APIs eliminados |
+| `src/types/live.ts` | Idem |
+| `src/types/subscription.ts` | Idem |
+
+**Archivos limpiados:**
+- `src/lib/api/client.ts` — eliminada función `delay()` (solo usada por APIs mock eliminadas). Conservado `ApiError` (usado por `auth.ts`, `AuthPage.tsx`, `ResetPassword.tsx`).
+
+**Verificación:** `npm run typecheck` ✅, `npm run test` (15/15) ✅, `npm run lint` (sin errores nuevos) ✅.
+
+### Estado actual del proyecto
+
+- **Upload de videos**: Funcional con TUS protocol. Pendiente verificar en producción tras deploy.
+- **Mocks**: 0 archivos mock. Todo el contenido se sirve desde Supabase (real).
+- **Tipos de datos**: Solo queda `src/types/user.ts`. Los tipos `Module`, `Lesson` están en `src/lib/api/stream/content.ts` donde se usan.
+- **Páginas admin**: Gestor de Contenido (`/admin/content`), Lives (`/admin/lives`), Métricas (`/admin/metrics`), Usuarios (`/admin/users`), Settings (`/admin/settings`).

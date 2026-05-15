@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import * as tus from "tus-js-client";
 
 export interface Module {
   id: string;
@@ -147,27 +148,28 @@ export function uploadFileWithProgress(
   onProgress: (percent: number) => void
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const formData = new FormData();
-    formData.append("file", file);
+    const upload = new tus.Upload(file, {
+      endpoint: uploadURL,
+      retryDelays: [0, 3000, 5000, 10000, 20000],
+      removeFingerprintOnSuccess: true,
+      metadata: {
+        filename: file.name,
+        filetype: file.type,
+      },
+      onProgress: (bytesUploaded: number, bytesTotal: number) => {
+        if (bytesTotal > 0) {
+          onProgress(Math.round((bytesUploaded / bytesTotal) * 100));
+        }
+      },
+      onSuccess: () => resolve(),
+      onError: (error: Error | tus.DetailedError) => {
+        const msg = error instanceof tus.DetailedError
+          ? `Upload failed (HTTP ${error.originalResponse?.getStatus() || "unknown"})`
+          : error.message;
+        reject(new Error(msg));
+      },
+    });
 
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", uploadURL);
-
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) {
-        onProgress(Math.round((e.loaded / e.total) * 100));
-      }
-    };
-
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        resolve();
-      } else {
-        reject(new Error(`Upload failed: ${xhr.status}`));
-      }
-    };
-
-    xhr.onerror = () => reject(new Error("Network error during upload"));
-    xhr.send(formData);
+    upload.start();
   });
 }
