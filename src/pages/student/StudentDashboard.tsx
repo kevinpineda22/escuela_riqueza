@@ -16,13 +16,14 @@ import {
   Crown,
   Radio,
   Trash2,
+  Lock,
+  Sparkles,
 } from "lucide-react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import LessonPlayer from "@/components/feature/LessonPlayer";
 import { SkeletonCard } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth.store";
@@ -99,7 +100,7 @@ const StudentDashboard = () => {
   }, [location.search]);
 
   const [selectedModule, setSelectedModule] = useState<string | null>(null);
-  const [badgeModalModule, setBadgeModalModule] = useState<DBModule | null>(null);
+  const [selectedBadgeId, setSelectedBadgeId] = useState<string | null>(null);
 
   const changeTab = (next: TabId) => {
     setSelectedModule(null);
@@ -791,120 +792,381 @@ const StudentDashboard = () => {
               </motion.div>
             )}
 
-            {activeTab === "certificados" && (
+            {activeTab === "certificados" && (() => {
+              const unlockedCount = dbModules.filter(m => getModuleProgress(m.id) === 100 && (dbLessonsMap[m.id]?.length || 0) > 0).length;
+              const activeBadgeModule = (selectedBadgeId && dbModules.find(m => m.id === selectedBadgeId)) || dbModules[0] || null;
+              const activeIsUnlocked = activeBadgeModule ? (getModuleProgress(activeBadgeModule.id) === 100 && (dbLessonsMap[activeBadgeModule.id]?.length || 0) > 0) : false;
+              const activeContent = activeBadgeModule ? getBadgeContent(activeBadgeModule.title) : null;
+              const activeProgress = activeBadgeModule ? getModuleProgress(activeBadgeModule.id) : 0;
+
+              return (
                 <motion.div key="certificados" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
-                  <div className="mb-6">
-                    <h2 className="text-3xl font-extrabold text-white tracking-tight">Tus Insignias</h2>
-                    <p className="text-textMuted mt-1">Completa el 100% de cada módulo para desbloquear su aval.</p>
+                  <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+                    <div>
+                      <h2 className="text-3xl font-extrabold text-white tracking-tight">Sala de Trofeos</h2>
+                      <p className="text-textMuted mt-1">Cada insignia representa un eje de inteligencia conquistado.</p>
+                    </div>
+                    {dbModules.length > 0 && (
+                      <motion.div
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-gradient-to-br from-gold/10 to-gold/5 border border-gold/30"
+                      >
+                        <Award className="text-gold drop-shadow-[0_0_8px_rgba(204,164,59,0.5)]" size={22} />
+                        <div>
+                          <div className="text-gold font-extrabold text-lg leading-none">{unlockedCount} <span className="text-textMuted/70 font-medium text-sm">/ {dbModules.length}</span></div>
+                          <div className="text-[9px] uppercase tracking-[0.2em] text-textMuted mt-1">Desbloqueadas</div>
+                        </div>
+                      </motion.div>
+                    )}
                   </div>
-                  
+
                   {dbModules.length === 0 ? (
-                    <EmptyState 
+                    <EmptyState
                       icon={Award}
                       title="Logros Desbloqueados"
                       description="Termina el 100% de un módulo para obtener tu aval digital."
                       className="h-80"
                     />
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                      {dbModules.map((mod, idx) => {
-                        const isUnlocked = getModuleProgress(mod.id) === 100 && dbLessonsMap[mod.id]?.length > 0;
-                        return (
-                          <motion.div
-                            key={mod.id}
-                            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: idx * 0.05 }}
-                            className={cn(
-                              "border rounded-2xl p-6 relative overflow-hidden transition-all flex flex-col items-center text-center",
-                              isUnlocked
-                                ? "bg-black/40 border-gold/40 shadow-[0_0_20px_rgba(204,164,59,0.15)] cursor-pointer hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(204,164,59,0.25)]"
-                                : "bg-white/[0.02] border-white/5 opacity-50 grayscale"
-                            )}
-                            onClick={() => isUnlocked && setBadgeModalModule(mod)}
-                          >
-                            {isUnlocked && (
-                              <div className="absolute top-0 right-0 w-32 h-32 bg-gold/10 rounded-full blur-3xl -mr-10 -mt-10" />
-                            )}
-                            <div className="w-full h-64 flex items-center justify-center mb-4 relative z-10">
-                              {mod.badge_image_url ? (
-                                <img
-                                  src={mod.badge_image_url}
-                                  alt={mod.title}
-                                  className={cn(
-                                    "w-56 h-56 object-contain",
-                                    !isUnlocked && "opacity-40 grayscale",
-                                    isUnlocked && "drop-shadow-[0_0_30px_rgba(204,164,59,0.5)]"
+                    <div className="space-y-8">
+                      {/* SHOWCASE */}
+                      <div className="relative bg-gradient-to-b from-black/70 via-black/40 to-black/70 border border-gold/20 rounded-3xl overflow-hidden">
+                        {/* Spotlight conic rotando */}
+                        <motion.div
+                          aria-hidden
+                          className="absolute inset-0 pointer-events-none"
+                          animate={{ rotate: 360 }}
+                          transition={{ duration: 40, repeat: Infinity, ease: "linear" }}
+                          style={{
+                            background: activeIsUnlocked
+                              ? "conic-gradient(from 0deg at 50% 50%, transparent 0deg, rgba(204,164,59,0.18) 45deg, transparent 90deg, transparent 180deg, rgba(204,164,59,0.12) 225deg, transparent 270deg)"
+                              : "conic-gradient(from 0deg at 50% 50%, transparent 0deg, rgba(255,255,255,0.05) 60deg, transparent 120deg, transparent 240deg, rgba(255,255,255,0.03) 300deg, transparent 360deg)",
+                          }}
+                        />
+                        {/* Glow centro */}
+                        <div className={cn(
+                          "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[36rem] h-[36rem] rounded-full blur-[120px] pointer-events-none",
+                          activeIsUnlocked ? "bg-gold/15" : "bg-white/[0.03]"
+                        )} />
+                        {/* Vignette */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-darker/60 to-transparent pointer-events-none" />
+
+                        <div className="relative z-10 px-6 sm:px-10 lg:px-14 py-12 sm:py-16 grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-10 lg:gap-12 items-center">
+                          {/* Trofeo */}
+                          <div className="flex justify-center order-1 lg:order-1">
+                            <div className="relative" style={{ perspective: "1200px" }}>
+                              {/* Partículas (solo desbloqueado) */}
+                              {activeIsUnlocked && [...Array(10)].map((_, i) => {
+                                const angle = (i / 10) * Math.PI * 2;
+                                const radius = 310 + (i % 3) * 40;
+                                return (
+                                  <motion.div
+                                    key={`particle-${activeBadgeModule?.id}-${i}`}
+                                    className="absolute top-1/2 left-1/2 w-1.5 h-1.5 rounded-full bg-gold pointer-events-none"
+                                    style={{ boxShadow: "0 0 8px rgba(204,164,59,0.8)" }}
+                                    animate={{
+                                      x: [0, Math.cos(angle) * radius, 0],
+                                      y: [0, Math.sin(angle) * radius, 0],
+                                      opacity: [0, 1, 0],
+                                      scale: [0, 1.2, 0],
+                                    }}
+                                    transition={{
+                                      duration: 3 + (i % 4) * 0.5,
+                                      repeat: Infinity,
+                                      delay: i * 0.25,
+                                      ease: "easeInOut",
+                                    }}
+                                  />
+                                );
+                              })}
+
+                              {/* Reflejo en el piso */}
+                              <div
+                                aria-hidden
+                                className={cn(
+                                  "absolute left-1/2 -translate-x-1/2 bottom-[-48px] w-[28rem] h-9 rounded-[50%] blur-xl",
+                                  activeIsUnlocked ? "bg-gold/35" : "bg-white/5"
+                                )}
+                              />
+
+                              <AnimatePresence mode="wait">
+                                <motion.div
+                                  key={activeBadgeModule?.id}
+                                  initial={{ opacity: 0, scale: 0.7, rotateY: -120 }}
+                                  animate={{ opacity: 1, scale: 1, rotateY: 0 }}
+                                  exit={{ opacity: 0, scale: 0.7, rotateY: 120 }}
+                                  transition={{ duration: 0.6, type: "spring", stiffness: 90, damping: 14 }}
+                                  className="relative"
+                                  style={{ transformStyle: "preserve-3d" }}
+                                >
+                                  <motion.div
+                                    animate={{
+                                      y: [0, -14, 0],
+                                      rotateY: [0, 8, 0, -8, 0],
+                                    }}
+                                    transition={{
+                                      duration: 7,
+                                      repeat: Infinity,
+                                      ease: "easeInOut",
+                                    }}
+                                    style={{ transformStyle: "preserve-3d" }}
+                                  >
+                                    {activeBadgeModule?.badge_image_url ? (
+                                      <img
+                                        src={activeBadgeModule.badge_image_url}
+                                        alt={activeBadgeModule.title}
+                                        className={cn(
+                                          "w-[26rem] sm:w-[30rem] lg:w-[34rem] h-[26rem] sm:h-[30rem] lg:h-[34rem] object-contain select-none",
+                                          activeIsUnlocked
+                                            ? "drop-shadow-[0_0_70px_rgba(204,164,59,0.7)]"
+                                            : "opacity-30 [filter:grayscale(1)_brightness(0.55)_sepia(0.7)_hue-rotate(8deg)_saturate(2)] drop-shadow-[0_0_35px_rgba(204,164,59,0.15)]"
+                                        )}
+                                        draggable={false}
+                                      />
+                                    ) : (
+                                      <div
+                                        className={cn(
+                                          "w-60 sm:w-72 lg:w-80 h-60 sm:h-72 lg:h-80 rounded-full flex items-center justify-center border-4",
+                                          activeIsUnlocked
+                                            ? "bg-gold/20 border-gold text-gold shadow-[0_0_60px_rgba(204,164,59,0.55)]"
+                                            : "bg-white/5 border-white/10 text-white/25"
+                                        )}
+                                      >
+                                        <Award size={130} />
+                                      </div>
+                                    )}
+                                  </motion.div>
+
+                                  {/* Lock overlay para bloqueadas */}
+                                  {!activeIsUnlocked && (
+                                    <motion.div
+                                      initial={{ opacity: 0, scale: 0.5 }}
+                                      animate={{ opacity: 1, scale: 1 }}
+                                      transition={{ delay: 0.25, type: "spring" }}
+                                      className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                                    >
+                                      <motion.div
+                                        animate={{ y: [0, -6, 0] }}
+                                        transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                                        className="w-20 h-20 rounded-full bg-darker/95 border-2 border-gold/40 flex items-center justify-center shadow-[0_0_30px_rgba(0,0,0,0.9)] backdrop-blur-md"
+                                      >
+                                        <Lock size={32} className="text-gold/90" />
+                                      </motion.div>
+                                    </motion.div>
                                   )}
-                                />
-                              ) : (
-                                <div className={cn(
-                                  "w-16 h-16 rounded-full flex items-center justify-center border-2",
-                                  isUnlocked ? "bg-gold/20 text-gold border-gold shadow-[0_0_15px_rgba(204,164,59,0.3)]" : "bg-white/10 text-white/40 border-white/10"
-                                )}>
-                                  {isUnlocked ? <CheckCircle2 size={28} /> : <Award size={28} />}
-                                </div>
-                              )}
+
+                                  {/* Sparkle accent (solo desbloqueado) */}
+                                  {activeIsUnlocked && (
+                                    <motion.div
+                                      animate={{ rotate: 360, scale: [1, 1.2, 1] }}
+                                      transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                                      className="absolute top-4 right-4 text-gold pointer-events-none"
+                                    >
+                                      <Sparkles size={28} className="drop-shadow-[0_0_10px_rgba(204,164,59,0.8)]" />
+                                    </motion.div>
+                                  )}
+                                </motion.div>
+                              </AnimatePresence>
                             </div>
-                            <h3 className={cn("text-lg font-bold mb-2 relative z-10", isUnlocked ? "text-gold" : "text-white/60")}>
-                              {isUnlocked ? "¡Módulo Completado!" : "Bloqueado"}
-                            </h3>
-                            <p className="text-sm font-medium text-white/80 line-clamp-2 relative z-10">
-                              {mod.title}
-                            </p>
-                            
-                            {!isUnlocked && (
-                              <div className="mt-4 w-full relative z-10">
-                                <div className="text-xs text-white/40 mb-1">{getModuleProgress(mod.id)}% completado</div>
-                                <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-                                  <div className="h-full bg-white/30 rounded-full" style={{ width: `${getModuleProgress(mod.id)}%` }} />
-                                </div>
+                          </div>
+
+                          {/* Detalle */}
+                          <AnimatePresence mode="wait">
+                            <motion.div
+                              key={`detail-${activeBadgeModule?.id}`}
+                              initial={{ opacity: 0, x: 30 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              exit={{ opacity: 0, x: -30 }}
+                              transition={{ duration: 0.45, delay: 0.15 }}
+                              className="space-y-5 order-2 lg:order-2 text-center lg:text-left"
+                            >
+                              <div>
+                                <motion.div
+                                  initial={{ opacity: 0, y: 10 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  transition={{ delay: 0.25 }}
+                                  className="inline-block mb-3"
+                                >
+                                  {activeIsUnlocked ? (
+                                    <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-500/10 border border-green-500/30 text-green-400 text-[10px] font-bold uppercase tracking-[0.2em]">
+                                      <CheckCircle2 size={12} /> Conquistado
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/15 text-white/70 text-[10px] font-bold uppercase tracking-[0.2em]">
+                                      <Lock size={11} /> {activeProgress}% completado
+                                    </span>
+                                  )}
+                                </motion.div>
+                                <motion.h3
+                                  initial={{ opacity: 0, y: 10 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  transition={{ delay: 0.3 }}
+                                  className={cn(
+                                    "text-3xl sm:text-4xl font-extrabold tracking-tight leading-tight",
+                                    activeIsUnlocked ? "text-gold" : "text-white/85"
+                                  )}
+                                >
+                                  {activeBadgeModule?.title}
+                                </motion.h3>
                               </div>
-                            )}
-                          </motion.div>
-                        );
-                      })}
+
+                              <motion.p
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.4 }}
+                                className="text-textMain/85 leading-relaxed text-sm sm:text-[15px]"
+                              >
+                                {activeContent?.description}
+                              </motion.p>
+
+                              <motion.div
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                transition={{ delay: 0.5, duration: 0.4 }}
+                                className={cn(
+                                  "rounded-2xl px-5 py-4 border-l-4 backdrop-blur-sm",
+                                  activeIsUnlocked
+                                    ? "bg-gradient-to-r from-gold/15 to-gold/5 border-gold shadow-[0_0_25px_rgba(204,164,59,0.15)]"
+                                    : "bg-white/5 border-white/25"
+                                )}
+                              >
+                                <p
+                                  className={cn(
+                                    "font-bold text-sm sm:text-[15px] italic leading-relaxed",
+                                    activeIsUnlocked ? "text-gold" : "text-white/65"
+                                  )}
+                                >
+                                  {activeContent?.keyPhrase}
+                                </p>
+                              </motion.div>
+
+                              {!activeIsUnlocked && activeBadgeModule && (
+                                <motion.div
+                                  initial={{ opacity: 0, y: 10 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  transition={{ delay: 0.6 }}
+                                  className="pt-2"
+                                >
+                                  <div className="flex items-center justify-between text-xs mb-2">
+                                    <span className="text-textMuted uppercase tracking-widest font-medium">Progreso</span>
+                                    <span className="text-gold font-bold">{activeProgress}%</span>
+                                  </div>
+                                  <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden border border-white/5">
+                                    <motion.div
+                                      initial={{ width: 0 }}
+                                      animate={{ width: `${activeProgress}%` }}
+                                      transition={{ duration: 1.1, ease: "easeOut", delay: 0.7 }}
+                                      className="h-full bg-gradient-to-r from-gold/60 via-gold to-goldHover rounded-full shadow-[0_0_10px_rgba(204,164,59,0.5)]"
+                                    />
+                                  </div>
+                                </motion.div>
+                              )}
+                            </motion.div>
+                          </AnimatePresence>
+                        </div>
+                      </div>
+
+                      {/* GALERÍA DE MINIATURAS */}
+                      <div>
+                        <div className="flex items-center justify-between mb-4">
+                          <h4 className="text-[11px] uppercase font-bold tracking-[0.25em] text-textMuted">Tu colección</h4>
+                          <span className="text-[10px] uppercase tracking-widest text-textMuted/50">Tocá una insignia</span>
+                        </div>
+                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 sm:gap-4">
+                          {dbModules.map((mod, idx) => {
+                            const isUnlocked = getModuleProgress(mod.id) === 100 && (dbLessonsMap[mod.id]?.length || 0) > 0;
+                            const isSelected = activeBadgeModule?.id === mod.id;
+                            const progress = getModuleProgress(mod.id);
+
+                            return (
+                              <motion.button
+                                key={mod.id}
+                                type="button"
+                                initial={{ opacity: 0, y: 24 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: idx * 0.05 + 0.1 }}
+                                whileHover={{ y: -5 }}
+                                whileTap={{ scale: 0.96 }}
+                                onClick={() => setSelectedBadgeId(mod.id)}
+                                className={cn(
+                                  "relative aspect-square rounded-2xl border-2 transition-colors flex items-center justify-center overflow-hidden group",
+                                  isSelected
+                                    ? "border-gold bg-gold/10 shadow-[0_0_30px_rgba(204,164,59,0.4)]"
+                                    : isUnlocked
+                                      ? "border-gold/25 bg-black/30 hover:border-gold/60"
+                                      : "border-white/5 bg-white/[0.02] hover:border-white/15"
+                                )}
+                              >
+                                {isSelected && (
+                                  <motion.div
+                                    layoutId="selectedThumbGlow"
+                                    className="absolute inset-0 bg-gradient-to-br from-gold/10 to-transparent pointer-events-none"
+                                    transition={{ type: "spring", stiffness: 280, damping: 28 }}
+                                  />
+                                )}
+
+                                {mod.badge_image_url ? (
+                                  <img
+                                    src={mod.badge_image_url}
+                                    alt={mod.title}
+                                    className={cn(
+                                      "w-[96%] h-[96%] object-contain transition-all relative z-10 select-none",
+                                      isUnlocked
+                                        ? "drop-shadow-[0_0_18px_rgba(204,164,59,0.5)] group-hover:scale-110"
+                                        : "opacity-35 [filter:grayscale(1)_brightness(0.6)_sepia(0.7)_hue-rotate(8deg)_saturate(1.8)] group-hover:opacity-55"
+                                    )}
+                                    draggable={false}
+                                  />
+                                ) : (
+                                  <Award
+                                    size={54}
+                                    className={cn(
+                                      "transition-colors relative z-10",
+                                      isUnlocked ? "text-gold" : "text-white/25"
+                                    )}
+                                  />
+                                )}
+
+                                {/* Badge esquina superior derecha */}
+                                <div className="absolute top-1.5 right-1.5 z-20">
+                                  {isUnlocked ? (
+                                    <motion.div
+                                      initial={{ scale: 0 }}
+                                      animate={{ scale: 1 }}
+                                      transition={{ delay: idx * 0.05 + 0.3, type: "spring" }}
+                                      className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center shadow-[0_0_12px_rgba(34,197,94,0.6)]"
+                                    >
+                                      <CheckCircle2 size={13} className="text-darker" strokeWidth={3} />
+                                    </motion.div>
+                                  ) : (
+                                    <div className="w-6 h-6 rounded-full bg-darker/85 border border-white/15 flex items-center justify-center backdrop-blur-md">
+                                      <Lock size={10} className="text-white/55" />
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Progress bar inferior (bloqueadas) */}
+                                {!isUnlocked && progress > 0 && (
+                                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/50 z-10">
+                                    <motion.div
+                                      initial={{ width: 0 }}
+                                      animate={{ width: `${progress}%` }}
+                                      transition={{ duration: 0.8, delay: idx * 0.05 + 0.4 }}
+                                      className="h-full bg-gold/70"
+                                    />
+                                  </div>
+                                )}
+                              </motion.button>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </motion.div>
-              )}
-
-              <Dialog open={!!badgeModalModule} onOpenChange={(open) => { if (!open) setBadgeModalModule(null); }}>
-                <DialogContent className="bg-darker border-gold/30 sm:max-w-lg max-h-[90dvh] overflow-y-auto">
-                  <DialogHeader className="text-center">
-                    <DialogTitle className="text-2xl font-extrabold text-gold">
-                      {badgeModalModule?.title}
-                    </DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-6">
-                    {badgeModalModule?.badge_image_url ? (
-                      <div className="flex justify-center">
-                        <img
-                          src={badgeModalModule.badge_image_url}
-                          alt={badgeModalModule.title}
-                          className="w-44 h-44 object-contain drop-shadow-[0_0_30px_rgba(204,164,59,0.5)]"
-                        />
-                      </div>
-                    ) : (
-                      <div className="flex justify-center">
-                        <div className="w-24 h-24 rounded-full bg-gold/20 text-gold border-2 border-gold flex items-center justify-center shadow-[0_0_20px_rgba(204,164,59,0.4)]">
-                          <CheckCircle2 size={48} />
-                        </div>
-                      </div>
-                    )}
-                    <div className="bg-gold/5 border border-gold/20 rounded-xl p-5">
-                      <p className="text-textMain text-sm leading-relaxed">
-                        {getBadgeContent(badgeModalModule?.title).description}
-                      </p>
-                    </div>
-                    <div className="text-center">
-                      <div className="inline-block bg-gold/10 border border-gold/30 rounded-xl px-5 py-3">
-                        <p className="text-gold font-bold text-sm">
-                          {getBadgeContent(badgeModalModule?.title).keyPhrase}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
+              );
+            })()}
 
             {activeTab === "comunidad" && (
               <motion.div 
