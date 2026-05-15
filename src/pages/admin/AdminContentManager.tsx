@@ -46,7 +46,7 @@ const AdminContentManager = () => {
   const [reordering, setReordering] = useState(false);
 
   const uploadVideo = useCallback(async (file: File): Promise<string> => {
-    const { uploadURL, uid } = await getDirectUploadUrl();
+    const { uploadURL, uid } = await getDirectUploadUrl(file.size, file.name);
     setUploadProgress(0);
     try {
       await uploadFileWithProgress(uploadURL, file, (pct) => setUploadProgress(pct));
