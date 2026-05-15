@@ -571,9 +571,9 @@ const StudentDashboard = () => {
                               videoSrc={activeLesson.stream_uid || ""} 
                               isPremium={isPremium} 
                               lesson={{
-                                id: Number(activeLesson.id),
+                                id: activeLesson.id,
                                 titulo: activeLesson.title,
-                                modId: Number(activeLesson.module_id)
+                                modId: activeLesson.module_id
                               }}
                               moduleTitle={dbModules.find(m => m.id === activeLesson.module_id)?.title || ""}
                             />
