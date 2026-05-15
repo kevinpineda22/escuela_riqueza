@@ -18,7 +18,7 @@ interface Intelligence {
 const intelligences: Intelligence[] = [
   {
     id: 1,
-    title: "Inteligencia Mental",
+    title: "Inteligencia del Aprendizaje",
     description:
       "Aprende a aprender. Memoria, foco profundo y velocidad de procesamiento — la base de todo el resto.",
     icon: <BookOpen className="w-10 h-10" />,
@@ -70,7 +70,7 @@ interface CardLayoutProps extends CardProps {
 const IntelligenceCard = ({ intelligence, index, total, layout = "carousel" }: CardLayoutProps) => {
   const { user } = useAuthStore();
   const isPremium = user?.plan === PLANS.INDIVIDUAL || user?.plan === PLANS.VIP;
-  const linkTo = user ? "/dashboard?tab=modulos" : "/leccion";
+  const linkTo = user ? "/dashboard?tab=modulos" : `/explorar/${intelligence.id}`;
 
   const sizeClasses =
     layout === "stack"

@@ -11,12 +11,12 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 interface LessonPlayerProps {
   videoSrc?: string;
   isPremium: boolean;
-  lesson?: { id: string | number; titulo: string; modId: string | number };
+  lesson?: { id: string; titulo: string; modId: string };
   moduleTitle?: string;
 }
 
 const AD_DURATION = 41;
-const AD_VIDEO_ID = "02b22da00a68753980615a8df8f06e96";
+const AD_VIDEO_ID = "e5d953d28c8b3d1c1ae8f0b0825191be";
 
 const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayerProps) => {
   const { playTrack, isPodcastMode, closePlayer, track, lastKnownTime, lastVideoId, setPlaybackProgress } = usePlayerStore();
@@ -368,19 +368,13 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
           </div>
         )}
 
-        {videoSrc && !isPlayingThisInPodcast && (
-          <div 
-            key={videoSrc}
-            className={cn(
-              "w-full h-full absolute inset-0 bg-black transition-all duration-300",
-              showAd || !playRequested ? "opacity-0 pointer-events-none z-0" : "opacity-100 z-10"
-            )}
-          >
+        {playRequested && !showAd && videoSrc && !isPlayingThisInPodcast && (
+          <div className="w-full h-full absolute inset-0 bg-black z-10">
             <Stream
               streamRef={streamRef}
               src={videoSrc}
-              controls={!showAd}
-              autoplay={playRequested && !showAd}
+              controls
+              autoplay
               preload="auto"
               className="w-full h-full border-none"
               onTimeUpdate={handleTimeUpdate}

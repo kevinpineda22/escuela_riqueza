@@ -127,7 +127,7 @@ const AdminVideoUpload = () => {
                   <SelectItem value="aprendizaje" className="text-white hover:bg-white/5 focus:bg-white/10 focus:text-gold cursor-pointer transition-colors py-2.5">Inteligencia del aprendizaje</SelectItem>
                   <SelectItem value="riqueza" className="text-white hover:bg-white/5 focus:bg-white/10 focus:text-gold cursor-pointer transition-colors py-2.5">Inteligencia de la riqueza</SelectItem>
                   <SelectItem value="emocional" className="text-white hover:bg-white/5 focus:bg-white/10 focus:text-gold cursor-pointer transition-colors py-2.5">Inteligencia emocional</SelectItem>
-                  <SelectItem value="comercial" className="text-white hover:bg-white/5 focus:bg-white/10 focus:text-gold cursor-pointer transition-colors py-2.5">Inteligencia Comercial y Negociadora</SelectItem>
+                  <SelectItem value="comercial" className="text-white hover:bg-white/5 focus:bg-white/10 focus:text-gold cursor-pointer transition-colors py-2.5">Inteligencia Comercial</SelectItem>
                   <SelectItem value="estrategica" className="text-white hover:bg-white/5 focus:bg-white/10 focus:text-gold cursor-pointer transition-colors py-2.5">Inteligencia Estratégica</SelectItem>
                   <SelectItem value="espiritual" className="text-white hover:bg-white/5 focus:bg-white/10 focus:text-gold cursor-pointer transition-colors py-2.5">Inteligencia Espiritual</SelectItem>
                 </SelectContent>

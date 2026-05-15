@@ -55,7 +55,7 @@ const LessonViewer = () => {
           <LessonPlayer
             videoSrc={VIDEO_FILENAME}
             isPremium={isUserPremium}
-            lesson={{ id: 1, titulo: "El camino a la libertad financiera", modId: 1 }}
+            lesson={{ id: "1", titulo: "El camino a la libertad financiera", modId: "1" }}
             moduleTitle="Módulo 1"
           />
 

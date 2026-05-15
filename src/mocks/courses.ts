@@ -32,7 +32,7 @@ export const MOCK_MODULES: Module[] = [
   {
     id: "mod-comercial",
     slug: "inteligencia-comercial",
-    title: "Inteligencia Comercial y Negociadora",
+    title: "Inteligencia Comercial",
     description: "Vender y negociar como un profesional.",
     iconKey: "briefcase",
     orderIndex: 4,

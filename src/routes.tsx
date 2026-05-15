@@ -10,6 +10,7 @@ import NotFound from "@/pages/public/NotFound";
 import HistoryPage from "@/pages/public/HistoryPage";
 import TermsPage from "@/pages/public/TermsPage";
 import PrivacyPage from "@/pages/public/PrivacyPage";
+import ModulePreview from "@/pages/public/ModulePreview";
 import LessonViewer from "@/pages/student/LessonViewer";
 import StudentDashboard from "@/pages/student/StudentDashboard";
 import VIPLiveRoom from "@/pages/student/VIPLiveRoom";
@@ -54,6 +55,7 @@ const AppRoutes = () => {
         <Route path="/historia" element={<PageTransition><HistoryPage /></PageTransition>} />
         <Route path="/terminos" element={<PageTransition><TermsPage /></PageTransition>} />
         <Route path="/privacidad" element={<PageTransition><PrivacyPage /></PageTransition>} />
+        <Route path="/explorar/:intelligenceId" element={<PageTransition><ModulePreview /></PageTransition>} />
 
         {/* Estudiantes (cualquier plan logueado) */}
         <Route
