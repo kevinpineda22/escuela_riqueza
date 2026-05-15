@@ -22,6 +22,7 @@ import Footer from "@/components/layout/Footer";
 import LessonPlayer from "@/components/feature/LessonPlayer";
 import { SkeletonCard } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth.store";
@@ -45,6 +46,43 @@ const getInitials = (name: string) => {
 
 const VALID_TABS: TabId[] = ["modulos", "notas", "certificados", "comunidad", "perfil"];
 
+const BADGE_CONTENT: Record<string, { description: string; keyPhrase: string }> = {
+  "inteligencia del aprendizaje": {
+    description: "Abrirás los ojos y dejarás atrás las enseñanzas obsoletas del sistema educativo, para darle paso a esos aprendizajes significativos que merece tu vida. Te darás cuenta de que el empresarismo no se desarrolla desde el conocimiento, sino desde la mentalidad.",
+    keyPhrase: "¡La mentalidad la determina el aprendizaje!",
+  },
+  "inteligencia de la riqueza": {
+    description: "Descubrirás temas y realidades controversiales. Por un lado entenderás que nos han educado para ser pobres y sabrás que la riqueza se despierta porque todos llevamos un rico dentro de nosotros en espera de ser despertado. Y por otro lado entenderás por qué el concepto que tienes sobre el trabajo, el éxito y las metas no son más que creencias limitantes que te frenan y no te dejan ver más allá de tus narices.",
+    keyPhrase: "¡La riqueza la produce la inteligencia y las creencias limitantes son generadoras de pobreza!",
+  },
+  "inteligencia emocional": {
+    description: "El problema más grave en las empresas es la carencia de inteligencia emocional que deteriora la calidad de las relaciones, crea una comunicación deficiente y un trabajo en equipo bastante pobre. Sin inteligencia emocional no puede haber empresas prósperas, ni una sociedad que cree bienestar para la vida.",
+    keyPhrase: "¡Además la inteligencia emocional es vital para la resolución de los problemas!",
+  },
+  "inteligencia comercial": {
+    description: "Este eje tan disruptivo, revolucionario e importante es el que te ayudará a vender; pero no se trata vender tradicionalmente, sino de ofrecer un valor significativo. Por lo tanto aquí aprenderás cómo generar confianza y convertirte en un experto en lograr relaciones de alto valor con tus clientes.",
+    keyPhrase: "¡Recuerda que solo lo que significa algo tiene valor!",
+  },
+  "inteligencia estratégica": {
+    description: "El sinónimo de empresa es ''Problema'' y los problemas solo se manejan con estrategia, por eso el empresario tiene que volverse un pensador estratégico. Además, la vida del empresario está constantemente amenazada por la incertidumbre y por el cambio. Pensar estratégicamente es esencial para garantizar el crecimiento y la solidez de la empresa en un mundo donde reina la inestabilidad.",
+    keyPhrase: "¡La estrategia no se trata de planear, sino de anticipar y responder de manera creativa a lo desconocido!",
+  },
+  "inteligencia espiritual": {
+    description: "Este módulo es el más innovador del programa, ya que reconoce que para ser un verdadero empresario y líder se requiere de una profunda sabiduría. Entenderás que un sabio no es el que sabe, sino el que saborea el fracaso, la pérdida, la incertidumbre y los problemas, para darle el paso al disfrute de algo nuevo. Las personas espirituales son las que logran vivir la integridad.",
+    keyPhrase: "Recuerda esta frase: ''La integridad y la espiritualidad son la clave del éxito empresarial''.",
+  },
+};
+
+function getBadgeContent(moduleTitle: string | undefined): { description: string; keyPhrase: string } {
+  if (!moduleTitle) return { description: "Has completado este módulo con éxito.", keyPhrase: "¡Felicidades por tu logro!" };
+  const normalized = moduleTitle.toLowerCase().trim();
+  const content = BADGE_CONTENT[normalized];
+  if (content) return content;
+  const matched = Object.entries(BADGE_CONTENT).find(([key]) => normalized.includes(key));
+  if (matched) return matched[1];
+  return { description: "Has completado este módulo con éxito.", keyPhrase: "¡Felicidades por tu logro!" };
+}
+
 const StudentDashboard = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -61,6 +99,7 @@ const StudentDashboard = () => {
   }, [location.search]);
 
   const [selectedModule, setSelectedModule] = useState<string | null>(null);
+  const [badgeModalModule, setBadgeModalModule] = useState<DBModule | null>(null);
 
   const changeTab = (next: TabId) => {
     setSelectedModule(null);
@@ -776,23 +815,24 @@ const StudentDashboard = () => {
                             initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: idx * 0.05 }}
                             className={cn(
                               "border rounded-2xl p-6 relative overflow-hidden transition-all flex flex-col items-center text-center",
-                              isUnlocked ? "bg-black/40 border-gold/40 shadow-[0_0_20px_rgba(204,164,59,0.15)]" : "bg-white/[0.02] border-white/5 opacity-50 grayscale"
+                              isUnlocked
+                                ? "bg-black/40 border-gold/40 shadow-[0_0_20px_rgba(204,164,59,0.15)] cursor-pointer hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(204,164,59,0.25)]"
+                                : "bg-white/[0.02] border-white/5 opacity-50 grayscale"
                             )}
+                            onClick={() => isUnlocked && setBadgeModalModule(mod)}
                           >
                             {isUnlocked && (
                               <div className="absolute top-0 right-0 w-32 h-32 bg-gold/10 rounded-full blur-3xl -mr-10 -mt-10" />
                             )}
-                            <div className={cn(
-                              "w-24 h-24 flex items-center justify-center mb-4 relative z-10",
-                              !isUnlocked && "opacity-40 grayscale"
-                            )}>
+                            <div className="w-full h-64 flex items-center justify-center mb-4 relative z-10">
                               {mod.badge_image_url ? (
                                 <img
                                   src={mod.badge_image_url}
                                   alt={mod.title}
                                   className={cn(
-                                    "w-full h-full object-contain",
-                                    isUnlocked && "drop-shadow-[0_0_15px_rgba(204,164,59,0.3)]"
+                                    "w-56 h-56 object-contain",
+                                    !isUnlocked && "opacity-40 grayscale",
+                                    isUnlocked && "drop-shadow-[0_0_30px_rgba(204,164,59,0.5)]"
                                   )}
                                 />
                               ) : (
@@ -800,7 +840,7 @@ const StudentDashboard = () => {
                                   "w-16 h-16 rounded-full flex items-center justify-center border-2",
                                   isUnlocked ? "bg-gold/20 text-gold border-gold shadow-[0_0_15px_rgba(204,164,59,0.3)]" : "bg-white/10 text-white/40 border-white/10"
                                 )}>
-                                  {isUnlocked ? <CheckCircle2 size={32} /> : <Award size={32} />}
+                                  {isUnlocked ? <CheckCircle2 size={28} /> : <Award size={28} />}
                                 </div>
                               )}
                             </div>
@@ -826,6 +866,45 @@ const StudentDashboard = () => {
                   )}
                 </motion.div>
               )}
+
+              <Dialog open={!!badgeModalModule} onOpenChange={(open) => { if (!open) setBadgeModalModule(null); }}>
+                <DialogContent className="bg-darker border-gold/30 sm:max-w-lg max-h-[90dvh] overflow-y-auto">
+                  <DialogHeader className="text-center">
+                    <DialogTitle className="text-2xl font-extrabold text-gold">
+                      {badgeModalModule?.title}
+                    </DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-6">
+                    {badgeModalModule?.badge_image_url ? (
+                      <div className="flex justify-center">
+                        <img
+                          src={badgeModalModule.badge_image_url}
+                          alt={badgeModalModule.title}
+                          className="w-44 h-44 object-contain drop-shadow-[0_0_30px_rgba(204,164,59,0.5)]"
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex justify-center">
+                        <div className="w-24 h-24 rounded-full bg-gold/20 text-gold border-2 border-gold flex items-center justify-center shadow-[0_0_20px_rgba(204,164,59,0.4)]">
+                          <CheckCircle2 size={48} />
+                        </div>
+                      </div>
+                    )}
+                    <div className="bg-gold/5 border border-gold/20 rounded-xl p-5">
+                      <p className="text-textMain text-sm leading-relaxed">
+                        {getBadgeContent(badgeModalModule?.title).description}
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <div className="inline-block bg-gold/10 border border-gold/30 rounded-xl px-5 py-3">
+                        <p className="text-gold font-bold text-sm">
+                          {getBadgeContent(badgeModalModule?.title).keyPhrase}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
 
             {activeTab === "comunidad" && (
               <motion.div 
