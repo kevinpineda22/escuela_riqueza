@@ -129,9 +129,11 @@ export async function updateModuleOrder(orderedIds: string[]): Promise<void> {
 
 // --- CLOUDFLARE ---
 
-export async function getDirectUploadUrl(): Promise<{ uploadURL: string; uid: string }> {
+export async function getDirectUploadUrl(size: number, name?: string): Promise<{ uploadURL: string; uid: string }> {
   const res = await fetch('/api/stream/upload-url', {
-    method: 'POST'
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ size, name })
   });
 
   if (!res.ok) {
@@ -148,9 +150,9 @@ export function uploadFileWithProgress(
   onProgress: (percent: number) => void
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const upload = new tus.Upload(file, {
-      endpoint: uploadURL,
-      retryDelays: [0, 3000, 5000, 10000, 20000],
+      const upload = new tus.Upload(file, {
+        uploadUrl: uploadURL,
+        retryDelays: [0, 3000, 5000, 10000, 20000],
       removeFingerprintOnSuccess: true,
       metadata: {
         filename: file.name,
