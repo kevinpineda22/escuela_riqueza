@@ -8,6 +8,7 @@ export interface Module {
   allowed_plans: ("free" | "individual" | "vip")[];
   is_published: boolean;
   created_at: string;
+  badge_image_url?: string | null;
 }
 
 export interface Lesson {
@@ -113,22 +114,60 @@ export async function deleteLesson(id: string): Promise<void> {
   if (error) throw error;
 }
 
+// --- REORDENAR MÓDULOS ---
+
+export async function updateModuleOrder(orderedIds: string[]): Promise<void> {
+  const results = await Promise.all(
+    orderedIds.map((id, index) =>
+      supabase.from("modules").update({ order_index: index }).eq("id", id)
+    )
+  );
+  const err = results.find(r => r.error);
+  if (err) throw err.error;
+}
+
 // --- CLOUDFLARE ---
 
 export async function getDirectUploadUrl(): Promise<{ uploadURL: string; uid: string }> {
-  try {
-    const res = await fetch('/api/stream/upload-url', {
-      method: 'POST'
-    });
-    
-    if (!res.ok) {
-      throw new Error('Fallo al solicitar URL de subida a Vercel');
-    }
-    
-    const data = await res.json();
-    return data;
-  } catch (err) {
-    console.error("Error obteniendo Direct Upload URL:", err);
-    throw err;
+  const res = await fetch('/api/stream/upload-url', {
+    method: 'POST'
+  });
+
+  if (!res.ok) {
+    throw new Error('Fallo al solicitar URL de subida a Vercel');
   }
+
+  const data = await res.json();
+  return data;
+}
+
+export function uploadFileWithProgress(
+  uploadURL: string,
+  file: File,
+  onProgress: (percent: number) => void
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", uploadURL);
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        onProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve();
+      } else {
+        reject(new Error(`Upload failed: ${xhr.status}`));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error("Network error during upload"));
+    xhr.send(formData);
+  });
 }

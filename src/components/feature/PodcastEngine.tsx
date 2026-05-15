@@ -15,6 +15,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Stream } from "@cloudflare/stream-react";
 import { usePlayerStore } from "@/stores/player.store";
+import { saveUserProgress } from "@/lib/api/stream/progress";
 
 // Ref global para que LessonPlayer y GlobalPodcastPlayer puedan
 // leer currentTime / duration sin necesitar su propio iframe.
@@ -123,6 +124,10 @@ const PodcastEngine = () => {
     setPlaybackProgress,
   } = usePlayerStore();
 
+  const lastSavedTimeRef = useRef(0);
+  const lastSaveCallTimeRef = useRef(Date.now());
+  const endedRef = useRef(false);
+
   // Mantener refs sincronizadas
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
   useEffect(() => { isPodcastModeRef.current = isPodcastMode; }, [isPodcastMode]);
@@ -167,6 +172,8 @@ const PodcastEngine = () => {
   // Resetear posición cuando cambia el track
   useEffect(() => {
     initializedRef.current = false;
+    endedRef.current = false;
+    lastSavedTimeRef.current = 0;
   }, [track?.videoId]);
 
   // ── Watchdog ─────────────────────────────────────────────────────────────
@@ -348,6 +355,19 @@ const PodcastEngine = () => {
         } catch { /* iOS antiguos pueden rechazar valores fuera de rango */ }
       }
     }
+
+    // Guardar progreso en Supabase (cada 10s, throttle 5s)
+    const lessonId = currentTrack.id;
+    if (lessonId && el.currentTime > 0 && Math.abs(el.currentTime - lastSavedTimeRef.current) >= 10) {
+      const now = Date.now();
+      if (now - lastSaveCallTimeRef.current > 5000) {
+        lastSavedTimeRef.current = el.currentTime;
+        lastSaveCallTimeRef.current = now;
+        const duration = el.duration;
+        const isCompleted = endedRef.current || (duration > 0 && (el.currentTime / duration) >= 0.9);
+        saveUserProgress(String(lessonId), el.currentTime, isCompleted).catch(() => {});
+      }
+    }
   };
 
   const handlePause = () => {
@@ -358,7 +378,14 @@ const PodcastEngine = () => {
     }
   };
 
-  const handleEnded = () => setIsPlaying(false);
+  const handleEnded = () => {
+    endedRef.current = true;
+    setIsPlaying(false);
+    const currentTrack = trackRef.current;
+    if (currentTrack?.id && internalRef.current?.duration) {
+      saveUserProgress(String(currentTrack.id), internalRef.current.duration, true).catch(() => {});
+    }
+  };
 
   // ── Render ───────────────────────────────────────────────────────────────
 

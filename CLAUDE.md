@@ -30,19 +30,21 @@
 | Lenguaje | TypeScript | ✅ migrado (todos los `.tsx`) |
 | Routing | React Router DOM 7 | ✅ instalado |
 | Estilos | Tailwind CSS 4 (`@tailwindcss/vite`) | ✅ instalado |
-| UI primitives | shadcn/ui (Radix + button, sheet, select, dropdown, accordion, tooltip) | ✅ instalado |
+| UI primitives | shadcn/ui (Radix + button, sheet, select, dropdown, accordion, tooltip, dialog) | ✅ instalado |
 | Animaciones | motion (Framer Motion v12) + Lenis (smooth scroll desktop) | ✅ instalado |
 | Iconos | lucide-react | ✅ instalado |
+| Carousels | embla-carousel-react + embla-carousel-autoplay | ✅ instalado |
 | Forms + validación | react-hook-form + zod (v4) | ✅ instalado |
-| State cliente | zustand (auth.store, preferences.store) | ✅ instalado |
+| State cliente | zustand (auth.store, player.store, preferences.store) | ✅ instalado |
 | Server state | @tanstack/react-query | ✅ instalado |
 | Auth + DB + Realtime + Storage | Supabase | ✅ integrado (auth real, RLS, realtime chat) |
-| VOD + Live | Cloudflare Stream | ✅ integrado (upload directo + Live Inputs) |
+| VOD + Live | Cloudflare Stream | ✅ integrado (upload directo + Live Inputs + grabaciones) |
 | Storage de recursos (PDFs) | Cloudflare R2 | ❌ pendiente |
-| Pagos | Stripe (Subscriptions) | ❌ pendiente (mock plan en perfil) |
-| Backend mínimo | Vercel Serverless Functions (`/api/*.ts`) | 🟡 parcial (`/api/stream/upload-url.ts`) |
+| Pagos | Stripe (Subscriptions) | 🟡 parcial (tabla subscriptions via SQL trigger, sin webhook Stripe aún) |
+| Backend mínimo | Vercel Serverless Functions (`/api/*.ts`) | ✅ 3 functions (`upload-url.ts`, `live-input-status.ts`, `recording.ts`) |
+| Gráficos | recharts | ✅ instalado |
 | SEO landing | vite-prerender-plugin | ❌ pendiente |
-| Tests | Vitest + @testing-library/react | ✅ configurado (sin cobertura aún) |
+| Tests | Vitest + @testing-library/react + @testing-library/jest-dom | ✅ configurado (15 tests) |
 | Deploy | Vercel | ✅ deployando |
 
 > **No hay backend Express standalone.** El "backend" es: Supabase (auth/DB/realtime) + Cloudflare (video/storage) + Stripe (pagos) + un puñado de Vercel Functions para firmar URLs y recibir webhooks.
@@ -56,43 +58,72 @@ escuela_riqueza/
 ├── api/                          # Vercel Serverless Functions
 │   ├── stream/
 │   │   ├── upload-url.ts         # Firma URL de upload directo a Cloudflare Stream
-│   │   └── playback-token.ts     # Firma token de reproducción para video VIP
-│   └── stripe/
+│   │   ├── live-input-status.ts  # Consulta estado del Live Input (OBS conectado?)
+│   │   └── recording.ts          # Obtiene grabación de un Live Input finalizado
+│   └── stripe/                   # ❌ Pendiente
 │       ├── checkout.ts           # Crea sesión de checkout
 │       └── webhook.ts            # Recibe eventos Stripe, actualiza Supabase
-├── public/                       # Assets estáticos
+├── public/                       # Assets estáticos (favicon.svg)
 ├── src/
 │   ├── main.tsx
 │   ├── App.tsx
-│   ├── routes.tsx                # Definición central de rutas + guards
+│   ├── routes.tsx                # Definición central de rutas + guards + PageTransition wrapper
 │   ├── lib/
 │   │   ├── supabase.ts           # Cliente Supabase tipado
-│   │   ├── stripe.ts             # Helpers cliente
-│   │   ├── stream.ts             # Helpers Cloudflare Stream
-│   │   └── env.ts                # Validación de env vars con zod
+│   │   ├── utils.ts              # cn() helper (clsx + tailwind-merge)
+│   │   ├── query-client.ts       # QueryClient de @tanstack/react-query
+│   │   └── api/                  # Capa de datos
+│   │       ├── client.ts         # Helpers base (delay, ApiError)
+│   │       ├── auth.ts           # signIn, signUp, signOut, getCurrentUser reales
+│   │       ├── courses.ts        # Mock de módulos/lecciones
+│   │       ├── lives.ts          # Mock de lives/chat
+│   │       ├── billing.ts        # Mock de suscripción
+│   │       ├── admin/
+│   │       │   ├── metrics.ts    # Dashboard KPIs reales desde Supabase
+│   │       │   └── users.ts      # CRUD de usuarios admin real
+│   │       └── stream/
+│   │           ├── content.ts    # CRUD real de módulos/lecciones en Supabase
+│   │           ├── lives.ts      # CRUD real de lives, input status, recordings
+│   │           └── progress.ts   # Progreso de lecciones (upsert)
+│   ├── schemas/                  # Validación zod
+│   │   ├── auth.schema.ts        # Login/Signup/Reset
+│   │   ├── lesson.schema.ts      # Subida de lección
+│   │   └── live.schema.ts        # Creación de live
 │   ├── types/
-│   │   └── database.ts           # Tipos generados desde Supabase (`supabase gen types`)
+│   │   ├── user.ts               # Plan, UserRole, User
+│   │   ├── course.ts             # Module, Lesson, ModuleWithLessons
+│   │   ├── live.ts               # Live, ChatMessage, LiveStatus
+│   │   └── subscription.ts       # Subscription, SubscriptionStatus
+│   ├── stores/                   # Zustand stores con persist
+│   │   ├── auth.store.ts         # Sesión del usuario
+│   │   ├── player.store.ts       # Modo podcast (track, isPlaying, volumen)
+│   │   └── preferences.store.ts  # Animaciones toggle
+│   ├── mocks/                    # Datos mock legacy
+│   │   ├── courses.ts            # 6 módulos, 3 lecciones
+│   │   ├── lives.ts              # 1 live programado
+│   │   └── users.ts              # 4 usuarios de prueba
 │   ├── hooks/
-│   │   ├── useAuth.ts
-│   │   ├── useSubscription.ts
-│   │   └── useRequireRole.ts
+│   │   ├── useAuth.ts            # Envuelve auth store + api auth
+│   │   ├── useRequireRole.ts     # Guard de rutas por rol/plan
+│   │   ├── useMediaQuery.ts      # useIsDesktop, usePrefersReducedMotion
+│   │   └── useScrollToHash.ts    # Hash scroll con offset para AnimatePresence
 │   ├── components/
-│   │   ├── ui/                   # shadcn/ui primitives (button, dialog, table…)
-│   │   ├── layout/               # Header, Footer, Sidebar
-│   │   └── feature/              # Componentes de dominio (LessonPlayer, LiveChat…)
-│   ├── pages/
-│   │   ├── public/               # LandingPage, Login, Signup
-│   │   ├── student/              # Dashboard, LessonViewer, VIPLiveRoom
-│   │   └── admin/                # AdminDashboard, AdminVideoUpload, AdminLives, AdminUsers
-│   └── features/                 # Lógica de dominio agrupada
-│       ├── auth/
-│       ├── courses/
-│       ├── lives/
-│       ├── billing/
-│       └── admin/
+│   │   ├── ui/                   # shadcn/ui primitives (button, dialog, sheet, select, dropdown, accordion, tooltip, skeleton, empty-state, toaster)
+│   │   ├── layout/               # Header, Footer, AdminLayout, RequireAuth, ErrorBoundary
+│   │   └── feature/              # PodcastEngine, GlobalPodcastPlayer, LessonPlayer, LiveChat, AuthSplash, AnimationToggle, HeroCinematic, AwakeningAct, IntelligencesAct, PathAct, PlansAct
+│   └── pages/
+│       ├── public/               # LandingPage, AuthPage, ResetPassword, EmailConfirmed, Plans, HistoryPage, TermsPage, PrivacyPage, NotFound
+│       ├── student/              # StudentDashboard, LessonViewer, VIPLiveRoom
+│       └── admin/                # AdminMetrics, AdminContentManager, AdminLiveManager, AdminVideoUpload, AdminUsers, AdminUserDetail, AdminSettings
+├── test/                         # Setup vitest
 ├── docs/
-│   └── ARCHITECTURE.md
-├── env.example                   # Plantilla — copiar a .env.local
+│   ├── ARCHITECTURE.md
+│   ├── migrate-lives-schema.sql  # Migración lives + RLS
+│   └── RESPONSIVE_AUDIT.md       # Auditoría responsive
+├── sync_admin_plan.sql           # RPC admin_update_user_plan, admin_delete_user
+├── sync_signup.sql               # Trigger handle_new_user (perfil + suscripción)
+├── sync_profiles.sql             # Trigger handle_user_update (email sync)
+├── sync_progress.sql             # Tabla user_lesson_progress + RLS + trigger
 ├── CLAUDE.md
 └── README.md
 ```
@@ -140,8 +171,9 @@ npm run dev          # vite dev server en http://localhost:5173
 npm run build        # build de producción → dist/
 npm run preview      # preview del build
 npm run lint         # eslint
-npm run typecheck    # tsc --noEmit (a configurar)
-npm run test         # vitest (a configurar)
+npm run typecheck    # tsc --noEmit
+npm run test         # vitest
+npm run test:ui      # vitest --ui
 ```
 
 > **Nunca correr `npm run build` para "verificar" un cambio.** Para tipos: `npm run typecheck`. Para lógica: `npm run test`.
@@ -284,8 +316,8 @@ for select using (
 
 ### 10.2 Funcionalidad pendiente (la trabaja el compañero de equipo)
 - `/api/stream/playback-token.ts` — token firmado para reproducir VOD premium sin que se filtre la URL.
-- `/api/stripe/checkout.ts` + `/api/stripe/webhook.ts` — sincronización de plan vía suscripciones.
-- Tabla `subscriptions` real (hoy el plan vive en `users.plan` mock).
+- `/api/stripe/checkout.ts` + `/api/stripe/webhook.ts` — sincronización de plan vía suscripciones real de Stripe.
+- Tabla `subscriptions` existe y se crea vía trigger SQL en signup, pero sin webhook Stripe real que la mantenga sincronizada.
 - Generación de tipos `src/types/database.ts` con `supabase gen types`.
 - Cloudflare R2 para PDFs / recursos descargables.
 
@@ -303,6 +335,8 @@ for select using (
 - `Plans.tsx` (página pública `/planes` completa con FAQ interactivo y tabla comparativa).
 - `HistoryPage.tsx` (página `/historia` con video Cloudflare Stream embebido y copia profesional).
 - `TermsPage.tsx` y `PrivacyPage.tsx` (páginas legales profesionales con contactos formales).
+- `EmailConfirmed.tsx` (post-signup: checking/success/error estados con auto-redirect).
+- `AdminUserDetail.tsx` (drill-down: perfil, suscripción, acciones — modificar plan/suspender/eliminar).
 
 **🟡 DECENT (gold/dark aplicado pero falta polish)**
 - `Header.tsx` — falta: menú mobile funcional (botón existe pero no abre nada).
@@ -315,10 +349,6 @@ for select using (
 **🔴 BASIC / MISSING (placeholder o sin identidad)**
 - `LessonViewer.tsx` — playlist sin animación, modal upgrade plano, sin empty states.
 
-**⚫ Pantallas que aún no existen**
-- "Cuenta verificada / Email confirmado" post-signup (Supabase email link).
-- Detalle de usuario en admin (drill-down desde `AdminUsers`).
-
 ### 10.4 Sistemas transversales
 
 **✅ Construidos (Fase 1 + Fase 2)**
@@ -329,12 +359,12 @@ for select using (
 - **AuthBootstrap provider** — `src/components/providers/AuthBootstrap.tsx`. En boot revalida sesión Supabase y refresca el store (loop fixeado usando `onAuthStateChange`).
 - **ErrorBoundary** — `src/components/layout/ErrorBoundary.tsx` (clase + fallback default premium o custom).
 - **404 catch-all** — ruta `path="*"` → `NotFound.tsx`.
+- **Page transitions** — `routes.tsx` envuelto en `AnimatePresence` con `PageTransition` wrapper (fade + blur entre rutas). ✅
+- **Modal/Dialog premium** — `src/components/ui/dialog.tsx` con backdrop blur, zoom-in/zoom-out scale, gold focus ring. ✅
 - **Tests** — 11 (Skeleton + EmptyState) + 4 (ErrorBoundary) = 15/15 ✅.
 
 **❌ Pendientes**
-1. **Page transitions** — wrapper con `AnimatePresence` por route para fade/slide entre pantallas (Fase Cierre).
-2. **Modal/Dialog premium** — backdrop blur + scale-in en lugar de radix defaults (Fase Cierre).
-3. **Custom Stream player skin** — wrapper sobre `<Stream>` (solo para VOD, ya no para lives).
+1. **Custom Stream player skin** — wrapper sobre `<Stream>` (solo para VOD, ya no para lives).
 
 ### 10.5 Plan de fases de estilo
 
@@ -363,9 +393,9 @@ for select using (
 - Pulir `GlobalPodcastPlayer` (thumb slider custom, pulse en barras durante playback, expand/collapse mobile).
 - Pulir `AdminContentManager` (skeleton, focus animado, depth en upload zones).
 
-**🔜 Fase Cierre — Transitions globales + Modal premium**
-- Wrapper con `AnimatePresence` en `routes.tsx` para fade/slide entre rutas.
-- Wrapper sobre `Dialog` (radix) con backdrop blur + scale-in para reemplazar los defaults en toda la app.
+**✅ Fase Cierre — Transitions globales + Modal premium**
+- ✅ Wrapper con `AnimatePresence` en `routes.tsx` para fade/slide entre rutas.
+- ✅ Wrapper sobre `Dialog` (radix) con backdrop blur + scale-in para reemplazar los defaults en toda la app.
 
 ### 10.7 Arquitectura del Modo Podcast (crítico — no romper)
 
@@ -578,6 +608,56 @@ Esto garantiza que solo haya UN `<Stream>` de Cloudflare en el DOM (el de `Podca
 - Cualquier nuevo primitivo va a `src/components/ui/` con un test al lado (`*.test.tsx`).
 - No volver a meter keyframes CSS en `tailwind.config.js`: las animaciones se hacen con Framer Motion.
 - Toda toast del proyecto entra por `import { toast } from "@/components/ui/toaster"` — NO importar sonner directo.
+
+### 10.14 Historial de cambios — 2026-05-14 (Sesión 3 — Upload, reordenar, podcast, insignias)
+
+#### Fix: Loop de video pisaba `is_completed` (LessonPlayer)
+- **Problema**: Cloudflare Stream reinicia el video al llegar al final, `handleTimeUpdate` con currentTime≈0 pisaba `is_completed=false`
+- **Solución**: `endedRef` (useRef) que guarda `endedRef.current || ...` en el cálculo de `isCompleted`. `handleEnded` setea `playRequested=false` (corta el loop) y guarda completed. Overlay con check verde + "Reproducir de nuevo" cuando terminó.
+
+#### Dashboard se actualiza sin F5 (polling fallback)
+- **Problema**: `user_lesson_progress` no estaba en la publicación Realtime de Supabase, el dashboard solo mostraba progreso tras F5
+- **Solución**: `setInterval` cada 15s que re-fetchea `fetchAllUserProgress()` y actualiza `userProgress`. La suscripción Realtime se conserva.
+
+#### Progreso en modo podcast (PodcastEngine)
+- **Problema**: `handleTimeUpdate` solo actualizaba el store de zustand, nunca persistía en Supabase
+- **Solución**: Importado `saveUserProgress`. `handleTimeUpdate` guarda cada 10s con throttle 5s. `handleEnded` guarda con `isCompleted=true`. Mismas refs sincronizadas que en video.
+
+#### Insignias con imágenes personalizadas
+- Agregado `badge_image_url?: string | null` a interfaz `Module` en `content.ts`
+- Certificates tab: si el módulo tiene `badge_image_url`, muestra `<img>` con grayscale si bloqueado, glow si desbloqueado; fallback a icono anterior
+- SQL migration: `docs/migrate-badge-image.sql`
+
+#### Barra de progreso en subida de videos (AdminContentManager)
+- Nueva función `uploadFileWithProgress()` con `XMLHttpRequest` + `xhr.upload.onprogress`
+- Reemplazado `fetch` por XHR para tracking de progreso en tiempo real
+- Barra animated gradient gold en formularios de crear y editar lección
+- `uploadVideo` envuelto en try/finally para limpiar estado incluso en error
+
+#### Reordenar módulos (AdminContentManager)
+- `updateModuleOrder(orderedIds)` con `PATCH` individuales en paralelo (`supabase.from("modules").update({ order_index }).eq("id", id)`) — evita error `null value in column "title"` que ocurría con `upsert`
+- Flechas ↑↓ en cabecera de cada módulo (solo desktop). `handleMoveModule` intercambia localmente y persiste.
+
+#### Rediseño UX del AdminContentManager
+- Stats bar: módulos totales, lecciones, con video
+- Create module: card full-width con fade en vez de popup top-right
+- Cards con sombra, línea gold superior, icono BookOpen, contador de lecciones
+- Lecciones con barra lateral gold, icono en caja, badges de plan coloreados
+- Labels visibles en todos los campos del form
+- Todos los `alert()` reemplazados por toasts del sistema
+- Botones con spinner durante upload, drag zone con estados hover/focus/disabled
+- Skeleton loading en vez de texto plano
+- Selectores de plan como chips visuales con color por plan
+
+#### Archivos modificados
+| Archivo | Cambio |
+|---|---|
+| `src/components/feature/LessonPlayer.tsx` | endedRef, overlay completado, guard en isCompleted |
+| `src/components/feature/PodcastEngine.tsx` | saveUserProgress en handleTimeUpdate y handleEnded |
+| `src/pages/student/StudentDashboard.tsx` | Polling 15s, badge_image_url en certificados |
+| `src/pages/admin/AdminContentManager.tsx` | Rediseño completo, upload progress, reordenar módulos |
+| `src/lib/api/stream/content.ts` | updateModuleOrder, uploadFileWithProgress, badge_image_url en Module |
+| `docs/migrate-badge-image.sql` | (nuevo) SQL para columna badge_image_url |
 
 ---
 

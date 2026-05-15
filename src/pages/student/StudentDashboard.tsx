@@ -125,6 +125,58 @@ const StudentDashboard = () => {
     loadContent();
   }, [user?.plan]);
 
+  // Sincronizar progreso en tiempo real vía Supabase Realtime
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel("user-progress-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "user_lesson_progress",
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
+            const record = payload.new as { lesson_id: string; is_completed: boolean };
+            setUserProgress((prev) => {
+              const existing = prev.find((p) => p.lesson_id === record.lesson_id);
+              if (existing) {
+                return prev.map((p) =>
+                  p.lesson_id === record.lesson_id
+                    ? { lesson_id: record.lesson_id, is_completed: record.is_completed }
+                    : p
+                );
+              }
+              return [...prev, { lesson_id: record.lesson_id, is_completed: record.is_completed }];
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
+
+  // Polling fallback (cada 15s) por si Realtime no está disponible
+  useEffect(() => {
+    if (!user?.id) return;
+    const interval = setInterval(async () => {
+      try {
+        const progress = await fetchAllUserProgress();
+        setUserProgress(progress);
+      } catch {
+        // silencio
+      }
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [user?.id]);
+
   // Notes state
   const [personalNote, setPersonalNote] = useState("");
   const [isSavingNote, setIsSavingNote] = useState(false);
@@ -480,9 +532,9 @@ const StudentDashboard = () => {
                               videoSrc={activeLesson.stream_uid || ""} 
                               isPremium={isPremium} 
                               lesson={{
-                                id: activeLesson.id as unknown as number,
+                                id: activeLesson.id,
                                 titulo: activeLesson.title,
-                                modId: activeLesson.module_id as unknown as number
+                                modId: activeLesson.module_id
                               }}
                               moduleTitle={dbModules.find(m => m.id === activeLesson.module_id)?.title || ""}
                             />
@@ -731,10 +783,26 @@ const StudentDashboard = () => {
                               <div className="absolute top-0 right-0 w-32 h-32 bg-gold/10 rounded-full blur-3xl -mr-10 -mt-10" />
                             )}
                             <div className={cn(
-                              "w-16 h-16 rounded-full flex items-center justify-center mb-4 relative z-10 border-2",
-                              isUnlocked ? "bg-gold/20 text-gold border-gold shadow-[0_0_15px_rgba(204,164,59,0.3)]" : "bg-white/10 text-white/40 border-white/10"
+                              "w-24 h-24 flex items-center justify-center mb-4 relative z-10",
+                              !isUnlocked && "opacity-40 grayscale"
                             )}>
-                              {isUnlocked ? <CheckCircle2 size={32} /> : <Award size={32} />}
+                              {mod.badge_image_url ? (
+                                <img
+                                  src={mod.badge_image_url}
+                                  alt={mod.title}
+                                  className={cn(
+                                    "w-full h-full object-contain",
+                                    isUnlocked && "drop-shadow-[0_0_15px_rgba(204,164,59,0.3)]"
+                                  )}
+                                />
+                              ) : (
+                                <div className={cn(
+                                  "w-16 h-16 rounded-full flex items-center justify-center border-2",
+                                  isUnlocked ? "bg-gold/20 text-gold border-gold shadow-[0_0_15px_rgba(204,164,59,0.3)]" : "bg-white/10 text-white/40 border-white/10"
+                                )}>
+                                  {isUnlocked ? <CheckCircle2 size={32} /> : <Award size={32} />}
+                                </div>
+                              )}
                             </div>
                             <h3 className={cn("text-lg font-bold mb-2 relative z-10", isUnlocked ? "text-gold" : "text-white/60")}>
                               {isUnlocked ? "¡Módulo Completado!" : "Bloqueado"}

@@ -11,12 +11,16 @@ export interface UserLessonProgress {
 }
 
 export async function fetchUserProgress(lessonId: string): Promise<UserLessonProgress | null> {
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return null;
+
   const { data, error } = await supabase
     .from("user_lesson_progress")
     .select("*")
+    .eq("user_id", userData.user.id)
     .eq("lesson_id", lessonId)
     .maybeSingle();
-    
+
   if (error) {
     console.error("Error fetching progress:", error);
     return null;
