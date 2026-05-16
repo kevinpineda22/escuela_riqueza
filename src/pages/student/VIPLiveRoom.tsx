@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
-import LiveChat from "@/components/feature/LiveChat";
-import { Sparkles, Calendar, Clock, Tv, Radio, Loader2, VideoOff, ArrowLeft, MessageSquare, X } from "lucide-react";
+import LiveChat, { type ChatMessage } from "@/components/feature/LiveChat";
+import { Sparkles, Calendar, Clock, Tv, Radio, Loader2, VideoOff, ArrowLeft, MessageSquare, X, Volume2, PanelRightClose, PanelRightOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player.store";
 import { useAuthStore } from "@/stores/auth.store";
@@ -11,6 +11,7 @@ import { fetchActiveLive, checkLiveInputStatus, type LiveEvent } from "@/lib/api
 import { useIsDesktop } from "@/hooks/useMediaQuery";
 
 const CF_SUBDOMAIN = import.meta.env.VITE_CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN || "";
+const STREAM_SDK_URL = "https://embed.cloudflarestream.com/embed/sdk.latest.js";
 
 const VIPLiveRoom = () => {
   const navigate = useNavigate();
@@ -21,10 +22,63 @@ const VIPLiveRoom = () => {
   const [timeLeft, setTimeLeft] = useState({ hours: 0, minutes: 0, seconds: 0 });
   const [liveInputConnected, setLiveInputConnected] = useState(false);
   const [isChatOpenMobile, setIsChatOpenMobile] = useState(false);
+  const [audioEnabled, setAudioEnabled] = useState(false);
+  const [isChatVisibleDesktop, setIsChatVisibleDesktop] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
   const isDesktop = useIsDesktop();
   const { clearPlayer } = usePlayerStore();
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const streamPlayerRef = useRef<{ muted: boolean; volume: number; play: () => Promise<void> } | null>(null);
 
   useEffect(() => { clearPlayer(); }, [clearPlayer]);
+
+  // Cargar el SDK de Cloudflare Stream una sola vez (necesario para controlar el iframe sin remount)
+  useEffect(() => {
+    if (document.querySelector(`script[src="${STREAM_SDK_URL}"]`)) return;
+    const script = document.createElement("script");
+    script.src = STREAM_SDK_URL;
+    script.defer = true;
+    document.head.appendChild(script);
+  }, []);
+
+  const attachStreamPlayer = () => {
+    const w = window as unknown as { Stream?: (el: HTMLIFrameElement) => typeof streamPlayerRef.current };
+    if (!iframeRef.current || !w.Stream) {
+      // SDK todavía no terminó de cargar — reintenta en breve
+      setTimeout(attachStreamPlayer, 200);
+      return;
+    }
+    streamPlayerRef.current = w.Stream(iframeRef.current);
+  };
+
+  // Resetea unreads al volver a mostrar el chat
+  useEffect(() => {
+    if (isChatVisibleDesktop) setUnreadCount(0);
+  }, [isChatVisibleDesktop]);
+
+  const handleIncomingMessage = (msg: ChatMessage) => {
+    if (msg.isSystem) return;
+    if (msg.user_id === user?.id) return;
+    if (isDesktop && !isChatVisibleDesktop) {
+      setUnreadCount(c => c + 1);
+    }
+  };
+
+  const handleEnableAudio = () => {
+    setAudioEnabled(true);
+    const player = streamPlayerRef.current;
+    if (!player) return;
+    try {
+      player.muted = false;
+      player.volume = 1;
+      const result = player.play();
+      if (result && typeof (result as Promise<void>).catch === "function") {
+        (result as Promise<void>).catch(() => {});
+      }
+    } catch (e) {
+      console.warn("[VIPLiveRoom] No se pudo desmutear via SDK:", e);
+    }
+  };
 
   const isLive = live?.status === "live" && !live?.is_paused;
   const isEnded = live?.status === "ended";
@@ -278,12 +332,49 @@ const VIPLiveRoom = () => {
                 className="w-full h-full relative bg-black flex items-center justify-center"
               >
                 <iframe
-                  src={`https://${CF_SUBDOMAIN}/${live.stream_live_input_id}/iframe?mode=webrtc&autoplay=true&preferLowLatency=true`}
+                  ref={iframeRef}
+                  onLoad={attachStreamPlayer}
+                  src={`https://${CF_SUBDOMAIN}/${live.stream_live_input_id}/iframe?mode=webrtc&autoplay=true&preferLowLatency=true&muted=true&playsinline=true`}
                   allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; camera; microphone"
                   className="w-full h-full border-none absolute inset-0 z-0"
                   allowFullScreen
                   title="VIP Live Room"
                 />
+                <AnimatePresence>
+                  {!audioEnabled && (
+                    <motion.div
+                      key="enable-audio-overlay"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.3 }}
+                      className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-[3px] cursor-pointer"
+                      onClick={handleEnableAudio}
+                    >
+                      <motion.button
+                        onClick={handleEnableAudio}
+                        aria-label="Activar sonido del live"
+                        initial={{ scale: 0.85, opacity: 0, y: 12 }}
+                        animate={{ scale: 1, opacity: 1, y: 0 }}
+                        exit={{ scale: 0.9, opacity: 0 }}
+                        transition={{ type: "spring", damping: 18, stiffness: 220 }}
+                        whileHover={{ scale: 1.04 }}
+                        whileTap={{ scale: 0.96 }}
+                        className="relative flex items-center gap-3 px-7 py-4 sm:px-9 sm:py-5 rounded-full bg-gradient-to-br from-gold via-goldHover to-gold text-darker font-black text-base sm:text-lg tracking-tight shadow-[0_25px_60px_-10px_rgba(204,164,59,0.7)] ring-1 ring-gold/50"
+                      >
+                        {/* Pulse rings */}
+                        <span className="absolute inset-0 rounded-full bg-gold/50 animate-ping pointer-events-none" />
+                        <span className="absolute inset-0 rounded-full bg-gold/30 animate-ping pointer-events-none [animation-delay:0.6s]" />
+
+                        {/* Content */}
+                        <span className="relative flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-darker/15">
+                          <Volume2 size={18} strokeWidth={2.5} className="text-darker" />
+                        </span>
+                        <span className="relative">Activar sonido</span>
+                      </motion.button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </motion.div>
             ) : isEnded ? (
               <motion.div
@@ -410,13 +501,48 @@ const VIPLiveRoom = () => {
             )}
           </AnimatePresence>
         </div>
+
+        {/* Toggle del chat — SOLO desktop. Pestaña vertical pegada al borde derecho del video */}
+        {isDesktop && (
+          <button
+            onClick={() => setIsChatVisibleDesktop(v => !v)}
+            aria-label={isChatVisibleDesktop ? "Ocultar chat" : "Mostrar chat"}
+            className="absolute right-0 top-1/2 -translate-y-1/2 z-40 group flex items-center gap-2 pl-3 pr-2.5 py-4 rounded-l-2xl bg-black/60 backdrop-blur-md border border-r-0 border-white/15 text-white/80 hover:text-gold hover:bg-black/80 hover:pl-4 transition-all shadow-[-8px_0_25px_-5px_rgba(0,0,0,0.4)]"
+          >
+            {isChatVisibleDesktop ? (
+              <PanelRightClose size={20} />
+            ) : (
+              <PanelRightOpen size={20} />
+            )}
+            <AnimatePresence>
+              {!isChatVisibleDesktop && unreadCount > 0 && (
+                <motion.span
+                  key={unreadCount}
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0, opacity: 0 }}
+                  transition={{ type: "spring", damping: 14, stiffness: 280 }}
+                  className="absolute -top-1.5 -left-1.5 min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center shadow-lg border-2 border-darker"
+                >
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </button>
+        )}
       </div>
 
-      {/* Chat — sidebar fijo SOLO en desktop. En mobile NO se monta para evitar
-          duplicar la suscripción Realtime a Supabase (eso colapsa el canal). */}
+      {/* Chat — sidebar colapsable en desktop. Siempre montado para mantener viva
+          la suscripción Realtime (necesaria para contar mensajes no leídos).
+          En mobile NO se monta acá para evitar duplicar la suscripción. */}
       {isDesktop && (
-        <div className="md:flex md:w-80 lg:w-[400px] md:h-screen bg-darker shrink-0 z-50 overflow-hidden">
-          <LiveChat liveId={live.id} />
+        <div
+          className={cn(
+            "md:h-screen bg-darker shrink-0 z-50 overflow-hidden transition-[width,opacity] duration-300 ease-in-out",
+            isChatVisibleDesktop ? "w-80 lg:w-[400px] opacity-100" : "w-0 opacity-0"
+          )}
+        >
+          <LiveChat liveId={live.id} onIncomingMessage={handleIncomingMessage} />
         </div>
       )}
 
@@ -463,7 +589,7 @@ const VIPLiveRoom = () => {
                     </button>
                   </div>
                   <div className="flex-1 min-h-0">
-                    <LiveChat liveId={live.id} />
+                    <LiveChat liveId={live.id} onIncomingMessage={handleIncomingMessage} />
                   </div>
                 </motion.div>
               </>

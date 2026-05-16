@@ -6,13 +6,18 @@ import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/stores/auth.store";
 import { Skeleton } from "@/components/ui/skeleton";
 
-interface ChatMessage {
+export interface ChatMessage {
   id: string;
   user_id: string;
   user_name: string;
   content: string;
   created_at: string;
   isSystem?: boolean;
+}
+
+interface LiveChatProps {
+  liveId?: string;
+  onIncomingMessage?: (msg: ChatMessage) => void;
 }
 
 const SYSTEM_MESSAGE: ChatMessage = {
@@ -24,12 +29,18 @@ const SYSTEM_MESSAGE: ChatMessage = {
   isSystem: true,
 };
 
-const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000" }: { liveId?: string }) => {
+const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingMessage }: LiveChatProps) => {
   const { user } = useAuthStore();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [newMessage, setNewMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const onIncomingMessageRef = useRef(onIncomingMessage);
+
+  // Mantener el callback siempre actualizado sin reabrir la suscripción Realtime
+  useEffect(() => {
+    onIncomingMessageRef.current = onIncomingMessage;
+  }, [onIncomingMessage]);
 
   // Auto-scroll al último mensaje.
   // Safari iOS < 16 puede tirar al usar { behavior: "smooth" } si el elemento
@@ -128,11 +139,18 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000" }: { liveId?
         };
 
         if (isActive) {
+          let isDuplicate = false;
           setMessages((prev) => {
              // Evitar duplicados si el realtime se adelantó al fetch
-             if (prev.some(m => m.id === incomingMessage.id)) return prev;
+             if (prev.some(m => m.id === incomingMessage.id)) {
+               isDuplicate = true;
+               return prev;
+             }
              return [...prev, incomingMessage];
           });
+          if (!isDuplicate) {
+            onIncomingMessageRef.current?.(incomingMessage);
+          }
         }
       }
     ).subscribe();

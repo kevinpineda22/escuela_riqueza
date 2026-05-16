@@ -748,3 +748,57 @@ Se eliminaron 10 archivos que eran mocks/data quemados sin uso real:
 
 #### Contenido: FAQ
 - AÃ±adida nueva pregunta a la secciÃ³n FAQ de `Plans.tsx` sobre la diferencia de Escuela de la Riqueza con otros programas de formaciÃ³n.
+
+---
+
+## 13. Historial de cambios — 2026-05-16
+
+### Fix: Pantalla negra en Android vertical al entrar al live
+
+**Problema**: en Android Chrome vertical, al entrar a `/vip-live` el iframe del player queda totalmente negro. Al rotar a horizontal, el video aparece. En desktop e iOS funciona normal.
+
+**Causa raíz**: el iframe se cargaba con `?mode=webrtc&autoplay=true&preferLowLatency=true` **sin `muted=true`**. Chrome Android bloquea autoplay con audio cuando no hay gesto del usuario, y como encima del player hay un header con `pointer-events: none`, el usuario nunca podía disparar el gesto que destrabara la reproducción. Rotar a landscape disparaba un `resize` + reflow que en algunas builds de Chrome cuenta como interacción del sistema y desbloqueaba el play.
+
+**Fix** (`src/pages/student/VIPLiveRoom.tsx`):
+1. Estado nuevo `audioEnabled` (default `false`) + `iframeRef` + `streamPlayerRef`.
+2. URL del iframe siempre arranca con `&muted=true&playsinline=true`. El `play()` se ejecuta sin pedir gesto.
+3. Cargar el SDK de Cloudflare Stream globalmente (`https://embed.cloudflarestream.com/embed/sdk.latest.js`) en `useEffect`. En el `onLoad` del iframe se invoca `window.Stream(iframe)` y se guarda el player en `streamPlayerRef`.
+4. Overlay premium con backdrop blur + botón dorado pulsante centrado sobre el player. Click en el overlay o el botón ejecuta `handleEnableAudio`: setea `player.muted = false`, `player.volume = 1`, y `player.play()`. **No hay remount del iframe** — el gesto del usuario se aplica directo a la sesión WebRTC ya establecida.
+5. Visible en todos los dispositivos (Chrome desktop también bloquea autoplay-con-audio sin MEI score; rotar el botón a mobile-only generaría inconsistencias raras).
+
+**Por qué el remount via `key` NO funcionaba (primer intento)**: al cambiar la `key` del iframe, React desmonta y vuelve a montar. Cloudflare establece una nueva conexión WebRTC (1-2s de negociación UDP). Para cuando el handshake termina y se intenta reproducir con audio, el "user activation context" de Chrome (~5s) ya expiró. El SDK soluciona esto porque la conexión ya está activa: solo se togglea la propiedad `muted` del player vivo, sin reload ni handshake.
+
+### 13.1 Pendientes de optimización del live (NO atacados aún)
+
+#### 13.1.1 Latencia real es ~10s aunque el modo es WebRTC
+
+**Síntoma**: la URL del iframe pide `mode=webrtc&preferLowLatency=true`, que en papel da <1s. Pero medido con cronómetro frente a cámara, el delay real es ~10s. Eso significa que WebRTC **playback** está cayendo silenciosamente a HLS.
+
+**Causa probable**: la **ingesta** está en RTMP. OBS por defecto manda RTMP. Cloudflare puede servir WebRTC playback sobre RTMP ingest, pero el transcoding agrega latencia y muchas veces cae a LL-HLS. Para latencia <1s real, **ingesta y playback deben ser ambos WebRTC**.
+
+**Cómo verificar la latencia real**:
+1. Visual: cronómetro frente a la cámara de OBS vs reloj del cel viendo el stream.
+2. `chrome://inspect` desde PC con Android conectado → abrir `chrome://webrtc-internals` dentro del iframe. Si NO hay `RTCPeerConnection` activa, el playback NO es WebRTC — cayó a HLS.
+3. Cloudflare Dashboard → Stream → Live Inputs → tu input → tab "Connection". Muestra si la ingesta entrante es RTMP o WebRTC (WHIP).
+
+**Cómo bajarla cuando se ataque**:
+- Migrar OBS de RTMP a WHIP. Requiere OBS 30+ (Studio).
+  - Servicio: WHIP.
+  - URL: `https://customer-<TU_SUBDOMAIN>.cloudflarestream.com/<LIVE_INPUT_ID>/webRTC/publish`.
+  - Codec: H.264 **baseline** (NO main ni high — algunos decoders Android no soportan).
+  - Bitrate: 2500-5000 kbps CBR.
+  - Keyframe: 1s.
+- Alternativa intermedia (si Iván no puede migrar OBS): mantener RTMP pero forzar keyframe=1s + activar Low-Latency HLS en el Live Input. Latencia esperada: 2-5s en lugar de 10.
+- Después de migrar, validar con `chrome://webrtc-internals` que efectivamente hay PeerConnection activa.
+
+#### 13.1.2 ¿Por qué el live "siempre" está en low latency?
+
+No es un bug, es la URL hardcodeada. Cloudflare Stream tiene tres modos de playback:
+
+| Modo | Latencia | URL param |
+|---|---|---|
+| HLS estándar | 10-30s | sin `mode` ni `preferLowLatency` |
+| LL-HLS | 2-5s | `?preferLowLatency=true` |
+| WebRTC | <1s (si la ingesta también es WebRTC) | `?mode=webrtc` |
+
+`VIPLiveRoom.tsx` siempre pide WebRTC + LLHLS. Si en algún momento se quisiera priorizar **estabilidad sobre latencia** (por ejemplo, para redes corporativas/móviles malas que bloquean UDP), habría que sacar ambos params y caer a HLS clásico. **No es necesario hoy**: WebRTC con fallback automático de Cloudflare ya cubre el caso de UDP bloqueado degradando a LL-HLS.
