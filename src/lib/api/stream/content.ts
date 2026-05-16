@@ -152,6 +152,7 @@ export function uploadFileWithProgress(
   return new Promise((resolve, reject) => {
       const upload = new tus.Upload(file, {
         uploadUrl: uploadURL,
+        chunkSize: 50 * 1024 * 1024, // 50 MB
         retryDelays: [0, 3000, 5000, 10000, 20000],
       removeFingerprintOnSuccess: true,
       metadata: {
