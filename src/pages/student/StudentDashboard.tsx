@@ -25,6 +25,7 @@ import LessonPlayer from "@/components/feature/LessonPlayer";
 import { SkeletonCard } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { toast } from "@/components/ui/toaster";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth.store";
 import { usePlayerStore } from "@/stores/player.store";
@@ -278,30 +279,32 @@ const StudentDashboard = () => {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(user?.avatarUrl || null);
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+  const [subscriptionEndDate, setSubscriptionEndDate] = useState<string | null>(null);
+  const [isBillingModalOpen, setIsBillingModalOpen] = useState(false);
 
-  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setAvatarFile(file);
-    setAvatarPreview(URL.createObjectURL(file));
-  };
+  // Cargar fecha de expiracin si el plan es de pago
+  useEffect(() => {
+    if (!user || user.plan === PLANS.FREE) return;
+    const loadSubscriptionEnd = async () => {
+      try {
+        const { data } = await supabase
+          .from("subscriptions")
+          .select("current_period_end")
+          .eq("user_id", user.id)
+          .eq("status", "active")
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-  const handleDeleteAvatar = async () => {
-    if (!user) return;
-    setIsUpdatingProfile(true);
-    try {
-      const { error } = await supabase.from("profiles").update({ avatar_url: null }).eq("id", user.id);
-      if (error) throw error;
-      setUser({ ...user, avatarUrl: null });
-      setAvatarPreview(null);
-      setAvatarFile(null);
-      toast.success("Foto eliminada", { description: "Tu perfil ahora usa la imagen por defecto." });
-    } catch (err) {
-      toast.error("Error al eliminar foto", { description: (err as any).message });
-    } finally {
-      setIsUpdatingProfile(false);
-    }
-  };
+        if (data?.current_period_end) {
+          setSubscriptionEndDate(new Date(data.current_period_end).toLocaleDateString());
+        }
+      } catch (err) {
+        console.error("Error al cargar la suscripción", err);
+      }
+    };
+    loadSubscriptionEnd();
+  }, [user]);
 
   const handleUpdateProfile = async () => {
     if (!user) return;
@@ -313,6 +316,7 @@ const StudentDashboard = () => {
         const filePath = `${user.id}-${Math.random()}.${fileExt}`;
         const { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, avatarFile);
         if (uploadError) throw uploadError;
+        
         finalAvatarUrl = supabase.storage.from('avatars').getPublicUrl(filePath).data.publicUrl;
       }
       const { error } = await supabase.from("profiles").update({ full_name: profileName, avatar_url: finalAvatarUrl }).eq("id", user.id);
@@ -325,6 +329,26 @@ const StudentDashboard = () => {
     } finally {
       setIsUpdatingProfile(false);
     }
+  };
+
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("La imagen debe pesar menos de 2MB");
+      return;
+    }
+    setAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
+  };
+
+  const handleDeleteAvatar = () => {
+    setAvatarFile(null);
+    setAvatarPreview(null);
+  };
+
+  const handleManageBilling = async () => {
+    setIsBillingModalOpen(true);
   };
 
   const isPremium = user?.plan === PLANS.INDIVIDUAL || user?.plan === PLANS.VIP;
@@ -1283,12 +1307,18 @@ const StudentDashboard = () => {
                           <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span> Activo
                         </span>
                       </div>
-                      <div className="flex justify-between items-center">
+                      <div className="flex justify-between items-center pb-5 border-b border-white/5">
                         <span className="text-textMuted font-medium">Miembro desde</span>
                         <span className="text-white/90 font-medium">
                           {user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : "Hoy"}
                         </span>
                       </div>
+                      {user?.plan !== PLANS.FREE && subscriptionEndDate && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-textMuted font-medium">Próximo cobro</span>
+                          <span className="text-white/90 font-medium">{subscriptionEndDate}</span>
+                        </div>
+                      )}
                     </div>
                     
                     {user?.plan === PLANS.FREE ? (
@@ -1296,7 +1326,10 @@ const StudentDashboard = () => {
                         Mejorar mi Plan
                       </button>
                     ) : (
-                      <button className="w-full mt-8 py-3.5 bg-white/5 hover:bg-white/10 text-white/70 font-medium rounded-xl transition-all border border-white/5 text-sm relative z-10">
+                      <button 
+                        onClick={handleManageBilling}
+                        className="w-full mt-8 py-3.5 bg-white/5 hover:bg-white/10 text-white/70 font-medium rounded-xl transition-all border border-white/5 text-sm relative z-10"
+                      >
                         Gestionar Métodos de Pago
                       </button>
                     )}
@@ -1308,6 +1341,64 @@ const StudentDashboard = () => {
         </div>
       </main>
       <Footer />
+
+      {/* Mockup de Customer Portal de Stripe */}
+      <Dialog open={isBillingModalOpen} onOpenChange={setIsBillingModalOpen}>
+        <DialogContent className="sm:max-w-[425px] bg-darker border-white/10 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-xl flex items-center gap-2">
+              <Award className="text-gold" size={24} /> Portal de Pagos
+            </DialogTitle>
+            <DialogDescription className="text-textMuted">
+              Gestiona tu suscripción y métodos de pago.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-6 space-y-6">
+            <div className="bg-white/5 border border-white/10 rounded-xl p-5 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-gold/5 rounded-bl-full -mr-5 -mt-5" />
+              <div className="relative z-10 flex justify-between items-start mb-4">
+                <div>
+                  <h4 className="text-sm font-semibold text-textMuted uppercase tracking-wider mb-1">Plan Actual</h4>
+                  <p className="text-2xl font-bold text-white uppercase">{user?.plan}</p>
+                </div>
+                <span className="text-green-400 font-bold bg-green-500/10 px-2 py-1 rounded border border-green-500/20 text-xs flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span> Activo
+                </span>
+              </div>
+              <div className="relative z-10 flex justify-between items-center text-sm pt-4 border-t border-white/10">
+                <span className="text-white/60">Próximo cobro:</span>
+                <span className="text-white font-medium">{subscriptionEndDate || "15 de Junio de 2026 (Simulado)"}</span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="text-sm font-semibold text-white/80">Métodos de Pago</h4>
+              <div className="bg-black/30 border border-white/10 rounded-xl p-4 flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-6 bg-white/10 rounded border border-white/20 flex items-center justify-center text-[10px] font-bold text-white/60">
+                    VISA
+                  </div>
+                  <div className="text-sm">
+                    <p className="text-white font-medium">•••• 4242</p>
+                    <p className="text-xs text-white/50">Expira 12/28</p>
+                  </div>
+                </div>
+                <span className="text-xs text-gold bg-gold/10 px-2 py-1 rounded border border-gold/20">Predeterminado</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 pt-4">
+              <button className="w-full py-2.5 bg-white/10 hover:bg-white/15 text-white text-sm font-medium rounded-lg transition-colors border border-white/10">
+                Añadir método de pago
+              </button>
+              <button className="w-full py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-sm font-medium rounded-lg transition-colors border border-red-500/20">
+                Cancelar suscripción
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
