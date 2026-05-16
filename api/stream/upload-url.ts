@@ -35,7 +35,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       metadata.push(`name ${Buffer.from(videoName).toString('base64')}`);
     }
     metadata.push(`maxDurationSeconds ${Buffer.from(String(maxDurationSeconds)).toString('base64')}`);
-    metadata.push(`requiresignedurls ${Buffer.from('false').toString('base64')}`);
 
     const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/stream?direct_user=true`, {
       method: 'POST',
