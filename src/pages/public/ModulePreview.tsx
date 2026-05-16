@@ -11,7 +11,7 @@ import { fetchModules, fetchLessons, type Module as DBModule, type Lesson as DBL
 import { useAuthStore } from "@/stores/auth.store";
 
 const INTELLIGENCE_LABELS: Record<number, string> = {
-  1: "Inteligencia del Aprendizaje",
+  1: "Inteligencia Mental",
   2: "Inteligencia de la Riqueza",
   3: "Inteligencia Emocional",
   4: "Inteligencia Comercial",

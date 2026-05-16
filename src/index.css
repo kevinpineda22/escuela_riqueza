@@ -60,3 +60,8 @@ html[data-reduce-motion="true"] *::after {
   scroll-behavior: auto !important;
 }
 
+
+/* Fix para que los iframes (ej: Cloudflare Stream) no bloqueen el scroll de Lenis */
+html.lenis-scrolling iframe {
+  pointer-events: none !important;
+}

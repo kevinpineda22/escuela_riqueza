@@ -18,7 +18,7 @@ interface Intelligence {
 const intelligences: Intelligence[] = [
   {
     id: 1,
-    title: "Inteligencia del Aprendizaje",
+    title: "Inteligencia Mental",
     description:
       "Aprende a aprender. Memoria, foco profundo y velocidad de procesamiento — la base de todo el resto.",
     icon: <BookOpen className="w-10 h-10" />,
