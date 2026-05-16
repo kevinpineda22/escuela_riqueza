@@ -9,9 +9,11 @@ import { useAuthStore } from "@/stores/auth.store";
 import { supabase } from "@/lib/supabase";
 import { fetchActiveLive, checkLiveInputStatus, type LiveEvent } from "@/lib/api/stream/lives";
 import { useIsDesktop } from "@/hooks/useMediaQuery";
+import { Stream } from "@cloudflare/stream-react";
 
-const CF_SUBDOMAIN = import.meta.env.VITE_CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN || "";
-const STREAM_SDK_URL = "https://embed.cloudflarestream.com/embed/sdk.latest.js";
+// Extraer customer code del subdominio "customer-XXX.cloudflarestream.com"
+// para que @cloudflare/stream-react use el mismo dominio que el resto del proyecto.
+const CF_CUSTOMER_CODE = (import.meta.env.VITE_CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN || "").match(/customer-([^.]+)/)?.[1] || "";
 
 const VIPLiveRoom = () => {
   const navigate = useNavigate();
@@ -27,29 +29,10 @@ const VIPLiveRoom = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const isDesktop = useIsDesktop();
   const { clearPlayer } = usePlayerStore();
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const streamPlayerRef = useRef<{ muted: boolean; volume: number; play: () => Promise<void> } | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const streamRef = useRef<any>(null);
 
   useEffect(() => { clearPlayer(); }, [clearPlayer]);
-
-  // Cargar el SDK de Cloudflare Stream una sola vez (necesario para controlar el iframe sin remount)
-  useEffect(() => {
-    if (document.querySelector(`script[src="${STREAM_SDK_URL}"]`)) return;
-    const script = document.createElement("script");
-    script.src = STREAM_SDK_URL;
-    script.defer = true;
-    document.head.appendChild(script);
-  }, []);
-
-  const attachStreamPlayer = () => {
-    const w = window as unknown as { Stream?: (el: HTMLIFrameElement) => typeof streamPlayerRef.current };
-    if (!iframeRef.current || !w.Stream) {
-      // SDK todavía no terminó de cargar — reintenta en breve
-      setTimeout(attachStreamPlayer, 200);
-      return;
-    }
-    streamPlayerRef.current = w.Stream(iframeRef.current);
-  };
 
   // Resetea unreads al volver a mostrar el chat
   useEffect(() => {
@@ -66,17 +49,17 @@ const VIPLiveRoom = () => {
 
   const handleEnableAudio = () => {
     setAudioEnabled(true);
-    const player = streamPlayerRef.current;
+    const player = streamRef.current;
     if (!player) return;
     try {
       player.muted = false;
       player.volume = 1;
       const result = player.play();
-      if (result && typeof (result as Promise<void>).catch === "function") {
-        (result as Promise<void>).catch(() => {});
+      if (result && typeof result.catch === "function") {
+        result.catch(() => {});
       }
     } catch (e) {
-      console.warn("[VIPLiveRoom] No se pudo desmutear via SDK:", e);
+      console.warn("[VIPLiveRoom] No se pudo desmutear:", e);
     }
   };
 
@@ -326,20 +309,31 @@ const VIPLiveRoom = () => {
             {showIframe && hasStreamId ? (
               <motion.div
                 key="player"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 1, delay: 0.5 }}
+                initial={false}
                 className="w-full h-full relative bg-black flex items-center justify-center"
               >
-                <iframe
-                  ref={iframeRef}
-                  onLoad={attachStreamPlayer}
-                  src={`https://${CF_SUBDOMAIN}/${live.stream_live_input_id}/iframe?mode=webrtc&autoplay=true&preferLowLatency=true&muted=true&playsinline=true`}
-                  allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; camera; microphone"
-                  className="w-full h-full border-none absolute inset-0 z-0"
-                  allowFullScreen
-                  title="VIP Live Room"
+                {/* Fade-in cinemático en una capa SEPARADA del player.
+                    El <Stream> siempre arranca visible para que Android Chrome
+                    no pierda la pista de video durante la transición. */}
+                <motion.div
+                  aria-hidden
+                  initial={{ opacity: 1 }}
+                  animate={{ opacity: 0 }}
+                  transition={{ duration: 1, delay: 0.3 }}
+                  className="absolute inset-0 z-20 bg-black pointer-events-none"
                 />
+                <div className="w-full h-full absolute inset-0 z-0 bg-black">
+                  <Stream
+                    streamRef={streamRef}
+                    src={live.stream_live_input_id!}
+                    customerCode={CF_CUSTOMER_CODE || undefined}
+                    controls
+                    autoplay
+                    muted={!audioEnabled}
+                    preload="auto"
+                    className="w-full h-full border-none"
+                  />
+                </div>
                 <AnimatePresence>
                   {!audioEnabled && (
                     <motion.div

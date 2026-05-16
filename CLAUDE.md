@@ -753,20 +753,28 @@ Se eliminaron 10 archivos que eran mocks/data quemados sin uso real:
 
 ## 13. Historial de cambios — 2026-05-16
 
-### Fix: Pantalla negra en Android vertical al entrar al live
+### Rework del player de live (2026-05-16)
 
-**Problema**: en Android Chrome vertical, al entrar a `/vip-live` el iframe del player queda totalmente negro. Al rotar a horizontal, el video aparece. En desktop e iOS funciona normal.
+**Problema acumulado**: el approach del iframe raw con `mode=webrtc&preferLowLatency=true` + carga manual del SDK de Cloudflare via `<script>` y `window.Stream(iframe)` rompía la reconciliación de React. Síntomas en móviles:
+- Pantalla negra en Android (incluso con `muted=true&playsinline=true`)
+- Errores `NotFoundError: Failed to execute 'removeChild' on 'Node'` durante unmount
+- `Maximum update depth exceeded` (loop del ErrorBoundary cayendo por la cascada de removeChild)
+- En la práctica la latencia era ~10s aunque pidiéramos WebRTC (la ingesta RTMP de OBS hace que el playback caiga a HLS interno de Cloudflare)
 
-**Causa raíz**: el iframe se cargaba con `?mode=webrtc&autoplay=true&preferLowLatency=true` **sin `muted=true`**. Chrome Android bloquea autoplay con audio cuando no hay gesto del usuario, y como encima del player hay un header con `pointer-events: none`, el usuario nunca podía disparar el gesto que destrabara la reproducción. Rotar a landscape disparaba un `resize` + reflow que en algunas builds de Chrome cuenta como interacción del sistema y desbloqueaba el play.
+**Causa raíz**: el SDK manual mutaba el DOM del iframe fuera del ciclo de React. Cuando React intentaba desmontar el player (cambio de estado, AnimatePresence exit, etc.), encontraba el árbol corrupto y tiraba `removeChild`. Eso a su vez disparaba el ErrorBoundary, que intentaba renderizar el fallback mientras seguía habiendo nodos rotos, generando el loop `Maximum update depth`.
 
 **Fix** (`src/pages/student/VIPLiveRoom.tsx`):
-1. Estado nuevo `audioEnabled` (default `false`) + `iframeRef` + `streamPlayerRef`.
-2. URL del iframe siempre arranca con `&muted=true&playsinline=true`. El `play()` se ejecuta sin pedir gesto.
-3. Cargar el SDK de Cloudflare Stream globalmente (`https://embed.cloudflarestream.com/embed/sdk.latest.js`) en `useEffect`. En el `onLoad` del iframe se invoca `window.Stream(iframe)` y se guarda el player en `streamPlayerRef`.
-4. Overlay premium con backdrop blur + botón dorado pulsante centrado sobre el player. Click en el overlay o el botón ejecuta `handleEnableAudio`: setea `player.muted = false`, `player.volume = 1`, y `player.play()`. **No hay remount del iframe** — el gesto del usuario se aplica directo a la sesión WebRTC ya establecida.
-5. Visible en todos los dispositivos (Chrome desktop también bloquea autoplay-con-audio sin MEI score; rotar el botón a mobile-only generaría inconsistencias raras).
+1. **Reemplazado iframe raw + SDK manual por `<Stream>` de `@cloudflare/stream-react`** (la misma lib que usa `LessonPlayer` y `HistoryPage`). La lib gestiona el iframe, el SDK y el cleanup de listeners internamente; nunca toca DOM por fuera de React.
+2. **Modo WebRTC eliminado**. Se usa HLS estándar (compatible con TODO dispositivo). Latencia 5-10s; no perdemos nada porque ya estábamos en ese rango por la ingesta RTMP.
+3. **`controls` activos** en el `<Stream>`: el usuario ve el reproductor nativo de Cloudflare con su botón de mute como respaldo.
+4. **Control de mute via `streamRef`**: nuestro botón overlay "Activar sonido" llama `streamRef.current.muted = false; player.volume = 1; player.play()` usando la API oficial de la lib. Sin remount, sin SDK manual.
+5. **Fade-in cinemático en capa separada**: motion.div con `bg-black opacity 1 → 0` encima del `<Stream>`. Cubre la transición visual sin afectar el iframe, que arranca a opacity 1 (clave para que Android no pierda la pista de video durante el compositing).
+6. **`CF_CUSTOMER_CODE`** se extrae del subdominio (`customer-XXX.cloudflarestream.com` → `XXX`) y se pasa como prop al `<Stream>` para mantener el subdomain del proyecto.
 
-**Por qué el remount via `key` NO funcionaba (primer intento)**: al cambiar la `key` del iframe, React desmonta y vuelve a montar. Cloudflare establece una nueva conexión WebRTC (1-2s de negociación UDP). Para cuando el handshake termina y se intenta reproducir con audio, el "user activation context" de Chrome (~5s) ya expiró. El SDK soluciona esto porque la conexión ya está activa: solo se togglea la propiedad `muted` del player vivo, sin reload ni handshake.
+**Trade-offs aceptados**:
+- Perdimos el ideal teórico de WebRTC (<1s). En la práctica nunca lo teníamos.
+- Ganamos: compatibilidad universal (iOS, Android Chrome, Samsung Browser, in-app browsers), cleanup robusto sin errores de React, botón nativo de mute como fallback, código sustancialmente más simple.
+- Para volver a <1s en el futuro: requiere migrar OBS a WHIP (ingesta WebRTC nativa) — sección 13.1.1.
 
 ### 13.1 Pendientes de optimización del live (NO atacados aún)
 
