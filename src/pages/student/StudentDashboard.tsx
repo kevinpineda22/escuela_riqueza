@@ -300,7 +300,7 @@ const StudentDashboard = () => {
           setSubscriptionEndDate(new Date(data.current_period_end).toLocaleDateString());
         }
       } catch (err) {
-        console.error("Error al cargar la suscripcin", err);
+        console.error("Error al cargar la suscripción", err);
       }
     };
     loadSubscriptionEnd();
@@ -1315,7 +1315,7 @@ const StudentDashboard = () => {
                       </div>
                       {user?.plan !== PLANS.FREE && subscriptionEndDate && (
                         <div className="flex justify-between items-center">
-                          <span className="text-textMuted font-medium">Prximo cobro</span>
+                          <span className="text-textMuted font-medium">Próximo cobro</span>
                           <span className="text-white/90 font-medium">{subscriptionEndDate}</span>
                         </div>
                       )}
@@ -1350,7 +1350,7 @@ const StudentDashboard = () => {
               <Award className="text-gold" size={24} /> Portal de Pagos
             </DialogTitle>
             <DialogDescription className="text-textMuted">
-              Gestiona tu suscripcin y mtodos de pago.
+              Gestiona tu suscripción y métodos de pago.
             </DialogDescription>
           </DialogHeader>
           
@@ -1367,13 +1367,13 @@ const StudentDashboard = () => {
                 </span>
               </div>
               <div className="relative z-10 flex justify-between items-center text-sm pt-4 border-t border-white/10">
-                <span className="text-white/60">Prximo cobro:</span>
+                <span className="text-white/60">Próximo cobro:</span>
                 <span className="text-white font-medium">{subscriptionEndDate || "15 de Junio de 2026 (Simulado)"}</span>
               </div>
             </div>
 
             <div className="space-y-3">
-              <h4 className="text-sm font-semibold text-white/80">Mtodos de Pago</h4>
+              <h4 className="text-sm font-semibold text-white/80">Métodos de Pago</h4>
               <div className="bg-black/30 border border-white/10 rounded-xl p-4 flex justify-between items-center">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-6 bg-white/10 rounded border border-white/20 flex items-center justify-center text-[10px] font-bold text-white/60">
@@ -1390,10 +1390,10 @@ const StudentDashboard = () => {
 
             <div className="flex flex-col gap-3 pt-4">
               <button className="w-full py-2.5 bg-white/10 hover:bg-white/15 text-white text-sm font-medium rounded-lg transition-colors border border-white/10">
-                Aadir mtodo de pago
+                Añadir método de pago
               </button>
               <button className="w-full py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-sm font-medium rounded-lg transition-colors border border-red-500/20">
-                Cancelar suscripcin
+                Cancelar suscripción
               </button>
             </div>
           </div>
