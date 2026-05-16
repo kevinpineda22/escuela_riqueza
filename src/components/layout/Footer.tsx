@@ -21,6 +21,18 @@ const YtIcon = ({ size = 16 }: { size?: number }) => (
   </svg>
 );
 
+const FbIcon = ({ size = 16 }: { size?: number }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
+  </svg>
+);
+
+const WaIcon = ({ size = 16 }: { size?: number }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+  </svg>
+);
+
 interface FooterColumn {
   title: string;
   links: { label: string; href: string; external?: boolean; icon?: typeof Mail }[];
@@ -55,6 +67,8 @@ const columns: FooterColumn[] = [
 const socials = [
   { label: "Instagram", href: "https://www.instagram.com/escueladelariqueza/", Icon: IgIcon },
   { label: "YouTube", href: "https://www.youtube.com/@EscuelaDeLaRiqueza", Icon: YtIcon },
+  { label: "Facebook", href: "https://web.facebook.com/EscuelaDeLaRiqueza/?locale=es_LA&_rdc=1&_rdr#", Icon: FbIcon },
+  { label: "WhatsApp", href: "https://wa.me/573122975931", Icon: WaIcon },
 ];
 
 const Footer = () => {
