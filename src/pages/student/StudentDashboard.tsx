@@ -10,7 +10,7 @@ import {
   Video,
   User as UserIcon,
   Camera,
-  Loader2,
+  Loader2,  
   CheckCircle2,
   ArrowLeft,
   Crown,
