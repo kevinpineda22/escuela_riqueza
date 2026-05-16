@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import LiveChat, { type ChatMessage } from "@/components/feature/LiveChat";
-import { Sparkles, Calendar, Clock, Tv, Radio, Loader2, VideoOff, ArrowLeft, Volume2, PanelRightClose, PanelRightOpen } from "lucide-react";
+import { Sparkles, Calendar, Clock, Tv, Radio, Loader2, VideoOff, ArrowLeft, Volume2, PanelRightClose, PanelRightOpen, Users } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player.store";
 import { useAuthStore } from "@/stores/auth.store";
@@ -10,10 +11,19 @@ import { supabase } from "@/lib/supabase";
 import { fetchActiveLive, checkLiveInputStatus, type LiveEvent } from "@/lib/api/stream/lives";
 import { useIsDesktop } from "@/hooks/useMediaQuery";
 import { Stream } from "@cloudflare/stream-react";
+import LivePlayerControls from "@/components/feature/LivePlayerControls";
 
 // Extraer customer code del subdominio "customer-XXX.cloudflarestream.com"
 // para que @cloudflare/stream-react use el mismo dominio que el resto del proyecto.
 const CF_CUSTOMER_CODE = (import.meta.env.VITE_CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN || "").match(/customer-([^.]+)/)?.[1] || "";
+
+interface ViewerInfo {
+  user_id: string;
+  full_name: string;
+  avatar_url: string | null;
+  plan: "free" | "individual" | "vip";
+  online_at: string;
+}
 
 const VIPLiveRoom = () => {
   const navigate = useNavigate();
@@ -23,9 +33,20 @@ const VIPLiveRoom = () => {
   const [showIntro, setShowIntro] = useState(false);
   const [timeLeft, setTimeLeft] = useState({ hours: 0, minutes: 0, seconds: 0 });
   const [liveInputConnected, setLiveInputConnected] = useState(false);
-  const [audioEnabled, setAudioEnabled] = useState(false);
+  // Estados SEPARADOS de audio (antes estaban acoplados en `audioEnabled` y eso
+  // hacía que al mutear desde los controles, el overlay reapareciera):
+  //  - audioPromptDismissed: flag de "una vez". Una vez que el usuario clickea
+  //    "Activar sonido", el overlay NUNCA vuelve a aparecer en esta sesión.
+  //  - isMuted: estado actual de mute del player. Independiente del overlay.
+  const [audioPromptDismissed, setAudioPromptDismissed] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
   const [isChatVisibleDesktop, setIsChatVisibleDesktop] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [viewers, setViewers] = useState<ViewerInfo[]>([]);
+  const [showViewersList, setShowViewersList] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
+  const playerWrapperRef = useRef<HTMLDivElement>(null);
   const isDesktop = useIsDesktop();
   const { clearPlayer } = usePlayerStore();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -48,7 +69,8 @@ const VIPLiveRoom = () => {
   };
 
   const handleEnableAudio = () => {
-    setAudioEnabled(true);
+    setAudioPromptDismissed(true);
+    setIsMuted(false);
     const player = streamRef.current;
     if (!player) return;
     try {
@@ -60,6 +82,34 @@ const VIPLiveRoom = () => {
       }
     } catch (e) {
       console.warn("[VIPLiveRoom] No se pudo desmutear:", e);
+    }
+  };
+
+  const handleTogglePlay = () => {
+    const player = streamRef.current;
+    if (!player) return;
+    try {
+      if (isPlaying) {
+        player.pause();
+      } else {
+        const result = player.play();
+        if (result && typeof result.catch === "function") result.catch(() => {});
+      }
+    } catch (e) {
+      console.warn("[VIPLiveRoom] play/pause error:", e);
+    }
+  };
+
+  const handleToggleMute = () => {
+    const player = streamRef.current;
+    if (!player) return;
+    const next = !isMuted;
+    setIsMuted(next);
+    try {
+      player.muted = next;
+      if (!next && player.volume === 0) player.volume = 1;
+    } catch (e) {
+      console.warn("[VIPLiveRoom] toggle mute error:", e);
     }
   };
 
@@ -116,6 +166,46 @@ const VIPLiveRoom = () => {
     }, 3000);
     return () => clearInterval(poll);
   }, []);
+
+  // Presencia en tiempo real: quién está viendo el live ahora.
+  // Cada cliente se registra en un canal exclusivo del live; al cerrar pestaña
+  // Supabase lo saca solo (~30s). Dedupe por user_id para evitar duplicados
+  // cuando alguien abre la misma cuenta en dos pestañas.
+  useEffect(() => {
+    if (!live?.id || !user) return;
+
+    const channel = supabase.channel(`live_presence:${live.id}`, {
+      config: { presence: { key: user.id } },
+    });
+
+    const myPresence: ViewerInfo = {
+      user_id: user.id,
+      full_name: user.fullName || "Usuario",
+      avatar_url: user.avatarUrl,
+      plan: user.plan,
+      online_at: new Date().toISOString(),
+    };
+
+    channel
+      .on("presence", { event: "sync" }, () => {
+        const state = channel.presenceState<ViewerInfo>();
+        const unique = new Map<string, ViewerInfo>();
+        Object.values(state).flat().forEach(v => {
+          if (v?.user_id) unique.set(v.user_id, v);
+        });
+        setViewers([...unique.values()]);
+      })
+      .subscribe(async (status) => {
+        if (status === "SUBSCRIBED") {
+          await channel.track(myPresence);
+        }
+      });
+
+    return () => {
+      channel.untrack().catch(() => {});
+      supabase.removeChannel(channel);
+    };
+  }, [live?.id, user?.id, user?.fullName, user?.avatarUrl, user?.plan]);
 
   // Poll Cloudflare Live Input status: si OBS está transmitiendo, mostrar iframe aunque falte starts_at
   useEffect(() => {
@@ -293,6 +383,18 @@ const VIPLiveRoom = () => {
                 {showIframe ? "EN ESPERA" : "PRÓXIMAMENTE"}
               </div>
             )}
+
+            {/* Viewers badge — quién está conectado al live ahora */}
+            {!isEnded && viewers.length > 0 && (
+              <button
+                onClick={() => setShowViewersList(true)}
+                aria-label={`${viewers.length} conectados`}
+                className="flex items-center gap-1.5 sm:gap-2 bg-black/50 backdrop-blur-md border border-gold/20 text-white/85 hover:text-gold hover:border-gold/50 hover:bg-black/70 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl text-[10px] sm:text-xs font-black tracking-wide active:scale-95 transition-all"
+              >
+                <Users size={12} className="text-gold" />
+                <span>{viewers.length}</span>
+              </button>
+            )}
           </div>
         </motion.div>
 
@@ -329,56 +431,72 @@ const VIPLiveRoom = () => {
                   transition={{ duration: 1, delay: 0.3 }}
                   className="absolute inset-0 z-20 bg-black pointer-events-none"
                 />
-                <div className="w-full h-full absolute inset-0 z-0 bg-black">
+                <div ref={playerWrapperRef} className="w-full h-full absolute inset-0 z-0 bg-black">
                   <Stream
                     streamRef={streamRef}
                     src={live.stream_live_input_id!}
                     customerCode={CF_CUSTOMER_CODE || undefined}
-                    controls
+                    controls={false}
                     autoplay
-                    muted={!audioEnabled}
+                    muted={isMuted}
                     preload="auto"
                     responsive={false}
                     height="100%"
                     width="100%"
                     className="w-full h-full border-none"
+                    onPlay={() => { setIsPlaying(true); setIsBuffering(false); }}
+                    onPause={() => setIsPlaying(false)}
+                    onWaiting={() => setIsBuffering(true)}
+                    onPlaying={() => { setIsBuffering(false); setIsPlaying(true); }}
                   />
-                </div>
-                <AnimatePresence>
-                  {!audioEnabled && (
-                    <motion.div
-                      key="enable-audio-overlay"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.3 }}
-                      className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-[3px] cursor-pointer"
-                      onClick={handleEnableAudio}
-                    >
-                      <motion.button
+                  <LivePlayerControls
+                    streamRef={streamRef}
+                    wrapperRef={playerWrapperRef}
+                    isPlaying={isPlaying}
+                    isBuffering={isBuffering}
+                    isMuted={isMuted}
+                    onTogglePlay={handleTogglePlay}
+                    onToggleMute={handleToggleMute}
+                  />
+                  {/* Audio overlay — solo aparece UNA VEZ al ingresar al live.
+                      Una vez dismissed, no reaparece aunque el usuario mutee o
+                      ponga el volumen a 0 desde los controles. */}
+                  <AnimatePresence>
+                    {!audioPromptDismissed && (
+                      <motion.div
+                        key="enable-audio-overlay"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.3 }}
+                        className="absolute inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-[3px] cursor-pointer"
                         onClick={handleEnableAudio}
-                        aria-label="Activar sonido del live"
-                        initial={{ scale: 0.85, opacity: 0, y: 12 }}
-                        animate={{ scale: 1, opacity: 1, y: 0 }}
-                        exit={{ scale: 0.9, opacity: 0 }}
-                        transition={{ type: "spring", damping: 18, stiffness: 220 }}
-                        whileHover={{ scale: 1.04 }}
-                        whileTap={{ scale: 0.96 }}
-                        className="relative flex items-center gap-3 px-7 py-4 sm:px-9 sm:py-5 rounded-full bg-gradient-to-br from-gold via-goldHover to-gold text-darker font-black text-base sm:text-lg tracking-tight shadow-[0_25px_60px_-10px_rgba(204,164,59,0.7)] ring-1 ring-gold/50"
                       >
-                        {/* Pulse rings */}
-                        <span className="absolute inset-0 rounded-full bg-gold/50 animate-ping pointer-events-none" />
-                        <span className="absolute inset-0 rounded-full bg-gold/30 animate-ping pointer-events-none [animation-delay:0.6s]" />
+                        <motion.button
+                          onClick={handleEnableAudio}
+                          aria-label="Activar sonido del live"
+                          initial={{ scale: 0.85, opacity: 0, y: 12 }}
+                          animate={{ scale: 1, opacity: 1, y: 0 }}
+                          exit={{ scale: 0.9, opacity: 0 }}
+                          transition={{ type: "spring", damping: 18, stiffness: 220 }}
+                          whileHover={{ scale: 1.04 }}
+                          whileTap={{ scale: 0.96 }}
+                          className="relative flex items-center gap-3 px-7 py-4 sm:px-9 sm:py-5 rounded-full bg-gradient-to-br from-gold via-goldHover to-gold text-darker font-black text-base sm:text-lg tracking-tight shadow-[0_25px_60px_-10px_rgba(204,164,59,0.7)] ring-1 ring-gold/50"
+                        >
+                          {/* Pulse rings */}
+                          <span className="absolute inset-0 rounded-full bg-gold/50 animate-ping pointer-events-none" />
+                          <span className="absolute inset-0 rounded-full bg-gold/30 animate-ping pointer-events-none [animation-delay:0.6s]" />
 
-                        {/* Content */}
-                        <span className="relative flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-darker/15">
-                          <Volume2 size={18} strokeWidth={2.5} className="text-darker" />
-                        </span>
-                        <span className="relative">Activar sonido</span>
-                      </motion.button>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                          {/* Content */}
+                          <span className="relative flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-darker/15">
+                            <Volume2 size={18} strokeWidth={2.5} className="text-darker" />
+                          </span>
+                          <span className="relative">Activar sonido</span>
+                        </motion.button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               </motion.div>
             ) : isEnded ? (
               <motion.div
@@ -557,6 +675,69 @@ const VIPLiveRoom = () => {
           <LiveChat liveId={live.id} onIncomingMessage={handleIncomingMessage} />
         </div>
       )}
+
+      {/* Lista de viewers conectados al live */}
+      <Dialog open={showViewersList} onOpenChange={setShowViewersList}>
+        <DialogContent className="bg-darker border-white/10 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2.5">
+              <div className="p-1.5 rounded-lg bg-gold/15">
+                <Users size={16} className="text-gold" />
+              </div>
+              Conectados
+              <span className="text-gold font-black">({viewers.length})</span>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-y-auto -mx-2 px-2 space-y-1">
+            {viewers.length === 0 ? (
+              <p className="text-textMuted text-sm text-center py-8">Cargando conectados...</p>
+            ) : (
+              viewers
+                .slice()
+                .sort((a, b) => a.full_name.localeCompare(b.full_name))
+                .map(v => (
+                  <div
+                    key={v.user_id}
+                    className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-white/[0.04] transition-colors"
+                  >
+                    {v.avatar_url ? (
+                      <img
+                        src={v.avatar_url}
+                        alt={v.full_name}
+                        className="w-10 h-10 rounded-full object-cover ring-1 ring-white/10 shrink-0"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gold/30 to-gold/10 text-gold flex items-center justify-center font-black text-sm ring-1 ring-gold/30 shrink-0">
+                        {v.full_name?.[0]?.toUpperCase() ?? "?"}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-white truncate">
+                        {v.full_name}
+                        {v.user_id === user?.id && (
+                          <span className="ml-1.5 text-gold/70 font-normal text-xs">(Tú)</span>
+                        )}
+                      </p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                        <span
+                          className={cn(
+                            "text-[9px] font-black uppercase tracking-widest",
+                            v.plan === "vip" && "text-gold",
+                            v.plan === "individual" && "text-blue-300",
+                            v.plan === "free" && "text-textMuted",
+                          )}
+                        >
+                          {v.plan === "vip" ? "★ VIP" : v.plan === "individual" ? "Individual" : "Free"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
