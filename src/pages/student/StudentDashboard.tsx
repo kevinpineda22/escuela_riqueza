@@ -1330,7 +1330,7 @@ const StudentDashboard = () => {
                         onClick={handleManageBilling}
                         className="w-full mt-8 py-3.5 bg-white/5 hover:bg-white/10 text-white/70 font-medium rounded-xl transition-all border border-white/5 text-sm relative z-10"
                       >
-                        Gestionar MǸtodos de Pago
+                        Gestionar Métodos de Pago
                       </button>
                     )}
                   </div>

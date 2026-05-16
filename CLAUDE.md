@@ -682,15 +682,22 @@ Esto garantiza que solo haya UN `<Stream>` de Cloudflare en el DOM (el de `Podca
 
 ## 12. Historial de cambios — 2026-05-15
 
-### Fix: Upload de videos a Cloudflare Stream (CORS + "Video has no name")
+### Fix: Upload de videos a Cloudflare Stream (CORS + TUS Protocol)
 
-**Problema**: El upload usaba `XMLHttpRequest` + `FormData` contra `upload.cloudflarestream.com/{uid}`. Cloudflare Stream no habilita CORS para POST multipart/form-data desde navegadores. El preflight fallaba silenciosamente, el archivo nunca se subía, y Cloudflare mostraba "Video has no name" / "Pending Upload" para siempre.
+**Problema**: El upload usaba `XMLHttpRequest` + `FormData` contra `upload.cloudflarestream.com/{uid}`. Cloudflare Stream no habilita CORS para POST multipart/form-data desde navegadores. El preflight fallaba silenciosamente, el archivo nunca se subía, y Cloudflare mostraba "Video has no name" / "Pending Upload" para siempre. Además, fallaba por Content Too Large (413) y bloqueaba los videos requiriendo URLs firmadas.
 
 **Solución**: Reemplazado el mecanismo de upload por **TUS protocol** usando `tus-js-client` (librería oficial que Cloudflare recomienda para uploads desde browser).
 
 **Cambios técnicos:**
-- `src/lib/api/stream/content.ts` — `uploadFileWithProgress()` reescrito con `tus.Upload`. Envía `filename` y `filetype` como metadata TUS. Reintentos automáticos [0, 3s, 5s, 10s, 20s]. Manejo de errores con `tus.DetailedError`.
-- `api/stream/upload-url.ts` — Agregado manejo de OPTIONS preflight con CORS headers (`Access-Control-Allow-Origin: *`). Soporte para `req.body.name` para nombrar el video en Cloudflare. Errores más claros.
+- `src/lib/api/stream/content.ts` — `uploadFileWithProgress()` reescrito con `tus.Upload`. Envía `filename` y `filetype` como metadata TUS. Configurado `chunkSize` a 50MB para evitar error 413. Eliminado `requireSignedURLs` para evitar 401 Unauthorized post-subida.
+- `api/stream/upload-url.ts` — Agregado manejo de OPTIONS preflight con CORS headers (`Access-Control-Allow-Origin: *`). Soporte para `req.body.name` para nombrar el video y tamaño correcto usando `direct_user=true`.
+
+### Nueva Feature: Vista Pública de Módulos (Module Preview)
+- **`src/pages/public/ModulePreview.tsx`**: Nueva página pública `/explorar/:intelligenceId` para que usuarios sin registrar puedan visualizar la tabla de contenido, descripción y lecciones del módulo de una inteligencia específica.
+- **`src/components/feature/IntelligencesAct.tsx`**: Las "8 Inteligencias" de la landing ahora enlazan a los módulos reales de la DB a través de `/explorar/:intelligenceId`.
+
+### Mejoras UI: Certificados y Dashboard
+- **`src/pages/student/StudentDashboard.tsx`**: Se rediseñó la sección de certificados conectada con las insignias de los módulos reales y su texto correspondiente.
 
 ### Cleanup: Eliminación de código muerto
 
@@ -721,3 +728,23 @@ Se eliminaron 10 archivos que eran mocks/data quemados sin uso real:
 - **Mocks**: 0 archivos mock. Todo el contenido se sirve desde Supabase (real).
 - **Tipos de datos**: Solo queda `src/types/user.ts`. Los tipos `Module`, `Lesson` están en `src/lib/api/stream/content.ts` donde se usan.
 - **Páginas admin**: Gestor de Contenido (`/admin/content`), Lives (`/admin/lives`), Métricas (`/admin/metrics`), Usuarios (`/admin/users`), Settings (`/admin/settings`).
+
+### 12.1 Historial de cambios â€” 2026-05-15 (SesiÃ³n 2)
+
+#### Mejoras UI: Student Dashboard
+- **Mockup de Portal de Pagos**: Se reemplazÃ³ el botÃ³n de pagos inactivo por un modal completo (Dialog de shadcn) que simula el Customer Portal de Stripe. 
+- Muestra la fecha real del `current_period_end` (o simulada si estÃ¡ vacÃ­o), junto a una tarjeta predeterminada y opciones para gestionar la suscripciÃ³n.
+- **Fix de OrtografÃ­a**: Restaurados los acentos y 'Ã±' en el archivo `StudentDashboard.tsx` que se habÃ­an perdido tras una conversiÃ³n de codificaciÃ³n (suscripciÃ³n, prÃ³ximo, aÃ±adir, etc).
+
+#### RediseÃ±o: PÃ¡gina de Historia
+- **Nueva Estructura**: Se reconstruyÃ³ `/historia` dividiendo el contenido en dos columnas. Izquierda con la historia del fundador, derecha con un contenedor *sticky* para el diferenciador. Textos provistos por el usuario integrados.
+- **Fix de Cloudflare Stream (Layout Shift)**: Se eliminÃ³ el `responsive={true}` del componente `<Stream>` y se le aplicÃ³ `absolute inset-0 w-full h-full` dentro de un contenedor `aspect-video`. Esto evita que el SDK inyecte scripts de recÃ¡lculo que bugueaban o interrumpÃ­an el scroll del usuario.
+
+#### Fix: Descarga de Grabaciones (Lives)
+- **CorrecciÃ³n de URL Cloudflare**: El botÃ³n de descarga ahora apunta a `.../downloads/default.mp4` en lugar de la carpeta raÃ­z, previniendo el error `404 Not Found`.
+- **Nuevo Endpoint (`/api/stream/download-status`)**: Creada una nueva Vercel Serverless Function para consultar el estado de renderizado del MP4 en tiempo real antes de descargarlo.
+- **Feedback Interactivo**: Al hacer clic en descargar, un `toast` avisa si Cloudflare estÃ¡ empaquetando el video (`inprogress` con porcentaje), si aÃºn se estÃ¡ preparando (info), o abre la descarga directa si ya estÃ¡ `ready`.
+- **Fallback Local**: Si el servidor Vercel local (`/api`) estÃ¡ apagado en dev, atrapa el error `502 Bad Gateway` y abre la URL de emergencia para no bloquear el flujo de desarrollo.
+
+#### Contenido: FAQ
+- AÃ±adida nueva pregunta a la secciÃ³n FAQ de `Plans.tsx` sobre la diferencia de Escuela de la Riqueza con otros programas de formaciÃ³n.
