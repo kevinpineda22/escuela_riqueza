@@ -57,13 +57,12 @@ const HistoryPage = () => {
               </p>
             </div>
 
-            <div className="my-12 rounded-2xl overflow-hidden shadow-[0_0_40px_rgba(204,164,59,0.15)] border border-white/10 relative bg-black aspect-video group">
+            <div className="my-12 rounded-2xl overflow-hidden shadow-[0_0_40px_rgba(204,164,59,0.15)] border border-white/10 bg-black group">
               <Stream
                 src="6c7dbd66798d0c85e0e1fb0689916a8c"
                 controls
-                responsive={false}
+                responsive={true}
                 preload="metadata"
-                className="absolute inset-0 w-full h-full object-cover"
               />
             </div>
 
