@@ -38,6 +38,7 @@
     "react-wrap-balancer": "^1.1.1",
     "recharts": "^3.8.1",
     "sonner": "^2.0.7",
+    "stripe": "^22.1.1",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.2",
     "tus-js-client": "^4.3.1",

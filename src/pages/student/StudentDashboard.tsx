@@ -278,30 +278,35 @@ const StudentDashboard = () => {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(user?.avatarUrl || null);
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+  const [subscriptionEndDate, setSubscriptionEndDate] = useState<string | null>(null);
+  const [stripeCustomerId, setStripeCustomerId] = useState<string | null>(null);
 
-  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setAvatarFile(file);
-    setAvatarPreview(URL.createObjectURL(file));
-  };
+  // Cargar fecha de expiracin si el plan es de pago
+  useEffect(() => {
+    if (!user || user.plan === PLANS.FREE) return;
+    const loadSubscriptionEnd = async () => {
+      try {
+        const { data } = await supabase
+          .from("subscriptions")
+          .select("current_period_end, stripe_customer_id")
+          .eq("user_id", user.id)
+          .eq("status", "active")
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-  const handleDeleteAvatar = async () => {
-    if (!user) return;
-    setIsUpdatingProfile(true);
-    try {
-      const { error } = await supabase.from("profiles").update({ avatar_url: null }).eq("id", user.id);
-      if (error) throw error;
-      setUser({ ...user, avatarUrl: null });
-      setAvatarPreview(null);
-      setAvatarFile(null);
-      toast.success("Foto eliminada", { description: "Tu perfil ahora usa la imagen por defecto." });
-    } catch (err) {
-      toast.error("Error al eliminar foto", { description: (err as any).message });
-    } finally {
-      setIsUpdatingProfile(false);
-    }
-  };
+        if (data?.current_period_end) {
+          setSubscriptionEndDate(new Date(data.current_period_end).toLocaleDateString());
+        }
+        if (data?.stripe_customer_id) {
+          setStripeCustomerId(data.stripe_customer_id);
+        }
+      } catch (err) {
+        console.error("Error al cargar la suscripcin", err);
+      }
+    };
+    loadSubscriptionEnd();
+  }, [user]);
 
   const handleUpdateProfile = async () => {
     if (!user) return;
@@ -313,6 +318,7 @@ const StudentDashboard = () => {
         const filePath = `${user.id}-${Math.random()}.${fileExt}`;
         const { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, avatarFile);
         if (uploadError) throw uploadError;
+        
         finalAvatarUrl = supabase.storage.from('avatars').getPublicUrl(filePath).data.publicUrl;
       }
       const { error } = await supabase.from("profiles").update({ full_name: profileName, avatar_url: finalAvatarUrl }).eq("id", user.id);
@@ -324,6 +330,53 @@ const StudentDashboard = () => {
       toast.error("Error al actualizar perfil", { description: (err as any).message });
     } finally {
       setIsUpdatingProfile(false);
+    }
+  };
+
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("La imagen debe pesar menos de 2MB");
+      return;
+    }
+    setAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
+  };
+
+  const handleDeleteAvatar = () => {
+    setAvatarFile(null);
+    setAvatarPreview(null);
+  };
+
+  const handleManageBilling = async () => {
+    if (!stripeCustomerId) {
+      toast.info("Portal de Pagos", { description: "La integracin con Stripe se encuentra en desarrollo o tu cuenta no tiene un ID de Stripe asociado." });
+      return;
+    }
+
+    toast.loading("Conectando con Stripe...", { id: "stripe-redirect" });
+    try {
+      const response = await fetch("/api/stripe/portal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customerId: stripeCustomerId }),
+      });
+
+      if (!response.ok) {
+        throw new Error("No se pudo iniciar la sesin de Stripe");
+      }
+
+      const { url } = await response.json();
+      if (url) {
+        window.location.href = url;
+      } else {
+        throw new Error("Respuesta invlida desde el servidor");
+      }
+    } catch (error) {
+      console.error(error);
+      toast.dismiss("stripe-redirect");
+      toast.error("Error al conectar con Stripe", { description: "Intntalo de nuevo ms tarde." });
     }
   };
 
@@ -1283,12 +1336,18 @@ const StudentDashboard = () => {
                           <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span> Activo
                         </span>
                       </div>
-                      <div className="flex justify-between items-center">
+                      <div className="flex justify-between items-center pb-5 border-b border-white/5">
                         <span className="text-textMuted font-medium">Miembro desde</span>
                         <span className="text-white/90 font-medium">
                           {user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : "Hoy"}
                         </span>
                       </div>
+                      {user?.plan !== PLANS.FREE && subscriptionEndDate && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-textMuted font-medium">Prximo cobro</span>
+                          <span className="text-white/90 font-medium">{subscriptionEndDate}</span>
+                        </div>
+                      )}
                     </div>
                     
                     {user?.plan === PLANS.FREE ? (
@@ -1296,8 +1355,11 @@ const StudentDashboard = () => {
                         Mejorar mi Plan
                       </button>
                     ) : (
-                      <button className="w-full mt-8 py-3.5 bg-white/5 hover:bg-white/10 text-white/70 font-medium rounded-xl transition-all border border-white/5 text-sm relative z-10">
-                        Gestionar Métodos de Pago
+                      <button 
+                        onClick={handleManageBilling}
+                        className="w-full mt-8 py-3.5 bg-white/5 hover:bg-white/10 text-white/70 font-medium rounded-xl transition-all border border-white/5 text-sm relative z-10"
+                      >
+                        Gestionar MǸtodos de Pago
                       </button>
                     )}
                   </div>
