@@ -25,6 +25,7 @@ import LessonPlayer from "@/components/feature/LessonPlayer";
 import { SkeletonCard } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { toast } from "@/components/ui/toaster";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth.store";
 import { usePlayerStore } from "@/stores/player.store";
@@ -279,7 +280,7 @@ const StudentDashboard = () => {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(user?.avatarUrl || null);
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
   const [subscriptionEndDate, setSubscriptionEndDate] = useState<string | null>(null);
-  const [stripeCustomerId, setStripeCustomerId] = useState<string | null>(null);
+  const [isBillingModalOpen, setIsBillingModalOpen] = useState(false);
 
   // Cargar fecha de expiracin si el plan es de pago
   useEffect(() => {
@@ -288,7 +289,7 @@ const StudentDashboard = () => {
       try {
         const { data } = await supabase
           .from("subscriptions")
-          .select("current_period_end, stripe_customer_id")
+          .select("current_period_end")
           .eq("user_id", user.id)
           .eq("status", "active")
           .order("updated_at", { ascending: false })
@@ -297,9 +298,6 @@ const StudentDashboard = () => {
 
         if (data?.current_period_end) {
           setSubscriptionEndDate(new Date(data.current_period_end).toLocaleDateString());
-        }
-        if (data?.stripe_customer_id) {
-          setStripeCustomerId(data.stripe_customer_id);
         }
       } catch (err) {
         console.error("Error al cargar la suscripcin", err);
@@ -350,34 +348,7 @@ const StudentDashboard = () => {
   };
 
   const handleManageBilling = async () => {
-    if (!stripeCustomerId) {
-      toast.info("Portal de Pagos", { description: "La integracin con Stripe se encuentra en desarrollo o tu cuenta no tiene un ID de Stripe asociado." });
-      return;
-    }
-
-    toast.loading("Conectando con Stripe...", { id: "stripe-redirect" });
-    try {
-      const response = await fetch("/api/stripe/portal", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customerId: stripeCustomerId }),
-      });
-
-      if (!response.ok) {
-        throw new Error("No se pudo iniciar la sesin de Stripe");
-      }
-
-      const { url } = await response.json();
-      if (url) {
-        window.location.href = url;
-      } else {
-        throw new Error("Respuesta invlida desde el servidor");
-      }
-    } catch (error) {
-      console.error(error);
-      toast.dismiss("stripe-redirect");
-      toast.error("Error al conectar con Stripe", { description: "Intntalo de nuevo ms tarde." });
-    }
+    setIsBillingModalOpen(true);
   };
 
   const isPremium = user?.plan === PLANS.INDIVIDUAL || user?.plan === PLANS.VIP;
@@ -1370,6 +1341,64 @@ const StudentDashboard = () => {
         </div>
       </main>
       <Footer />
+
+      {/* Mockup de Customer Portal de Stripe */}
+      <Dialog open={isBillingModalOpen} onOpenChange={setIsBillingModalOpen}>
+        <DialogContent className="sm:max-w-[425px] bg-darker border-white/10 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-xl flex items-center gap-2">
+              <Award className="text-gold" size={24} /> Portal de Pagos
+            </DialogTitle>
+            <DialogDescription className="text-textMuted">
+              Gestiona tu suscripcin y mtodos de pago.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-6 space-y-6">
+            <div className="bg-white/5 border border-white/10 rounded-xl p-5 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-gold/5 rounded-bl-full -mr-5 -mt-5" />
+              <div className="relative z-10 flex justify-between items-start mb-4">
+                <div>
+                  <h4 className="text-sm font-semibold text-textMuted uppercase tracking-wider mb-1">Plan Actual</h4>
+                  <p className="text-2xl font-bold text-white uppercase">{user?.plan}</p>
+                </div>
+                <span className="text-green-400 font-bold bg-green-500/10 px-2 py-1 rounded border border-green-500/20 text-xs flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span> Activo
+                </span>
+              </div>
+              <div className="relative z-10 flex justify-between items-center text-sm pt-4 border-t border-white/10">
+                <span className="text-white/60">Prximo cobro:</span>
+                <span className="text-white font-medium">{subscriptionEndDate || "15 de Junio de 2026 (Simulado)"}</span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="text-sm font-semibold text-white/80">Mtodos de Pago</h4>
+              <div className="bg-black/30 border border-white/10 rounded-xl p-4 flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-6 bg-white/10 rounded border border-white/20 flex items-center justify-center text-[10px] font-bold text-white/60">
+                    VISA
+                  </div>
+                  <div className="text-sm">
+                    <p className="text-white font-medium">•••• 4242</p>
+                    <p className="text-xs text-white/50">Expira 12/28</p>
+                  </div>
+                </div>
+                <span className="text-xs text-gold bg-gold/10 px-2 py-1 rounded border border-gold/20">Predeterminado</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 pt-4">
+              <button className="w-full py-2.5 bg-white/10 hover:bg-white/15 text-white text-sm font-medium rounded-lg transition-colors border border-white/10">
+                Aadir mtodo de pago
+              </button>
+              <button className="w-full py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-sm font-medium rounded-lg transition-colors border border-red-500/20">
+                Cancelar suscripcin
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
