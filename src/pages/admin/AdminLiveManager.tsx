@@ -145,6 +145,31 @@ const AdminLiveManager = () => {
     setActiveTab("editor");
   };
 
+  const handleDownloadRecording = async (videoUid: string) => {
+    toast.loading("Verificando estado de la grabación...", { id: `dl-${videoUid}` });
+    try {
+      const res = await fetch("/api/stream/download-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ video_uid: videoUid })
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      
+      if (data.status === "ready" && data.url) {
+        toast.dismiss(`dl-${videoUid}`);
+        window.open(data.url, "_blank");
+      } else if (data.status === "inprogress") {
+        toast.loading(`Cloudflare está procesando tu video... ${Math.round(data.percentComplete)}%`, { id: `dl-${videoUid}`, duration: 5000 });
+      } else {
+        toast.info("La grabación se está preparando", { description: "Puede tardar unos minutos después de terminar el directo. Vuelve a intentar pronto.", id: `dl-${videoUid}`, duration: 5000 });
+      }
+    } catch (error) {
+      console.error("Error comprobando descarga", error);
+      toast.error("Hubo un error al conectar con Cloudflare", { id: `dl-${videoUid}`, duration: 3000 });
+    }
+  };
+
   const handleSave = async () => {
     if (!activeLive) return;
     const plans = formData.allowed_plans || ["vip"];
@@ -477,11 +502,10 @@ const AdminLiveManager = () => {
                   <Video size={14} /> Obtener grabación
                 </button>
                 {formData.recording_stream_uid && (
-                  <a href={`https://${CF_SUBDOMAIN}/${formData.recording_stream_uid}/downloads/default.mp4`}
-                    target="_blank" rel="noopener noreferrer"
+                  <button type="button" onClick={() => handleDownloadRecording(formData.recording_stream_uid!)}
                     className="bg-gold/10 hover:bg-gold/20 border border-gold/20 text-gold px-3 py-3 rounded-xl flex items-center gap-1.5 text-xs font-bold transition-colors shrink-0">
                     <Download size={14} /> Descargar
-                  </a>
+                  </button>
                 )}
               </div>
               <p className="text-[10px] text-textMuted/50">Al finalizar el directo, hacé clic en "Obtener grabación" para vincularla automáticamente. Sin necesidad de ir a Cloudflare.</p>
@@ -789,11 +813,10 @@ const AdminLiveManager = () => {
                   </div>
                   <div className="flex flex-wrap gap-2 shrink-0">
                     {live.recording_stream_uid && (
-                      <a href={`https://${CF_SUBDOMAIN}/${live.recording_stream_uid}/downloads/default.mp4`}
-                        target="_blank" rel="noopener noreferrer"
+                      <button type="button" onClick={() => handleDownloadRecording(live.recording_stream_uid!)}
                         className="flex-1 sm:flex-none bg-gold/10 hover:bg-gold/20 border border-gold/20 text-gold px-3 sm:px-4 py-2 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-bold transition-colors whitespace-nowrap">
                         <Download size={16} /> <span className="hidden sm:inline">Descargar grabación</span><span className="sm:hidden">Descargar</span>
-                      </a>
+                      </button>
                     )}
                     <button onClick={async e => {
                       e.stopPropagation();
