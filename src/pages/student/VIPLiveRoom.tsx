@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import LiveChat, { type ChatMessage } from "@/components/feature/LiveChat";
-import { Sparkles, Calendar, Clock, Tv, Radio, Loader2, VideoOff, ArrowLeft, MessageSquare, X, Volume2, PanelRightClose, PanelRightOpen } from "lucide-react";
+import { Sparkles, Calendar, Clock, Tv, Radio, Loader2, VideoOff, ArrowLeft, Volume2, PanelRightClose, PanelRightOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player.store";
 import { useAuthStore } from "@/stores/auth.store";
@@ -23,7 +23,6 @@ const VIPLiveRoom = () => {
   const [showIntro, setShowIntro] = useState(false);
   const [timeLeft, setTimeLeft] = useState({ hours: 0, minutes: 0, seconds: 0 });
   const [liveInputConnected, setLiveInputConnected] = useState(false);
-  const [isChatOpenMobile, setIsChatOpenMobile] = useState(false);
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [isChatVisibleDesktop, setIsChatVisibleDesktop] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -34,17 +33,18 @@ const VIPLiveRoom = () => {
 
   useEffect(() => { clearPlayer(); }, [clearPlayer]);
 
-  // Resetea unreads al volver a mostrar el chat
+  // Resetea unreads al volver a mostrar el chat (solo aplica en desktop;
+  // en mobile el chat siempre está visible — split fijo 50/50).
   useEffect(() => {
-    if (isChatVisibleDesktop) setUnreadCount(0);
-  }, [isChatVisibleDesktop]);
+    if (!isDesktop || isChatVisibleDesktop) setUnreadCount(0);
+  }, [isDesktop, isChatVisibleDesktop]);
 
   const handleIncomingMessage = (msg: ChatMessage) => {
     if (msg.isSystem) return;
     if (msg.user_id === user?.id) return;
-    if (isDesktop && !isChatVisibleDesktop) {
-      setUnreadCount(c => c + 1);
-    }
+    // Solo contamos unreads cuando el chat está oculto en desktop.
+    // En mobile siempre está visible, así que no aplica.
+    if (isDesktop && !isChatVisibleDesktop) setUnreadCount(c => c + 1);
   };
 
   const handleEnableAudio = () => {
@@ -178,9 +178,16 @@ const VIPLiveRoom = () => {
     );
   }
 
+  // Mobile: split fijo 50/50 entre video y chat (estilo Twitch/Kick/YouTube).
+  // El usuario expande a fullscreen landscape con el botón nativo de Cloudflare.
+  const mobileVideoHeightClass = "h-[50dvh] shrink-0";
+
   return (
-    <div className="min-h-[100dvh] bg-black text-textMain flex flex-col md:flex-row overflow-hidden font-sans">
-      <div className="flex-1 flex flex-col relative h-[100dvh] md:h-screen">
+    <div className="h-[100dvh] bg-black text-textMain flex flex-col md:flex-row overflow-hidden font-sans">
+      <div className={cn(
+        "flex flex-col relative",
+        isDesktop ? "flex-1 md:h-screen" : mobileVideoHeightClass
+      )}>
         {/* Cinematic Intro Overlay */}
         <AnimatePresence>
           {showIntro && (
@@ -331,6 +338,9 @@ const VIPLiveRoom = () => {
                     autoplay
                     muted={!audioEnabled}
                     preload="auto"
+                    responsive={false}
+                    height="100%"
+                    width="100%"
                     className="w-full h-full border-none"
                   />
                 </div>
@@ -540,56 +550,12 @@ const VIPLiveRoom = () => {
         </div>
       )}
 
-      {/* FAB y drawer del chat — SOLO en mobile */}
+      {/* Chat mobile — sibling permanente del video (split 50/50 fijo).
+          Sin toggle, sin FAB. El fullscreen lo maneja el botón nativo del player. */}
       {!isDesktop && (
-        <>
-          <button
-            onClick={() => setIsChatOpenMobile(true)}
-            aria-label="Abrir chat"
-            className="fixed bottom-5 right-5 z-40 w-14 h-14 rounded-full bg-gold hover:bg-goldHover text-darker flex items-center justify-center shadow-[0_10px_30px_-5px_rgba(204,164,59,0.6)] active:scale-95 transition-transform"
-          >
-            <MessageSquare size={22} />
-            <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse border-2 border-darker" />
-          </button>
-
-          <AnimatePresence>
-            {isChatOpenMobile && (
-              <>
-                <motion.div
-                  key="chat-overlay"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  onClick={() => setIsChatOpenMobile(false)}
-                  className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60]"
-                />
-                <motion.div
-                  key="chat-drawer"
-                  initial={{ y: "100%" }}
-                  animate={{ y: 0 }}
-                  exit={{ y: "100%" }}
-                  transition={{ type: "spring", damping: 30, stiffness: 280 }}
-                  className="fixed bottom-0 left-0 right-0 h-[85dvh] z-[70] bg-darker rounded-t-3xl overflow-hidden shadow-[0_-20px_40px_-10px_rgba(0,0,0,0.8)] flex flex-col"
-                >
-                  <div className="relative flex items-center justify-between px-4 py-3 pt-5 border-b border-white/10 bg-black/40 shrink-0">
-                    <div className="w-10 h-1 bg-white/20 rounded-full absolute left-1/2 -translate-x-1/2 top-2" />
-                    <h3 className="text-sm font-bold text-white">Comunidad VIP</h3>
-                    <button
-                      onClick={() => setIsChatOpenMobile(false)}
-                      aria-label="Cerrar chat"
-                      className="p-2.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
-                    >
-                      <X size={20} />
-                    </button>
-                  </div>
-                  <div className="flex-1 min-h-0">
-                    <LiveChat liveId={live.id} onIncomingMessage={handleIncomingMessage} />
-                  </div>
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
-        </>
+        <div className="flex-1 min-h-0 bg-darker border-t border-gold/30 shadow-[0_-20px_40px_-15px_rgba(0,0,0,0.7)]">
+          <LiveChat liveId={live.id} onIncomingMessage={handleIncomingMessage} />
+        </div>
       )}
     </div>
   );
