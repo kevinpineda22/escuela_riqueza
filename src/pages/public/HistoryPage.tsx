@@ -61,9 +61,9 @@ const HistoryPage = () => {
               <Stream
                 src="6c7dbd66798d0c85e0e1fb0689916a8c"
                 controls
-                responsive
+                responsive={false}
                 preload="metadata"
-                className="w-full h-full object-cover"
+                className="absolute inset-0 w-full h-full object-cover"
               />
             </div>
 
@@ -87,8 +87,8 @@ const HistoryPage = () => {
                 </div>
               </div>
 
-              <div className="md:col-span-4 flex flex-col pt-2 md:pt-14">
-                <div className="sticky top-28 bg-black/40 border border-white/10 rounded-2xl p-6 sm:p-8 hover:border-gold/30 transition-colors">
+              <div className="md:col-span-4">
+                <div className="sticky top-28 bg-black/40 border border-white/10 rounded-2xl p-6 sm:p-8 hover:border-gold/30 transition-colors mt-2 md:mt-14">
                   <div className="w-12 h-12 bg-gold/10 rounded-xl flex items-center justify-center mb-6">
                     <Lightbulb className="text-gold" size={24} />
                   </div>
