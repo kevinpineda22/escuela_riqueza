@@ -153,7 +153,15 @@ const AdminLiveManager = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ video_uid: videoUid })
       });
-      if (!res.ok) throw new Error();
+      
+      if (!res.ok) {
+        // Fallback local: Si la API de Vercel no está corriendo localmente (da 502),
+        // simplemente abrimos la pestaña.
+        toast.dismiss(`dl-${videoUid}`);
+        window.open(`https://${CF_SUBDOMAIN}/${videoUid}/downloads/default.mp4`, "_blank");
+        return;
+      }
+
       const data = await res.json();
       
       if (data.status === "ready" && data.url) {
@@ -166,7 +174,9 @@ const AdminLiveManager = () => {
       }
     } catch (error) {
       console.error("Error comprobando descarga", error);
-      toast.error("Hubo un error al conectar con Cloudflare", { id: `dl-${videoUid}`, duration: 3000 });
+      toast.dismiss(`dl-${videoUid}`);
+      // Fallback en caso de error de red
+      window.open(`https://${CF_SUBDOMAIN}/${videoUid}/downloads/default.mp4`, "_blank");
     }
   };
 
