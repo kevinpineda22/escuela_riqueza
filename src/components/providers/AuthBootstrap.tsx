@@ -71,10 +71,34 @@ const AuthBootstrap = ({ children }: AuthBootstrapProps) => {
       }
     });
 
+    // Handler global de unhandled rejections para capturar errores de Supabase Auth
+    // que se disparan en background (auto-refresh de token, listeners internos).
+    // Sin esto, un refresh token roto en localStorage rompe el ErrorBoundary.
+    const handleUnhandledAuthError = (event: PromiseRejectionEvent) => {
+      const reason = event.reason as { name?: string; message?: string } | null;
+      const message = typeof reason?.message === "string" ? reason.message : "";
+      const isAuthError =
+        reason?.name === "AuthApiError" ||
+        message.includes("Invalid Refresh Token") ||
+        message.includes("Refresh Token Not Found");
+
+      if (!isAuthError) return;
+
+      console.warn("[AuthBootstrap] Sesión inválida detectada (refresh token roto). Limpiando localStorage.", reason);
+      event.preventDefault();
+      // Forzar signOut local para limpiar el token podrido del storage.
+      // No nos importa el resultado del request al server.
+      supabase.auth.signOut({ scope: "local" }).catch(() => {});
+      if (isMounted) clearSession();
+    };
+
+    window.addEventListener("unhandledrejection", handleUnhandledAuthError);
+
     return () => {
       isMounted = false;
       clearTimeout(timeoutId);
       subscription.unsubscribe();
+      window.removeEventListener("unhandledrejection", handleUnhandledAuthError);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
