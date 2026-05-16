@@ -234,6 +234,14 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
                     {msg.user_id === user?.id && !msg.isSystem ? "Tú" : msg.user_name}
                   </span>
                   {msg.isSystem && <ShieldCheck size={10} className="text-gold" />}
+                  {!msg.isSystem && (
+                    <span className="text-[9px] font-medium text-white/30 tracking-wide tabular-nums">
+                      {new Date(msg.created_at).toLocaleTimeString(undefined, {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  )}
                 </div>
                 
                 <div
