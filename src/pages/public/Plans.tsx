@@ -25,15 +25,19 @@ const FAQ: FaqItem[] = [
     q: "¿En qué se diferencia el plan Individual del VIP?",
     a: "Individual te da acceso completo a todo el catálogo sin anuncios, modo podcast, notas personales y certificados. VIP suma encuentros en vivo con Iván, consultoría grupal y soporte prioritario.",
   },
-  {
-    q: "¿Hay reembolso si no me convence?",
-    a: "Tenés 14 días desde tu primera suscripción para solicitar reembolso completo sin preguntas.",
-  },
-  {
-    q: "¿Los certificados tienen validez?",
-    a: "Son certificados digitales de finalización de módulo, firmados por Escuela de la Riqueza. Ideales para sumar a tu LinkedIn o portfolio profesional.",
-  },
-];
+    {
+      q: "¿Hay reembolso si no me convence?",
+      a: "Tenés 14 días desde tu primera suscripción para solicitar reembolso completo sin preguntas.",
+    },
+    {
+      q: "¿Qué diferencia a la Escuela de la Riqueza de otros programas de formación empresarial?",
+      a: "Nuestro contenido está basado en el estudio y un nuevo descubrimiento que conecta la inteligencia para desarrollar en el empresario una mentalidad de talla mundial, no en sumar conocimiento enciclopédico.",
+    },
+    {
+      q: "¿Los certificados tienen validez?",
+      a: "Son certificados digitales de finalización de módulo, firmados por Escuela de la Riqueza. Ideales para sumar a tu LinkedIn o portfolio profesional.",
+    },
+  ];
 
 const COMPARE_ROWS: { label: string; free: boolean | string; individual: boolean | string; vip: boolean | string }[] = [
   { label: "Contenido introductorio", free: true, individual: true, vip: true },
