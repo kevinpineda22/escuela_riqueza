@@ -3,6 +3,7 @@ import { Radio, Image as ImageIcon, Settings2, Save, Plus, Trash2, PlayCircle, S
 import { cn } from "@/lib/utils";
 import { fetchLives, fetchEndedLives, fetchRecording, createLive, updateLive, deleteLive, setActiveLive as apiSetActiveLive, deactivateAllLives, checkLiveInputStatus, type LiveEvent } from "@/lib/api/stream/lives";
 import { supabase } from "@/lib/supabase";
+import { authedFetch } from "@/lib/api/client";
 import { toast } from "@/components/ui/toaster";
 
 const CF_SUBDOMAIN = import.meta.env.VITE_CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN || "";
@@ -148,9 +149,8 @@ const AdminLiveManager = () => {
   const handleDownloadRecording = async (videoUid: string) => {
     toast.loading("Verificando estado de la grabación...", { id: `dl-${videoUid}` });
     try {
-      const res = await fetch("/api/stream/download-status", {
+      const res = await authedFetch("/api/stream/download-status", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ video_uid: videoUid })
       });
       

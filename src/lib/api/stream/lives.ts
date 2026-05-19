@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { authedFetch } from "@/lib/api/client";
 
 export type LiveStatus = "scheduled" | "live" | "ended";
 export type PlanType = "free" | "individual" | "vip";
@@ -150,9 +151,8 @@ export async function checkLiveInputStatus(liveInputId: string): Promise<{ conne
     return { connected: false, disabled: true };
   }
   try {
-    const res = await fetch("/api/stream/live-input-status", {
+    const res = await authedFetch("/api/stream/live-input-status", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ live_input_id: liveInputId }),
     });
     if (!res.ok) {
@@ -169,9 +169,8 @@ export async function checkLiveInputStatus(liveInputId: string): Promise<{ conne
 
 export async function fetchRecording(liveInputId: string): Promise<{ recording_uid: string | null; message?: string }> {
   try {
-    const res = await fetch("/api/stream/recording", {
+    const res = await authedFetch("/api/stream/recording", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ live_input_id: liveInputId }),
     });
     if (!res.ok) throw new Error("Error al consultar grabación");
