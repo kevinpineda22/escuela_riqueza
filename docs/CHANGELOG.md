@@ -302,6 +302,37 @@ No es un bug, es la URL hardcodeada. Cloudflare Stream tiene tres modos de playb
 
 ---
 
+## 2026-05-19 (Sesión 2)
+
+### Feature: Comunidad VIP (Foro tipo Reddit)
+- **Base de datos (SQL)**: Creado `sync_community.sql` con las tablas `community_posts`, `community_comments` y `community_likes`. Incluye:
+  - Estructura de anidamiento de 1 nivel para comentarios (`parent_id`).
+  - Triggers para mantener actualizados `like_count` y `comment_count` en tiempo real para optimizar lecturas.
+  - Políticas RLS estrictas (Solo VIP y Admin pueden crear/ver, los autores pueden borrar sus propios posts/comentarios, admins pueden borrar cualquiera).
+  - Habilitación de publicación en Supabase Realtime.
+- **Capa API (`src/lib/api/community.ts`)**: CRUD completo. `fetchPosts`, `fetchPost`, `createPost`, `deletePost`, `fetchComments`, `createComment`, `deleteComment`, `toggleLike`. Optimización de estado `liked_by_me` inyectado en cada consulta usando `community_likes`.
+- **UI & Componentes (`src/components/feature/community/`)**:
+  - `CommunityFeed`: Orquestador principal, listas, filtros de categoría (Pregunta, Discusión, Recurso, Otro), ordenamiento (Recientes / Más populares). Subscripción a Realtime para posts nuevos.
+  - `PostCard` & `PostDetail`: Tarjetas resumen y vista completa del post. El detalle tiene un árbol de comentarios recursivo aplanado a un nivel, con subscripción a Realtime para comentarios nuevos/borrados.
+  - `LikeButton`: Toggle optimista con fallback en caso de error.
+  - `NewPostDialog`: Modal robusto validado para crear preguntas/discusiones.
+- **Integración**: Se reemplazó el placeholder de la pestaña "Comunidad VIP" en `StudentDashboard.tsx`. Usuarios gratis/individuales ven un estado vacío (candado) con botón de *upsell* para "Mejorar a VIP".
+
+### Ajustes en el Admin: Filtros por Periodo en Métricas
+- **SQL (`sync_admin_metrics_v2.sql`)**: Modificadas y creadas nuevas RPCs (`admin_count_new_users`, `admin_revenue_in_period`, `admin_get_top_lessons`) que ahora aceptan un parámetro `since timestamptz`. El top lessons ahora cuenta visualizaciones sólo dentro del período, manteniendo el `LEFT JOIN` para incluir lecciones con cero vistas.
+- **Frontend (`AdminMetrics.tsx` & `metrics.ts`)**: Agregado selector de periodo ("Todos los tiempos", "Últimos 7 días", "Último mes", "Último año"). Los KPIs cambian dinámicamente sus etiquetas ("Usuarios Totales" vs "Nuevos usuarios", "MRR Estimado" vs "Ingresos del período").
+
+### Fix: Scroll en Modo Desktop (Bug del iframe)
+- **Problema**: El `iframe` de Cloudflare en HistoryPage interceptaba todos los eventos de mouse en desktop, bloqueando el plugin de smooth scroll (Lenis) a menos que movieras el puntero fuera del video.
+- **Solución**: Se inyectó CSS global (`html.lenis-scrolling iframe { pointer-events: none !important; }`) para deshabilitar temporalmente los iframes durante un scroll activo en todo el sitio. Además, en `HistoryPage`, se puso un overlay transparente que absorbe scrolls pasivos.
+
+### Actualización de Copys (Contenidos)
+- **Historia (`HistoryPage.tsx`)**: Reescritura completa del texto por los contenidos actualizados del cliente ("La riqueza es una consecuencia...", "Rediseño cerebral", etc).
+- **Insignias de Certificados (`StudentDashboard.tsx`)**: Se renombró el módulo de "Inteligencia del aprendizaje" a "Inteligencia mental" en los textos locales (con fallback alias para retrocompatibilidad).
+- **Footer**: Añadidos íconos/SVG (`FbIcon`, `WaIcon`) y enlaces directos a Facebook y WhatsApp de la academia.
+
+---
+
 ## 2026-05-19
 
 ### Endurecimiento de seguridad: las 4 Vercel Functions ahora exigen JWT + admin role
