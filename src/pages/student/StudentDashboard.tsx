@@ -34,6 +34,7 @@ import { supabase } from "@/lib/supabase";
 import { fetchModules, fetchLessons, type Module as DBModule, type Lesson as DBLesson } from "@/lib/api/stream/content";
 import { fetchActiveLive, type LiveEvent } from "@/lib/api/stream/lives";
 import { fetchAllUserProgress } from "@/lib/api/stream/progress";
+import { CommunityFeed } from "@/components/feature/community/CommunityFeed";
 
 type TabId = "modulos" | "notas" | "certificados" | "comunidad" | "perfil";
 
@@ -49,6 +50,11 @@ const getInitials = (name: string) => {
 const VALID_TABS: TabId[] = ["modulos", "notas", "certificados", "comunidad", "perfil"];
 
 const BADGE_CONTENT: Record<string, { description: string; keyPhrase: string }> = {
+  "inteligencia mental": {
+    description: "Abrirás los ojos y dejarás atrás las enseñanzas obsoletas del sistema educativo, para darle paso a esos aprendizajes significativos que merece tu vida. Te darás cuenta de que el empresarismo no se desarrolla desde el conocimiento, sino desde la mentalidad.",
+    keyPhrase: "¡La mentalidad la determina el aprendizaje!",
+  },
+  // Alias legacy (módulo antes llamado "Inteligencia del aprendizaje")
   "inteligencia del aprendizaje": {
     description: "Abrirás los ojos y dejarás atrás las enseñanzas obsoletas del sistema educativo, para darle paso a esos aprendizajes significativos que merece tu vida. Te darás cuenta de que el empresarismo no se desarrolla desde el conocimiento, sino desde la mentalidad.",
     keyPhrase: "¡La mentalidad la determina el aprendizaje!",
@@ -1192,28 +1198,33 @@ const StudentDashboard = () => {
               );
             })()}
 
-            {activeTab === "comunidad" && (
-              <motion.div 
-                key="comunidad" 
+            {activeTab === "comunidad" && user && (
+              <motion.div
+                key="comunidad"
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}
-                className="p-8 sm:p-16 text-center border border-transparent rounded-3xl bg-gradient-to-br from-gold/20 to-darker min-h-[400px] flex flex-col justify-center relative overflow-hidden"
               >
-                <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 sm:w-80 h-64 sm:h-80 bg-gold/10 rounded-full blur-3xl mix-blend-screen" />
-                <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-64 sm:w-80 h-64 sm:h-80 bg-gold/5 rounded-full blur-3xl mix-blend-screen" />
-                
-                <div className="relative z-10">
-                  <Users size={56} className="mx-auto text-gold mb-6 drop-shadow-[0_0_15px_rgba(204,164,59,0.4)]" />
-                  <h3 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">Red Global Privada</h3>
-                  <p className="text-white/80 mt-4 max-w-md mx-auto text-lg leading-relaxed">
-                    Conecta con cientos de líderes y haz networking del más alto nivel exclusivo para miembros VIP.
-                  </p>
-                  <button
-                    type="button"
-                    className="mt-8 px-8 py-3.5 bg-gold text-darker font-bold rounded-xl hover:bg-goldHover transition-all shadow-[0_0_20px_rgba(204,164,59,0.3)] hover:shadow-[0_0_30px_rgba(204,164,59,0.5)] text-lg"
-                  >
-                    Abrir Foro VIP
-                  </button>
-                </div>
+                {user.plan === PLANS.VIP || user.role === "admin" ? (
+                  <CommunityFeed currentUserId={user.id} isAdmin={user.role === "admin"} />
+                ) : (
+                  <div className="p-8 sm:p-16 text-center border border-transparent rounded-3xl bg-gradient-to-br from-gold/20 to-darker min-h-[400px] flex flex-col justify-center relative overflow-hidden">
+                    <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 sm:w-80 h-64 sm:h-80 bg-gold/10 rounded-full blur-3xl mix-blend-screen" />
+                    <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-64 sm:w-80 h-64 sm:h-80 bg-gold/5 rounded-full blur-3xl mix-blend-screen" />
+                    <div className="relative z-10">
+                      <Lock size={48} className="mx-auto text-gold mb-6 drop-shadow-[0_0_15px_rgba(204,164,59,0.4)]" />
+                      <h3 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">Comunidad exclusiva VIP</h3>
+                      <p className="text-white/80 mt-4 max-w-md mx-auto text-lg leading-relaxed">
+                        Conecta con cientos de líderes y haz networking del más alto nivel. Disponible para miembros VIP.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => navigate("/planes")}
+                        className="mt-8 px-8 py-3.5 bg-gold text-darker font-bold rounded-xl hover:bg-goldHover transition-all shadow-[0_0_20px_rgba(204,164,59,0.3)] hover:shadow-[0_0_30px_rgba(204,164,59,0.5)] text-lg"
+                      >
+                        Mejorar a VIP
+                      </button>
+                    </div>
+                  </div>
+                )}
               </motion.div>
             )}
 

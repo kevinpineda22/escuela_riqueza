@@ -87,10 +87,11 @@ escuela_riqueza/
 │   │       ├── admin/
 │   │       │   ├── metrics.ts    # Dashboard KPIs reales desde Supabase
 │   │       │   └── users.ts      # CRUD de usuarios admin real
-│   │       └── stream/
-│   │           ├── content.ts    # CRUD real de módulos/lecciones en Supabase
-│   │           ├── lives.ts      # CRUD real de lives, input status, recordings
-│   │           └── progress.ts   # Progreso de lecciones (upsert)
+│   │       ├── stream/
+│   │       │   ├── content.ts    # CRUD real de módulos/lecciones en Supabase
+│   │       │   ├── lives.ts      # CRUD real de lives, input status, recordings
+│   │       │   └── progress.ts   # Progreso de lecciones (upsert)
+│   │       └── community.ts      # CRUD Comunidad VIP, posts, likes, comentarios
 │   ├── schemas/                  # Validación zod
 │   │   ├── auth.schema.ts        # Login/Signup/Reset
 │   │   ├── lesson.schema.ts      # Subida de lección
@@ -237,12 +238,19 @@ Ver `env.example` (copiar a `.env.local` para desarrollo). Reglas:
 - Chat en `Supabase Realtime` (canal `live:{liveId}`) — broadcast con tabla `live_messages` y RLS por suscripción.
 - Para baja latencia: OBS en CBR, keyframe 1s, 30fps. Para <1s real se requiere migrar OBS a WHIP (pendiente, ver CHANGELOG 2026-05-16).
 
-### 7.5 Pagos
+### 7.5 Comunidad VIP (Foro)
+- Foro tipo Reddit exclusivo para VIP y Admins. Tabla `community_posts` y `community_comments`.
+- **Anidamiento limitado**: Los comentarios usan un solo nivel de anidamiento (`parent_id` siempre apunta a un comentario raíz, aunque el usuario responda a una respuesta).
+- **Contadores desnormalizados**: `like_count` y `comment_count` en posts/comments se mantienen con triggers SQL de inserción y borrado para evitar count() en tiempo de lectura.
+- **Realtime**: Suscripción de inserción y borrado a `community_posts` en la vista de lista y `community_comments` en la vista de detalle.
+- Las lecturas cruzan con `community_likes` en tiempo de consulta para resolver `liked_by_me` del usuario autenticado.
+
+### 7.6 Pagos
 - Plan elegido en landing → checkout de Stripe (`POST /api/stripe/checkout`).
 - Webhook `/api/stripe/webhook.ts` recibe `customer.subscription.*` y actualiza tabla `subscriptions` en Supabase.
 - "Customer Portal" de Stripe para que el usuario gestione su suscripción.
 
-### 7.6 RLS (Row Level Security)
+### 7.7 RLS (Row Level Security)
 La capa crítica de seguridad. Toda tabla con datos sensibles debe tener policies. Patrón base:
 
 ```sql

@@ -1,13 +1,17 @@
 import { supabase } from "@/lib/supabase";
 
+export type MetricsPeriod = "7d" | "month" | "year" | "all";
+
 export interface DashboardMetrics {
   totalUsers: number;
+  newUsersInPeriod: number;
   usersByPlan: {
     free: number;
     individual: number;
     vip: number;
   };
   totalRevenue: number;
+  revenueInPeriod: number;
   publishedModules: number;
   topLessons: {
     title: string;
@@ -15,12 +19,42 @@ export interface DashboardMetrics {
   }[];
 }
 
-export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
-  // 1. Total users & Users by Plan
+/**
+ * Convierte el período seleccionado en el filtro a una fecha "since".
+ * Si retorna null, significa "Histórico" (sin filtro).
+ */
+function periodToSince(period: MetricsPeriod): Date | null {
+  const now = new Date();
+  switch (period) {
+    case "7d": {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 7);
+      return d;
+    }
+    case "month": {
+      // Desde el día 1 del mes actual a las 00:00
+      return new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+    case "year": {
+      return new Date(now.getFullYear(), 0, 1);
+    }
+    case "all":
+    default:
+      return null;
+  }
+}
+
+export async function fetchDashboardMetrics(
+  period: MetricsPeriod = "all"
+): Promise<DashboardMetrics> {
+  const since = periodToSince(period);
+  const sinceIso = since ? since.toISOString() : null;
+
+  // 1. Total users + usuarios por plan (cumulativo, sin filtro)
   const { data: usersData, error: usersError } = await supabase
     .from("profiles")
     .select("plan");
-    
+
   if (usersError) throw usersError;
 
   let totalUsers = 0;
@@ -33,11 +67,10 @@ export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
     if (u.plan === "vip") usersByPlan.vip++;
   });
 
-  // Cálculo temporal de ingresos (Mock)
-  // A futuro esto vendrá de Stripe Webhooks a la tabla subscriptions
-  const totalRevenue = (usersByPlan.individual * 29) + (usersByPlan.vip * 99);
+  // Ingreso estimado cumulativo (sin filtro de período)
+  const totalRevenue = usersByPlan.individual * 29 + usersByPlan.vip * 99;
 
-  // 2. Published Modules
+  // 2. Módulos publicados (cumulativo)
   const { count: publishedModules, error: modError } = await supabase
     .from("modules")
     .select("*", { count: "exact", head: true })
@@ -45,37 +78,40 @@ export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
 
   if (modError) throw modError;
 
-  // 3. Top Lessons (from user_lesson_progress)
-  // This uses a raw query to group and count. We can do it by fetching all or via RPC.
-  // For MVP, fetch all progress or create a view. We'll fetch all and aggregate in JS for simplicity since data is small, 
-  // or use RPC. Let's do a simple join if Supabase supports it, or aggregate in JS.
-  const { data: progressData, error: progError } = await supabase
-    .from("user_lesson_progress")
-    .select("lesson_id");
+  // 3. Top lecciones filtradas por período (RPC SECURITY DEFINER)
+  const { data: topLessonsData, error: topError } = await supabase.rpc(
+    "admin_get_top_lessons",
+    { limit_count: 5, since: sinceIso }
+  );
+  if (topError) console.error("Error fetching top lessons:", topError);
 
-  if (progError) throw progError;
+  const topLessons = (topLessonsData || []).map(
+    (row: { title: string; views: number }) => ({
+      title: row.title,
+      views: Number(row.views) || 0,
+    })
+  );
 
-  const viewsMap: Record<string, number> = {};
-  progressData?.forEach(p => {
-    viewsMap[p.lesson_id] = (viewsMap[p.lesson_id] || 0) + 1;
-  });
+  // 4. Nuevos usuarios en el período
+  const { data: newUsersCount, error: newErr } = await supabase.rpc(
+    "admin_count_new_users",
+    { since: sinceIso }
+  );
+  if (newErr) console.error("Error fetching new users:", newErr);
 
-  const { data: lessonsData } = await supabase
-    .from("lessons")
-    .select("id, title");
-
-  const topLessons = lessonsData
-    ?.map(l => ({
-      title: l.title,
-      views: viewsMap[l.id] || 0
-    }))
-    .sort((a, b) => b.views - a.views)
-    .slice(0, 5) || [];
+  // 5. Ingresos del período (hoy: estimación sobre suscripciones cuyo updated_at cae en el rango)
+  const { data: revenuePeriod, error: revErr } = await supabase.rpc(
+    "admin_revenue_in_period",
+    { since: sinceIso }
+  );
+  if (revErr) console.error("Error fetching revenue in period:", revErr);
 
   return {
     totalUsers,
+    newUsersInPeriod: Number(newUsersCount) || 0,
     usersByPlan,
     totalRevenue,
+    revenueInPeriod: Number(revenuePeriod) || 0,
     publishedModules: publishedModules || 0,
     topLessons,
   };

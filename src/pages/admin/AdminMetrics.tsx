@@ -20,32 +20,44 @@ import {
   ResponsiveContainer
 } from "recharts";
 import { cn } from "@/lib/utils";
-import { fetchDashboardMetrics, type DashboardMetrics } from "@/lib/api/admin/metrics";
+import { fetchDashboardMetrics, type DashboardMetrics, type MetricsPeriod } from "@/lib/api/admin/metrics";
 import { toast } from "@/components/ui/toaster";
 
-const periods = ["Últimos 7 días", "Este mes", "Este año", "Histórico"];
+const periods: { id: MetricsPeriod; label: string }[] = [
+  { id: "7d", label: "Últimos 7 días" },
+  { id: "month", label: "Este mes" },
+  { id: "year", label: "Este año" },
+  { id: "all", label: "Histórico" },
+];
 
 const AdminMetrics = () => {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [period, setPeriod] = useState(periods[1]);
+  const [period, setPeriod] = useState<MetricsPeriod>("month");
 
   useEffect(() => {
+    let cancelled = false;
     const loadMetrics = async () => {
+      setIsLoading(true);
       try {
-        const data = await fetchDashboardMetrics();
-        setMetrics(data);
+        const data = await fetchDashboardMetrics(period);
+        if (!cancelled) setMetrics(data);
       } catch (error) {
         console.error("Error fetching metrics:", error);
-        toast.error("Error", {
-          description: "No se pudieron cargar las métricas en tiempo real.",
-        });
+        if (!cancelled) {
+          toast.error("Error", {
+            description: "No se pudieron cargar las métricas en tiempo real.",
+          });
+        }
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
     loadMetrics();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [period]);
 
   if (isLoading) {
     return (
@@ -55,19 +67,22 @@ const AdminMetrics = () => {
     );
   }
 
-  // --- Real Data Formatting ---
+  const periodLabel = periods.find((p) => p.id === period)?.label ?? "";
+  const isAllTime = period === "all";
+
+  // --- KPIs reales ---
   const kpiData = [
     {
-      title: "Usuarios Totales",
-      value: metrics?.totalUsers.toString() || "0",
-      change: "En tiempo real",
+      title: isAllTime ? "Usuarios Totales" : "Nuevos usuarios",
+      value: (isAllTime ? metrics?.totalUsers : metrics?.newUsersInPeriod)?.toString() || "0",
+      change: isAllTime ? "Histórico" : periodLabel,
       isPositive: true,
       icon: Users,
     },
     {
-      title: "Ingresos (MRR Estimado)",
-      value: `$${metrics?.totalRevenue.toLocaleString() || "0"}`,
-      change: "Suscripciones activas",
+      title: isAllTime ? "Ingresos (MRR Estimado)" : "Ingresos del período",
+      value: `$${(isAllTime ? metrics?.totalRevenue : metrics?.revenueInPeriod)?.toLocaleString() || "0"}`,
+      change: isAllTime ? "Suscripciones activas" : periodLabel,
       isPositive: true,
       icon: DollarSign,
     },
@@ -118,16 +133,16 @@ const AdminMetrics = () => {
         <div className="flex items-center gap-1 sm:gap-2 bg-black/40 border border-white/10 rounded-xl p-1 w-full sm:w-auto overflow-x-auto custom-scrollbar">
           {periods.map((p) => (
             <button
-              key={p}
-              onClick={() => setPeriod(p)}
+              key={p.id}
+              onClick={() => setPeriod(p.id)}
               className={cn(
                 "px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap shrink-0",
-                period === p
+                period === p.id
                   ? "bg-gold/15 text-gold shadow-[0_0_10px_rgba(204,164,59,0.1)]"
                   : "text-white/60 hover:text-white hover:bg-white/5"
               )}
             >
-              {p}
+              {p.label}
             </button>
           ))}
         </div>
@@ -230,7 +245,10 @@ const AdminMetrics = () => {
 
         {/* Top Modules */}
         <div className="bg-black/30 border border-white/10 rounded-2xl p-6 flex flex-col h-[400px]">
-          <h3 className="text-lg font-bold text-white mb-6">Lecciones más vistas</h3>
+          <div className="mb-6">
+            <h3 className="text-lg font-bold text-white">Lecciones más vistas</h3>
+            <p className="text-xs text-textMuted mt-1">{periodLabel}</p>
+          </div>
           <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-4">
             {metrics?.topLessons && metrics.topLessons.length > 0 ? (
               metrics.topLessons.map((lesson, index) => (
