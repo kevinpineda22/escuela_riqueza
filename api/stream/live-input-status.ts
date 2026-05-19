@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { applyCors, requireAuth } from '../_lib/auth';
+import { applyRateLimit } from '../_lib/ratelimit';
 
 const BodySchema = z.object({
   live_input_id: z.string().trim().min(8).max(128),
@@ -15,6 +16,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const user = await requireAuth(req, res);
   if (!user) return;
+
+  // Polling cada 10s = ~6/min normal; damos margen para reconexiones.
+  const ok = await applyRateLimit(req, res, user.id, {
+    requests: 30,
+    window: '1 m',
+    prefix: 'live-input-status',
+  });
+  if (!ok) return;
 
   const parsed = BodySchema.safeParse(req.body);
   if (!parsed.success) {

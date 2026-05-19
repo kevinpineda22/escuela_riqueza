@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { applyCors, requireAdmin } from '../_lib/auth';
+import { applyRateLimit } from '../_lib/ratelimit';
 
 const BodySchema = z.object({
   live_input_id: z.string().trim().min(8).max(128),
@@ -15,6 +16,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const admin = await requireAdmin(req, res);
   if (!admin) return;
+
+  const ok = await applyRateLimit(req, res, admin.id, {
+    requests: 10,
+    window: '1 m',
+    prefix: 'recording',
+  });
+  if (!ok) return;
 
   const parsed = BodySchema.safeParse(req.body);
   if (!parsed.success) {

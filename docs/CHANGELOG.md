@@ -396,3 +396,34 @@ Durante esta sesión se auditó el código vs `docs/PROJECT_STATE.md` y se detec
 2. **`GlobalPodcastPlayer.tsx`** — thumb del slider custom, pulse en barras durante playback, expand/collapse mobile (pendiente desde Fase 5).
 3. **Custom skin sobre `<Stream>` de Cloudflare** para `LessonPlayer` VOD (Fase 5 original).
 4. **`LiveChat.tsx`** — indicador "está escribiendo" (única feature faltante, lo demás está done).
+
+### Cleanup: borrado de `LessonViewer.tsx` legacy
+
+- Eliminada ruta `/leccion` de `routes.tsx`.
+- Eliminado import de `LessonViewer` en `routes.tsx`.
+- Eliminado archivo `src/pages/student/LessonViewer.tsx` (tenía datos mock hardcodeados, video w3schools, `isUserPremium = false`).
+- `StudentDashboard.tsx` ya maneja el drill-down a la lección, así que era código muerto.
+- Verificado: `npm run typecheck` limpio.
+
+### Rate limit con Upstash (helper listo, falta config en cuenta Upstash)
+
+**Qué se agregó:**
+- `api/_lib/ratelimit.ts` — helper `applyRateLimit(req, res, identifier, config)` con sliding window. Singleton de cliente Redis. Cache local de limiters por config. Headers `X-RateLimit-*` + `Retry-After`. **Fail-open** si `UPSTASH_REDIS_REST_URL`/`TOKEN` no están seteados (no bloquea en dev local).
+- Dependencias: `@upstash/ratelimit` + `@upstash/redis`.
+
+**Límites aplicados** (key = `user.id`, prefijo por endpoint):
+
+| Endpoint | Límite | Razón |
+|---|---|---|
+| `upload-url` | 3/min | Admin sube videos infrecuentemente |
+| `recording` | 10/min | Admin |
+| `download-status` | 10/min | Admin |
+| `live-input-status` | 30/min | Polling cada 10s = 6/min, +margen para reconexiones |
+
+**Env vars pendientes que el admin debe configurar en Vercel:**
+- `UPSTASH_REDIS_REST_URL`
+- `UPSTASH_REDIS_REST_TOKEN`
+
+(Ambas se generan al crear un Redis database en upstash.com → tier gratis 10k cmds/día).
+
+**Verificación:** `npm run typecheck` ✅ limpio.
