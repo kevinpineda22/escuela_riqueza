@@ -1,17 +1,31 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { z } from 'zod';
+import { applyCors, requireAdmin } from '../_lib/auth';
+
+const BodySchema = z.object({
+  size: z.coerce.number().int().positive().max(5_000_000_000), // 5 GB cap
+  name: z.string().trim().min(1).max(200).optional(),
+});
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS headers for preflight
-  if (req.method === 'OPTIONS') {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, tus-resumable, upload-length, upload-metadata');
-    return res.status(204).end();
-  }
+  if (applyCors(req, res)) return;
 
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
+
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
+
+  const sizeFromHeader = req.headers['upload-length'];
+  const parsed = BodySchema.safeParse({
+    size: req.body?.size ?? sizeFromHeader,
+    name: req.body?.name,
+  });
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Body inválido', issues: parsed.error.issues });
+  }
+  const { size, name: videoName } = parsed.data;
 
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
   const apiToken = process.env.CLOUDFLARE_STREAM_API_TOKEN || process.env.CLOUDFLARE_API_TOKEN || process.env.CLOUDFLARE_STREAM_TOKEN;
@@ -23,14 +37,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const maxDurationSeconds = 3600 * 4;
-    const videoName = req.body?.name || undefined;
 
-    const size = req.body?.size || req.headers['upload-length'];
-    if (!size) {
-      return res.status(400).json({ error: 'Falta el tamaño del archivo (req.body.size)' });
-    }
-
-    const metadata = [];
+    const metadata: string[] = [];
     if (videoName) {
       metadata.push(`name ${Buffer.from(videoName).toString('base64')}`);
     }
@@ -42,7 +50,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         'Authorization': `Bearer ${apiToken}`,
         'Tus-Resumable': '1.0.0',
         'Upload-Length': String(size),
-        'Upload-Creator': 'escuela_riqueza_admin',
+        'Upload-Creator': `escuela_riqueza_admin:${admin.id}`,
         'Upload-Metadata': metadata.join(',')
       }
     });

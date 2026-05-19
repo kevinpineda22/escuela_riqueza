@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import * as tus from "tus-js-client";
+import { authedFetch } from "@/lib/api/client";
 
 export interface Module {
   id: string;
@@ -130,9 +131,8 @@ export async function updateModuleOrder(orderedIds: string[]): Promise<void> {
 // --- CLOUDFLARE ---
 
 export async function getDirectUploadUrl(size: number, name?: string): Promise<{ uploadURL: string; uid: string }> {
-  const res = await fetch('/api/stream/upload-url', {
+  const res = await authedFetch('/api/stream/upload-url', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ size, name })
   });
 

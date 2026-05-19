@@ -1,9 +1,26 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { z } from 'zod';
+import { applyCors, requireAdmin } from '../_lib/auth';
+
+const BodySchema = z.object({
+  live_input_id: z.string().trim().min(8).max(128),
+});
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (applyCors(req, res)) return;
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
+
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
+
+  const parsed = BodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Falta live_input_id válido' });
+  }
+  const { live_input_id } = parsed.data;
 
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
   const apiToken = process.env.CLOUDFLARE_STREAM_API_TOKEN || process.env.CLOUDFLARE_API_TOKEN || process.env.CLOUDFLARE_STREAM_TOKEN;
@@ -13,14 +30,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: 'Faltan credenciales de Cloudflare en el servidor' });
   }
 
-  const { live_input_id } = req.body;
-  if (!live_input_id) {
-    return res.status(400).json({ error: 'Falta live_input_id' });
-  }
-
   try {
     const response = await fetch(
-      `https://api.cloudflare.com/client/v4/accounts/${accountId}/stream?type=live&live_input=${live_input_id}&per_page=1`,
+      `https://api.cloudflare.com/client/v4/accounts/${accountId}/stream?type=live&live_input=${encodeURIComponent(live_input_id)}&per_page=1`,
       {
         headers: {
           'Authorization': `Bearer ${apiToken}`,
