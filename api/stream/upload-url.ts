@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
-import { applyCors, requireAdmin } from '../_lib/auth';
-import { applyRateLimit } from '../_lib/ratelimit';
+import { applyCors, requireAdmin } from '../_lib/auth.js';
+import { applyRateLimit } from '../_lib/ratelimit.js';
 
 const BodySchema = z.object({
   size: z.coerce.number().int().positive().max(5_000_000_000), // 5 GB cap

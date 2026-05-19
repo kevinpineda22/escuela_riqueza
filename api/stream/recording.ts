@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
-import { applyCors, requireAdmin } from '../_lib/auth';
-import { applyRateLimit } from '../_lib/ratelimit';
+import { applyCors, requireAdmin } from '../_lib/auth.js';
+import { applyRateLimit } from '../_lib/ratelimit.js';
 
 const BodySchema = z.object({
   live_input_id: z.string().trim().min(8).max(128),
