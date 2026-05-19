@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { applyCors, requireAdmin } from '../_lib/auth';
+import { applyRateLimit } from '../_lib/ratelimit';
 
 const BodySchema = z.object({
   size: z.coerce.number().int().positive().max(5_000_000_000), // 5 GB cap
@@ -16,6 +17,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const admin = await requireAdmin(req, res);
   if (!admin) return;
+
+  const ok = await applyRateLimit(req, res, admin.id, {
+    requests: 3,
+    window: '1 m',
+    prefix: 'upload-url',
+  });
+  if (!ok) return;
 
   const sizeFromHeader = req.headers['upload-length'];
   const parsed = BodySchema.safeParse({

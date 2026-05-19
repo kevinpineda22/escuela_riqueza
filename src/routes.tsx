@@ -11,7 +11,6 @@ import HistoryPage from "@/pages/public/HistoryPage";
 import TermsPage from "@/pages/public/TermsPage";
 import PrivacyPage from "@/pages/public/PrivacyPage";
 import ModulePreview from "@/pages/public/ModulePreview";
-import LessonViewer from "@/pages/student/LessonViewer";
 import StudentDashboard from "@/pages/student/StudentDashboard";
 import VIPLiveRoom from "@/pages/student/VIPLiveRoom";
 import AdminMetrics from "@/pages/admin/AdminMetrics";
@@ -45,7 +44,6 @@ const AppRoutes = () => {
       <Routes location={location} key={location.pathname.split("/")[1] || "/"}>
         {/* Públicas */}
         <Route path="/" element={<PageTransition><LandingPage /></PageTransition>} />
-        <Route path="/leccion" element={<PageTransition><LessonViewer /></PageTransition>} />
         <Route path="/login" element={<PageTransition><AuthPage initialMode="signin" /></PageTransition>} />
         <Route path="/registro" element={<PageTransition><AuthPage initialMode="signup" /></PageTransition>} />
         <Route path="/recuperar-contrasena" element={<PageTransition><AuthPage initialMode="forgot" /></PageTransition>} />

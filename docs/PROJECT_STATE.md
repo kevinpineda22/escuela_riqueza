@@ -157,8 +157,16 @@
 - **Headers de seguridad globales** en `vercel.json`: `X-Frame-Options DENY`, `X-Content-Type-Options nosniff`, `Referrer-Policy`, `Permissions-Policy`, HSTS 2 años.
 - **Sin `SUPABASE_SERVICE_ROLE_KEY`**: usamos JWT del user + anon key → respeta RLS, menos superficie de ataque.
 
+**✅ Rate limit con Upstash (helper listo, falta config en cuenta Upstash)**
+- `api/_lib/ratelimit.ts` con sliding window por `user.id`, prefix por endpoint, fail-open si las env vars no están seteadas.
+- Aplicado en las 4 functions con límites diferenciados:
+  - `upload-url`: 3 req/min (admin, sube videos infrecuentemente)
+  - `recording`: 10 req/min (admin)
+  - `download-status`: 10 req/min (admin)
+  - `live-input-status`: 30 req/min (cualquier auth user; polling cada 10s = ~6/min normal)
+- Headers `X-RateLimit-Limit / Remaining / Reset` + `Retry-After` cuando bloquea.
+
 **⏳ Pendiente**
-- **Rate limit** (Upstash Ratelimit, tier gratis 10k cmds/día). Targets: `upload-url` (3/min/user), `live-input-status` (30/min, polling cada 10s), `recording`/`download-status` (10/min).
 - **Audit RLS periódico** en Supabase (query para detectar tablas sin policies).
 - **CSP** (Content-Security-Policy) en `vercel.json` — postergado porque requiere cuidado para no romper Cloudflare Stream / Supabase / fonts.
 
@@ -168,3 +176,5 @@
 | `ALLOWED_ORIGINS` | `https://escuela-riqueza.vercel.app` | Production + Preview + Development |
 | `CLOUDFLARE_ACCOUNT_ID` | (ya existente) | Production |
 | `CLOUDFLARE_STREAM_API_TOKEN` | (ya existente) | Production |
+| `UPSTASH_REDIS_REST_URL` | desde upstash.com (free tier) | Production + Preview |
+| `UPSTASH_REDIS_REST_TOKEN` | desde upstash.com (free tier) | Production + Preview |

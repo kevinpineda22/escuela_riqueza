@@ -62,7 +62,8 @@
 escuela_riqueza/
 ├── api/                          # Vercel Serverless Functions
 │   ├── _lib/
-│   │   └── auth.ts               # requireAuth, requireAdmin, applyCors (helpers compartidos)
+│   │   ├── auth.ts               # requireAuth, requireAdmin, applyCors
+│   │   └── ratelimit.ts          # applyRateLimit con Upstash (fail-open si no hay env)
 │   ├── stream/
 │   │   ├── upload-url.ts         # Firma URL de upload directo a Cloudflare Stream (admin)
 │   │   ├── live-input-status.ts  # Consulta estado del Live Input — OBS conectado? (any auth)
@@ -195,6 +196,8 @@ Ver `env.example` (copiar a `.env.local` para desarrollo). Reglas:
 | `CLOUDFLARE_ACCOUNT_ID` | Cuenta Cloudflare para Stream API |
 | `CLOUDFLARE_STREAM_API_TOKEN` | Token con permisos `Stream:Edit` |
 | `ALLOWED_ORIGINS` | Allowlist CORS (comma-separated). Ej: `https://escuela-riqueza.vercel.app` |
+| `UPSTASH_REDIS_REST_URL` | URL del Redis de Upstash para rate limit (tier gratis 10k cmds/día) |
+| `UPSTASH_REDIS_REST_TOKEN` | Token del Redis de Upstash. Sin estas dos, el rate limit falla-abierto (no bloquea) |
 | `SUPABASE_URL` *(opcional)* | Fallback a `VITE_SUPABASE_URL` si no está |
 | `SUPABASE_ANON_KEY` *(opcional)* | Fallback a `VITE_SUPABASE_ANON_KEY`. Helper de auth respeta RLS, no requiere service role |
 
@@ -267,10 +270,11 @@ for select using (
 3. **Toda Vercel Function nueva** debe usar `requireAuth` o `requireAdmin` de `api/_lib/auth.ts` ANTES de tocar cualquier servicio externo. Patrón: `const user = await requireAdmin(req, res); if (!user) return;` arriba de todo (después del CORS).
 4. **Toda Vercel Function** valida el body con `zod` antes de usarlo (`safeParse` → 400 con `issues` si falla).
 5. **CORS por allowlist**: usar `applyCors(req, res)` al inicio del handler. Nunca usar `Access-Control-Allow-Origin: *`. El allowlist se configura en env `ALLOWED_ORIGINS` (separada por comas).
-6. **Frontend llama Vercel Functions vía `authedFetch`** (`@/lib/api/client`), nunca con `fetch()` crudo. Esto garantiza que el JWT viaja en el header.
-7. **Webhooks** validan firma (`stripe.webhooks.constructEvent`).
-8. **No commitear** `.env.local`, `.env`, claves, ni archivos de Supabase generados con datos reales.
-9. **Headers de seguridad** en `vercel.json` (X-Frame-Options DENY, nosniff, HSTS, etc.) — no remover sin entender por qué están.
+6. **Rate limit**: usar `applyRateLimit(req, res, user.id, { requests, window, prefix })` de `api/_lib/ratelimit.ts` después del auth. Cada endpoint con su propio `prefix` para no compartir bucket.
+7. **Frontend llama Vercel Functions vía `authedFetch`** (`@/lib/api/client`), nunca con `fetch()` crudo. Esto garantiza que el JWT viaja en el header.
+8. **Webhooks** validan firma (`stripe.webhooks.constructEvent`).
+9. **No commitear** `.env.local`, `.env`, claves, ni archivos de Supabase generados con datos reales.
+10. **Headers de seguridad** en `vercel.json` (X-Frame-Options DENY, nosniff, HSTS, etc.) — no remover sin entender por qué están.
 
 ---
 
