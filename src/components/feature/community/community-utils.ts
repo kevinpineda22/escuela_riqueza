@@ -1,13 +1,52 @@
+import type { LucideIcon } from "lucide-react";
+import { HelpCircle, MessageCircle, BookOpen, Sparkles } from "lucide-react";
 import type { CommunityAuthor, CommunityCategory } from "@/lib/api/community";
 
-export const CATEGORIES: { id: CommunityCategory; label: string; color: string }[] = [
-  { id: "pregunta", label: "Pregunta", color: "bg-blue-500/15 text-blue-300 border-blue-500/30" },
-  { id: "discusion", label: "Discusión", color: "bg-purple-500/15 text-purple-300 border-purple-500/30" },
-  { id: "recurso", label: "Recurso", color: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30" },
-  { id: "otro", label: "Otro", color: "bg-white/5 text-textMuted border-white/10" },
+export interface CategoryMeta {
+  id: CommunityCategory;
+  label: string;
+  color: string;
+  chip: string;
+  icon: LucideIcon;
+  accent: string;
+}
+
+export const CATEGORIES: CategoryMeta[] = [
+  {
+    id: "pregunta",
+    label: "Pregunta",
+    color: "bg-blue-500/15 text-blue-300 border-blue-500/30",
+    chip: "from-blue-500/20 to-blue-500/5 text-blue-200 border-blue-400/40",
+    icon: HelpCircle,
+    accent: "shadow-[0_0_24px_rgba(59,130,246,0.18)]",
+  },
+  {
+    id: "discusion",
+    label: "Discusión",
+    color: "bg-purple-500/15 text-purple-300 border-purple-500/30",
+    chip: "from-purple-500/20 to-purple-500/5 text-purple-200 border-purple-400/40",
+    icon: MessageCircle,
+    accent: "shadow-[0_0_24px_rgba(168,85,247,0.18)]",
+  },
+  {
+    id: "recurso",
+    label: "Recurso",
+    color: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+    chip: "from-emerald-500/20 to-emerald-500/5 text-emerald-200 border-emerald-400/40",
+    icon: BookOpen,
+    accent: "shadow-[0_0_24px_rgba(16,185,129,0.18)]",
+  },
+  {
+    id: "otro",
+    label: "Otro",
+    color: "bg-white/5 text-textMuted border-white/10",
+    chip: "from-white/10 to-white/5 text-white/80 border-white/15",
+    icon: Sparkles,
+    accent: "shadow-[0_0_24px_rgba(255,255,255,0.06)]",
+  },
 ];
 
-export function categoryMeta(id: CommunityCategory) {
+export function categoryMeta(id: CommunityCategory): CategoryMeta {
   return CATEGORIES.find((c) => c.id === id) ?? CATEGORIES[3];
 }
 

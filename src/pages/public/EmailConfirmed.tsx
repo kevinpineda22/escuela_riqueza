@@ -1,31 +1,32 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { motion } from "motion/react";
-import { ArrowRight, CheckCircle2, AlertCircle, Loader2, Home } from "lucide-react";
+import { ArrowRight, CheckCircle2, AlertCircle, Loader2, Home, LogIn } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { usePlatformSettings } from "@/hooks/usePlatformSettings";
 
-const LOGO_LIGHT =
+const LOGO_FALLBACK =
   "https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/18dc9190-6625-4b89-8f1e-3f221e96b500/public";
 
 type Status = "checking" | "success" | "error";
 
 const EmailConfirmed = () => {
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [status, setStatus] = useState<Status>("checking");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [hasSession, setHasSession] = useState(false);
+  const { data: settings } = usePlatformSettings();
+  const logoUrl = settings?.logo_url || LOGO_FALLBACK;
+  const platformName = settings?.platform_name || "Escuela de la Riqueza";
 
   useEffect(() => {
     let mounted = true;
 
     const checkSession = async () => {
-      // Supabase ya procesa el token del hash de la URL automáticamente
-      // (detectSessionInUrl está activo por defecto).
       const { data, error } = await supabase.auth.getSession();
 
       if (!mounted) return;
 
-      // Si vino un error explícito en query params
       const errorDescription = searchParams.get("error_description");
       if (errorDescription) {
         setStatus("error");
@@ -40,15 +41,14 @@ const EmailConfirmed = () => {
       }
 
       if (data.session) {
+        setHasSession(true);
         setStatus("success");
         return;
       }
 
-      // Sin sesión y sin error claro: probablemente link expirado
-      setStatus("error");
-      setErrorMessage(
-        "El enlace de verificación expiró o ya fue utilizado. Inicia sesión normalmente o solicita uno nuevo."
-      );
+      // Sin sesión: igual mostramos éxito si no hay error explícito
+      // (puede pasar si el link ya fue usado y la sesión expiró).
+      setStatus("success");
     };
 
     checkSession();
@@ -57,13 +57,6 @@ const EmailConfirmed = () => {
       mounted = false;
     };
   }, [searchParams]);
-
-  // Auto-redirect tras éxito
-  useEffect(() => {
-    if (status !== "success") return;
-    const t = setTimeout(() => navigate("/dashboard"), 2200);
-    return () => clearTimeout(t);
-  }, [status, navigate]);
 
   return (
     <div className="min-h-[100dvh] w-full bg-[#050505] flex flex-col items-center justify-center relative overflow-hidden font-sans px-5 sm:px-6 py-12 selection:bg-gold/30">
@@ -91,8 +84,8 @@ const EmailConfirmed = () => {
       >
         <Link to="/" className="mb-8 sm:mb-10">
           <img
-            src={LOGO_LIGHT}
-            alt="Escuela de la Riqueza"
+            src={logoUrl}
+            alt={platformName}
             className="h-14 sm:h-16 w-auto object-contain drop-shadow-[0_0_22px_rgba(204,164,59,0.4)]"
           />
         </Link>
@@ -153,16 +146,45 @@ const EmailConfirmed = () => {
                 ¡Bienvenido a la Escuela!
               </h1>
               <p className="text-sm text-textMuted leading-relaxed max-w-sm mx-auto">
-                Tu cuenta está activa. Te llevamos a tu panel en un momento...
+                {hasSession
+                  ? "Tu cuenta está activa. Ya podés entrar a tu panel cuando quieras."
+                  : "Tu cuenta quedó verificada. Iniciá sesión para acceder a tu panel."}
               </p>
             </div>
 
-            <Link
-              to="/dashboard"
-              className="mt-4 inline-flex items-center gap-2 px-6 py-3 rounded-full bg-gold hover:bg-goldHover text-darker font-bold text-sm transition-all shadow-[0_8px_24px_-8px_rgba(204,164,59,0.6)] hover:shadow-[0_8px_28px_-6px_rgba(204,164,59,0.85)] hover:-translate-y-0.5"
-            >
-              Ir a mi panel ahora <ArrowRight size={16} />
-            </Link>
+            <div className="flex flex-col sm:flex-row items-center gap-3 mt-4 w-full sm:w-auto">
+              {hasSession ? (
+                <>
+                  <Link
+                    to="/dashboard"
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full bg-gold hover:bg-goldHover text-darker font-bold text-sm transition-all shadow-[0_8px_24px_-8px_rgba(204,164,59,0.6)] hover:shadow-[0_8px_28px_-6px_rgba(204,164,59,0.85)] hover:-translate-y-0.5"
+                  >
+                    Ir a mi panel <ArrowRight size={16} />
+                  </Link>
+                  <Link
+                    to="/"
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-white/80 hover:text-white font-medium text-sm transition-all"
+                  >
+                    <Home size={16} /> Volver al inicio
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link
+                    to="/login"
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full bg-gold hover:bg-goldHover text-darker font-bold text-sm transition-all shadow-[0_8px_24px_-8px_rgba(204,164,59,0.6)] hover:shadow-[0_8px_28px_-6px_rgba(204,164,59,0.85)] hover:-translate-y-0.5"
+                  >
+                    <LogIn size={16} /> Iniciar sesión
+                  </Link>
+                  <Link
+                    to="/"
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-white/80 hover:text-white font-medium text-sm transition-all"
+                  >
+                    <Home size={16} /> Volver al inicio
+                  </Link>
+                </>
+              )}
+            </div>
           </motion.div>
         )}
 

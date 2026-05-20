@@ -1,0 +1,255 @@
+<!--
+  Plantilla: Confirmación de cuenta — Escuela de la Riqueza
+  Compatible con Gmail, Outlook (incluido Outlook 2007/2010/2013/2016/2019/365),
+  Apple Mail, Yahoo, ProtonMail, clientes móviles iOS/Android.
+
+  Cómo usarla:
+  1. Supabase Dashboard → Authentication → Email Templates → "Confirm signup"
+  2. Asunto sugerido: "Confirma tu cuenta en Escuela de la Riqueza"
+  3. Pegar TODO el contenido de este archivo en el cuerpo HTML.
+  4. Variables Supabase usadas: {{ .ConfirmationURL }}  {{ .Email }}
+-->
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <meta name="format-detection" content="telephone=no, date=no, address=no, email=no" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="supported-color-schemes" content="dark light" />
+    <title>Confirma tu cuenta</title>
+
+    <!--[if mso]>
+    <noscript>
+      <xml>
+        <o:OfficeDocumentSettings>
+          <o:PixelsPerInch>96</o:PixelsPerInch>
+        </o:OfficeDocumentSettings>
+      </xml>
+    </noscript>
+    <style>
+      table, td, div, h1, h2, h3, p, a { font-family: 'Segoe UI', Arial, sans-serif !important; }
+    </style>
+    <![endif]-->
+
+    <style>
+      /* Reset básico */
+      body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+      table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; border-collapse: collapse; }
+      img { -ms-interpolation-mode: bicubic; border: 0; outline: none; text-decoration: none; display: block; }
+      body { margin: 0 !important; padding: 0 !important; width: 100% !important; }
+
+      /* Hover gold para clientes que soportan CSS */
+      .btn-gold:hover {
+        background-color: #E1B846 !important;
+        box-shadow: 0 10px 32px -8px rgba(204,164,59,0.7) !important;
+      }
+      a { color: #CCA43B; text-decoration: none; }
+
+      /* Responsive */
+      @media screen and (max-width: 600px) {
+        .container { width: 100% !important; max-width: 100% !important; }
+        .px-mobile { padding-left: 24px !important; padding-right: 24px !important; }
+        .h1 { font-size: 26px !important; line-height: 1.25 !important; }
+        .lead { font-size: 15px !important; }
+        .btn-gold { display: block !important; width: 100% !important; }
+        .hide-mobile { display: none !important; }
+      }
+    </style>
+  </head>
+
+  <body style="margin:0; padding:0; background-color:#050505; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+    <!-- Preheader (texto de preview que se ve en la bandeja) -->
+    <div style="display:none; max-height:0; overflow:hidden; mso-hide:all; font-size:1px; line-height:1px; color:#050505; opacity:0;">
+      Estás a un clic de comenzar tu camino financiero en la Escuela de la Riqueza.
+    </div>
+
+    <!-- Wrapper -->
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color:#050505;">
+      <tr>
+        <td align="center" style="padding: 40px 16px;">
+
+          <!-- Container -->
+          <table role="presentation" class="container" border="0" cellpadding="0" cellspacing="0" width="600" style="width:600px; max-width:600px; background-color:#0a0a0a; border:1px solid rgba(204,164,59,0.18); border-radius:20px; overflow:hidden;">
+
+            <!-- HERO con borde gold superior -->
+            <tr>
+              <td style="background:#0a0a0a; border-top:3px solid #CCA43B;">
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                  <tr>
+                    <td align="center" class="px-mobile" style="padding: 44px 40px 32px 40px;">
+                      <!-- Logo -->
+                      <img src="https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/18dc9190-6625-4b89-8f1e-3f221e96b500/public" alt="Escuela de la Riqueza" width="64" height="64" style="width:64px; height:64px; display:block; margin:0 auto 24px auto;" />
+
+                      <!-- Eyebrow -->
+                      <p style="margin:0 0 8px 0; color:#CCA43B; font-size:11px; font-weight:700; letter-spacing:3px; text-transform:uppercase;">
+                        Escuela de la Riqueza
+                      </p>
+
+                      <!-- Título -->
+                      <h1 class="h1" style="margin:0 0 16px 0; color:#FFFFFF; font-size:32px; line-height:1.2; font-weight:800; letter-spacing:-0.5px;">
+                        Confirma tu cuenta
+                      </h1>
+
+                      <!-- Subtítulo -->
+                      <p class="lead" style="margin:0; color:#A3A3A3; font-size:16px; line-height:1.6;">
+                        Estás a un clic de comenzar tu camino hacia la libertad financiera con Iván Mazo.
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Divider sutil -->
+            <tr>
+              <td style="background:#0a0a0a;">
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                  <tr>
+                    <td class="px-mobile" style="padding: 0 40px;">
+                      <div style="height:1px; background: linear-gradient(to right, transparent, rgba(204,164,59,0.3), transparent); line-height:1px; font-size:1px;">&nbsp;</div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- CTA -->
+            <tr>
+              <td style="background:#0a0a0a;">
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                  <tr>
+                    <td align="center" class="px-mobile" style="padding: 36px 40px 8px 40px;">
+                      <p style="margin:0 0 28px 0; color:#E5E5E5; font-size:15px; line-height:1.6;">
+                        Hola{{ if .Email }} <strong style="color:#FFFFFF;">{{ .Email }}</strong>{{ end }}, gracias por unirte. Para activar tu cuenta y acceder al contenido, confirma tu correo:
+                      </p>
+
+                      <!-- Botón bulletproof (Outlook + resto) -->
+                      <table role="presentation" border="0" cellpadding="0" cellspacing="0" align="center">
+                        <tr>
+                          <td align="center" style="border-radius:14px; background-color:#CCA43B;">
+                            <!--[if mso]>
+                            <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{{ .ConfirmationURL }}" style="height:54px;v-text-anchor:middle;width:280px;" arcsize="26%" stroke="f" fillcolor="#CCA43B">
+                              <w:anchorlock/>
+                              <center style="color:#0a0a0a;font-family:'Segoe UI',Arial,sans-serif;font-size:16px;font-weight:bold;">
+                                Confirmar mi cuenta
+                              </center>
+                            </v:roundrect>
+                            <![endif]-->
+                            <!--[if !mso]><!-- -->
+                            <a href="{{ .ConfirmationURL }}" target="_blank" class="btn-gold" style="background-color:#CCA43B; border-radius:14px; color:#0a0a0a; display:inline-block; font-size:16px; font-weight:800; line-height:54px; text-align:center; text-decoration:none; width:280px; mso-hide:all; box-shadow: 0 8px 24px -8px rgba(204,164,59,0.55); transition: all 0.2s ease;">
+                              Confirmar mi cuenta
+                            </a>
+                            <!--<![endif]-->
+                          </td>
+                        </tr>
+                      </table>
+
+                      <p style="margin:24px 0 0 0; color:#737373; font-size:12px; line-height:1.5;">
+                        Este enlace expira en 24 horas.
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Fallback link -->
+            <tr>
+              <td style="background:#0a0a0a;">
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                  <tr>
+                    <td class="px-mobile" style="padding: 36px 40px 0 40px;">
+                      <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: rgba(255,255,255,0.025); border:1px solid rgba(255,255,255,0.08); border-radius:12px;">
+                        <tr>
+                          <td style="padding: 18px 20px;">
+                            <p style="margin:0 0 8px 0; color:#A3A3A3; font-size:12px; line-height:1.5;">
+                              ¿No te funciona el botón? Copia y pega esta URL en tu navegador:
+                            </p>
+                            <p style="margin:0; word-break:break-all;">
+                              <a href="{{ .ConfirmationURL }}" target="_blank" style="color:#CCA43B; font-size:12px; line-height:1.5; text-decoration:underline; word-break:break-all;">{{ .ConfirmationURL }}</a>
+                            </p>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Beneficios -->
+            <tr>
+              <td style="background:#0a0a0a;">
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                  <tr>
+                    <td class="px-mobile" style="padding: 36px 40px 8px 40px;">
+                      <p style="margin:0 0 16px 0; color:#737373; font-size:11px; font-weight:700; letter-spacing:2px; text-transform:uppercase;">
+                        Lo que te espera
+                      </p>
+                      <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                        <tr>
+                          <td style="padding: 6px 0; color:#E5E5E5; font-size:14px; line-height:1.6;">
+                            <span style="color:#CCA43B; font-weight:bold;">›</span>&nbsp;&nbsp;Cursos de las 7 inteligencias del dinero
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 6px 0; color:#E5E5E5; font-size:14px; line-height:1.6;">
+                            <span style="color:#CCA43B; font-weight:bold;">›</span>&nbsp;&nbsp;Lives en vivo con Iván Mazo
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 6px 0; color:#E5E5E5; font-size:14px; line-height:1.6;">
+                            <span style="color:#CCA43B; font-weight:bold;">›</span>&nbsp;&nbsp;Comunidad VIP exclusiva
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 6px 0; color:#E5E5E5; font-size:14px; line-height:1.6;">
+                            <span style="color:#CCA43B; font-weight:bold;">›</span>&nbsp;&nbsp;Modo podcast: aprende mientras te mueves
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td style="background:#050505; border-top:1px solid rgba(255,255,255,0.06);">
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                  <tr>
+                    <td align="center" class="px-mobile" style="padding: 28px 40px;">
+                      <p style="margin:0 0 6px 0; color:#A3A3A3; font-size:12px; line-height:1.6;">
+                        Si no creaste esta cuenta, simplemente ignora este correo.
+                      </p>
+                      <p style="margin:0; color:#737373; font-size:11px; line-height:1.6;">
+                        © Escuela de la Riqueza · Iván Mazo
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+          </table>
+
+          <!-- Espacio inferior -->
+          <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="600" class="container" style="width:600px; max-width:600px;">
+            <tr>
+              <td align="center" style="padding: 16px 8px;">
+                <p style="margin:0; color:#525252; font-size:11px; line-height:1.5;">
+                  Este correo fue enviado a {{ .Email }}.
+                </p>
+              </td>
+            </tr>
+          </table>
+
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
