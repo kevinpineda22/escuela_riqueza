@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Radio, Image as ImageIcon, Settings2, Save, Plus, Trash2, PlayCircle, StopCircle, Calendar, Clock, Monitor, Copy, Upload, Download, Video } from "lucide-react";
+import { Radio, Image as ImageIcon, Settings2, Save, Plus, Trash2, PlayCircle, StopCircle, Calendar, Clock, Monitor, Copy, Upload, Download, Video, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fetchLives, fetchEndedLives, fetchRecording, createLive, updateLive, deleteLive, setActiveLive as apiSetActiveLive, deactivateAllLives, checkLiveInputStatus, type LiveEvent } from "@/lib/api/stream/lives";
 import { supabase } from "@/lib/supabase";
@@ -698,11 +698,27 @@ const AdminLiveManager = () => {
 
       {activeTab === "rooms" && (
         <div className="space-y-3">
-          <div className="flex items-center gap-2 px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-xs text-textMuted">
-            <Radio size={14} className="text-gold shrink-0" />
-            Solo <strong className="text-white/80 mx-1">una sala</strong> puede estar <strong className="text-green-400 mx-1">Activa</strong> a la vez.
-            La sala activa es la que ven los usuarios en su dashboard y en <code className="text-gold mx-1">/vip-live</code>.
-            Hacé clic en <strong className="text-white/80 mx-1">Activa/Inactiva</strong> para cambiar.
+          <div className="flex items-start gap-3 p-4 bg-white/[0.03] border border-white/10 rounded-xl">
+            <div className="shrink-0 w-9 h-9 rounded-lg bg-gold/10 border border-gold/20 flex items-center justify-center">
+              <Info size={16} className="text-gold" />
+            </div>
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <p className="text-sm font-semibold text-white">Solo una sala puede estar activa a la vez</p>
+              <ul className="text-sm text-textMuted space-y-1 leading-relaxed">
+                <li className="flex gap-2">
+                  <span className="text-gold/60 shrink-0">•</span>
+                  <span>La sala <span className="text-green-400 font-semibold">Activa</span> es la que ven los usuarios en su dashboard y en <code className="text-gold bg-black/40 px-1.5 py-0.5 rounded text-xs">/vip-live</code>.</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-gold/60 shrink-0">•</span>
+                  <span>Hacé clic en el botón <span className="text-white font-semibold">Activa/Inactiva</span> de cada sala para cambiar cuál se publica.</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-gold/60 shrink-0">•</span>
+                  <span>Activar una sala desactiva automáticamente la anterior.</span>
+                </li>
+              </ul>
+            </div>
           </div>
           {lives.length === 0 ? (
             <div className="text-center py-12 text-textMuted bg-darker rounded-xl border border-white/5">

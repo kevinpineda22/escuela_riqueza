@@ -87,11 +87,10 @@ escuela_riqueza/
 │   │       ├── admin/
 │   │       │   ├── metrics.ts    # Dashboard KPIs reales desde Supabase
 │   │       │   └── users.ts      # CRUD de usuarios admin real
-│   │       ├── stream/
-│   │       │   ├── content.ts    # CRUD real de módulos/lecciones en Supabase
-│   │       │   ├── lives.ts      # CRUD real de lives, input status, recordings
-│   │       │   └── progress.ts   # Progreso de lecciones (upsert)
-│   │       └── community.ts      # CRUD Comunidad VIP, posts, likes, comentarios
+│   │       └── stream/
+│   │           ├── content.ts    # CRUD real de módulos/lecciones en Supabase
+│   │           ├── lives.ts      # CRUD real de lives, input status, recordings
+│   │           └── progress.ts   # Progreso de lecciones (upsert)
 │   ├── schemas/                  # Validación zod
 │   │   ├── auth.schema.ts        # Login/Signup/Reset
 │   │   ├── lesson.schema.ts      # Subida de lección
@@ -201,6 +200,8 @@ Ver `env.example` (copiar a `.env.local` para desarrollo). Reglas:
 | `UPSTASH_REDIS_REST_TOKEN` | Token del Redis de Upstash. Sin estas dos, el rate limit falla-abierto (no bloquea) |
 | `SUPABASE_URL` *(opcional)* | Fallback a `VITE_SUPABASE_URL` si no está |
 | `SUPABASE_ANON_KEY` *(opcional)* | Fallback a `VITE_SUPABASE_ANON_KEY`. Helper de auth respeta RLS, no requiere service role |
+| `SUPABASE_SERVICE_ROLE_KEY` | **Solo** para `/api/stream/cloudflare-webhook.ts` (server-to-server, bypass RLS). NUNCA exponer al cliente |
+| `CLOUDFLARE_WEBHOOK_SECRET` | Secret HMAC compartido con Cloudflare Stream para validar firma de webhooks de Live Inputs |
 
 ---
 
@@ -233,24 +234,37 @@ Ver `env.example` (copiar a `.env.local` para desarrollo). Reglas:
 - **Reproducción**: en `VIPLiveRoom` se usa `<Stream>` de `@cloudflare/stream-react` (HLS estándar, latencia 5-10s). El iframe raw + SDK manual fue removido por causar `removeChild` errors en móviles — ver CHANGELOG 2026-05-16.
 - Solo una sala `is_active = true` a la vez. Admin la elige con botón Activar/Inactivar.
 - VIP ve countdown desde `starts_at` → intro cinemática → player.
-- Auto-detección de OBS via `/api/stream/live-input-status` (polling 10s antes de starts_at).
+- Auto-detección de OBS via `/api/stream/live-input-status` (polling 10s antes de starts_at) **+ webhook server-to-server** (ver abajo).
 - Polling 3s como fallback de Realtime.
 - Chat en `Supabase Realtime` (canal `live:{liveId}`) — broadcast con tabla `live_messages` y RLS por suscripción.
 - Para baja latencia: OBS en CBR, keyframe 1s, 30fps. Para <1s real se requiere migrar OBS a WHIP (pendiente, ver CHANGELOG 2026-05-16).
 
-### 7.5 Comunidad VIP (Foro)
-- Foro tipo Reddit exclusivo para VIP y Admins. Tabla `community_posts` y `community_comments`.
-- **Anidamiento limitado**: Los comentarios usan un solo nivel de anidamiento (`parent_id` siempre apunta a un comentario raíz, aunque el usuario responda a una respuesta).
-- **Contadores desnormalizados**: `like_count` y `comment_count` en posts/comments se mantienen con triggers SQL de inserción y borrado para evitar count() en tiempo de lectura.
-- **Realtime**: Suscripción de inserción y borrado a `community_posts` en la vista de lista y `community_comments` en la vista de detalle.
-- Las lecturas cruzan con `community_likes` en tiempo de consulta para resolver `liked_by_me` del usuario autenticado.
+#### 7.4.1 Webhook de Cloudflare Stream (sync OBS ↔ panel)
 
-### 7.6 Pagos
+Endpoint `/api/stream/cloudflare-webhook.ts` recibe eventos de Cloudflare Stream Live Inputs y actualiza la tabla `lives` sin necesidad de polling. Funciona en cualquier entorno (DEV polling se apaga, webhook NO).
+
+**Comportamiento:**
+- `live_input.connected` → si hay sala `is_active=true` con ese `stream_live_input_id` en `scheduled`, pasa automáticamente a `status='live'`.
+- `live_input.disconnected` → marca `is_paused=true` (NO finaliza; finalizar es decisión manual del admin para evitar perder la sesión por microcortes de OBS).
+- `video.ready` con `liveInput` set → vincula `recording_stream_uid` a la sala correspondiente (solo si está vacío, no sobreescribe).
+
+**Seguridad:**
+- Valida firma HMAC-SHA256 con `CLOUDFLARE_WEBHOOK_SECRET`. Header `Webhook-Signature: time=<ts>,sig1=<hex>`. Rechaza eventos con `time` fuera de ±5 min (anti-replay).
+- Body parser de Vercel está deshabilitado (`export const config = { api: { bodyParser: false } }`) para acceder al raw body — necesario para HMAC.
+- Usa `SUPABASE_SERVICE_ROLE_KEY` para bypass RLS (el webhook no tiene contexto de usuario). **Nunca exponer esta key al cliente.**
+
+**Setup en Cloudflare Dashboard:**
+1. Stream → Live Inputs → seleccionar el Live Input (`950f6b77...` o el que use Iván).
+2. Edit → "Webhook URL": `https://<dominio-vercel>/api/stream/cloudflare-webhook`.
+3. Click en "Generate signing key" — copiar el secret a `CLOUDFLARE_WEBHOOK_SECRET` en Vercel envs.
+4. (Opcional) Stream → Webhooks (notificación global) → mismo URL, mismo secret, para que también dispare `video.ready` cuando termina de procesar la grabación.
+
+### 7.5 Pagos
 - Plan elegido en landing → checkout de Stripe (`POST /api/stripe/checkout`).
 - Webhook `/api/stripe/webhook.ts` recibe `customer.subscription.*` y actualiza tabla `subscriptions` en Supabase.
 - "Customer Portal" de Stripe para que el usuario gestione su suscripción.
 
-### 7.7 RLS (Row Level Security)
+### 7.6 RLS (Row Level Security)
 La capa crítica de seguridad. Toda tabla con datos sensibles debe tener policies. Patrón base:
 
 ```sql
