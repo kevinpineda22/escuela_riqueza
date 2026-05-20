@@ -1,26 +1,34 @@
 import { useEffect, useState, useCallback, useRef, type RefObject, type ChangeEvent } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Loader2 } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Loader2, Settings, Check } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
+import type { LiveHLSPlayerHandle, QualityLevel } from "./LiveHLSPlayer";
 
 interface LivePlayerControlsProps {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  streamRef: RefObject<any>;
-  wrapperRef: RefObject<HTMLDivElement | null>;
+  playerRef: RefObject<LiveHLSPlayerHandle | null>;
   isPlaying: boolean;
   isBuffering: boolean;
   isMuted: boolean;
+  levels: QualityLevel[];
+  currentLevel: number;
   onTogglePlay: () => void;
   onToggleMute: () => void;
+  onSelectLevel: (index: number) => void;
 }
 
 const LivePlayerControls = ({
-  streamRef,
-  wrapperRef,
+  playerRef,
   isPlaying,
   isBuffering,
   isMuted,
+  levels,
+  currentLevel,
   onTogglePlay,
   onToggleMute,
+  onSelectLevel,
 }: LivePlayerControlsProps) => {
   const [controlsVisible, setControlsVisible] = useState(true);
   const [volume, setVolume] = useState(1);
@@ -28,7 +36,6 @@ const LivePlayerControls = ({
   const [liveDelta, setLiveDelta] = useState(0);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Auto-hide controls después de 3s sin interacción (solo cuando se está reproduciendo)
   const scheduleHide = useCallback(() => {
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     if (!isPlaying) {
@@ -50,100 +57,102 @@ const LivePlayerControls = ({
     };
   }, [scheduleHide]);
 
-  // Tracking del live edge: cuánto está atrasado el usuario respecto al filo del vivo.
-  // Poll cada 1s mientras reproduce. duration crece con el manifest HLS;
-  // si currentTime queda atrás, hay delay.
   useEffect(() => {
     if (!isPlaying) return;
     const interval = setInterval(() => {
-      const player = streamRef.current;
-      if (!player) return;
-      const d = player.duration;
-      const c = player.currentTime;
+      const video = playerRef.current?.video;
+      if (!video) return;
+      const d = video.duration;
+      const c = video.currentTime;
       if (!isFinite(d) || !isFinite(c) || d <= 0) return;
       const delta = d - c;
       setLiveDelta(delta > 0 ? delta : 0);
     }, 1000);
     return () => clearInterval(interval);
-  }, [isPlaying, streamRef]);
+  }, [isPlaying, playerRef]);
 
   const handleGoLive = useCallback(() => {
-    const player = streamRef.current;
-    if (!player) return;
+    const video = playerRef.current?.video;
+    if (!video) return;
     try {
-      const d = player.duration;
+      const d = video.duration;
       if (!isFinite(d) || d <= 0) return;
-      player.currentTime = Math.max(0, d - 0.5);
-      // Si estaba pausado, también arranca play()
-      if (player.paused) {
-        const result = player.play();
-        if (result && typeof result.catch === "function") result.catch(() => {});
+      video.currentTime = Math.max(0, d - 0.5);
+      if (video.paused) {
+        video.play().catch(() => {});
       }
     } catch (e) {
       console.warn("[LivePlayerControls] go live error:", e);
     }
-  }, [streamRef]);
+  }, [playerRef]);
 
-  // Sync con el fullscreen del document (cubre tanto API estándar como webkit)
   useEffect(() => {
     const handle = () => {
-      const fs = document.fullscreenElement || (document as unknown as { webkitFullscreenElement?: Element }).webkitFullscreenElement;
+      const fs =
+        document.fullscreenElement ||
+        (document as unknown as { webkitFullscreenElement?: Element }).webkitFullscreenElement;
       setIsFullscreen(Boolean(fs));
     };
+    const videoEl = playerRef.current?.video;
+    const handleIosFsBegin = () => setIsFullscreen(true);
+    const handleIosFsEnd = () => setIsFullscreen(false);
+
     document.addEventListener("fullscreenchange", handle);
     document.addEventListener("webkitfullscreenchange", handle);
+    if (videoEl) {
+      videoEl.addEventListener("webkitbeginfullscreen", handleIosFsBegin);
+      videoEl.addEventListener("webkitendfullscreen", handleIosFsEnd);
+    }
     return () => {
       document.removeEventListener("fullscreenchange", handle);
       document.removeEventListener("webkitfullscreenchange", handle);
+      if (videoEl) {
+        videoEl.removeEventListener("webkitbeginfullscreen", handleIosFsBegin);
+        videoEl.removeEventListener("webkitendfullscreen", handleIosFsEnd);
+      }
     };
-  }, []);
+  }, [playerRef]);
 
   const handleFullscreenToggle = useCallback(async () => {
-    const el = wrapperRef.current;
-    if (!el) return;
     try {
-      const isFs = document.fullscreenElement || (document as unknown as { webkitFullscreenElement?: Element }).webkitFullscreenElement;
-      if (!isFs) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const req = el.requestFullscreen || (el as any).webkitRequestFullscreen;
-        if (req) {
-          await req.call(el);
-          // Lock landscape en Android. iOS Safari ignora silenciosamente (no soporta lock).
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const orientation = (screen as any).orientation;
-          if (orientation && typeof orientation.lock === "function") {
-            orientation.lock("landscape").catch(() => {});
-          }
+      if (!isFullscreen) {
+        await playerRef.current?.enterFullscreen();
+        const orientation = (screen as unknown as { orientation?: { lock?: (o: string) => Promise<void> } })
+          .orientation;
+        if (orientation?.lock) {
+          orientation.lock("landscape").catch(() => {});
         }
       } else {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const exit = document.exitFullscreen || (document as any).webkitExitFullscreen;
-        if (exit) await exit.call(document);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const orientation = (screen as any).orientation;
-        if (orientation && typeof orientation.unlock === "function") {
+        await playerRef.current?.exitFullscreen();
+        const orientation = (screen as unknown as { orientation?: { unlock?: () => void } }).orientation;
+        if (orientation?.unlock) {
           try { orientation.unlock(); } catch { /* ignore */ }
         }
       }
     } catch (e) {
       console.warn("[LivePlayerControls] fullscreen error:", e);
     }
-  }, [wrapperRef]);
+  }, [isFullscreen, playerRef]);
 
   const handleVolumeChange = (e: ChangeEvent<HTMLInputElement>) => {
     const v = parseFloat(e.target.value);
     setVolume(v);
-    if (streamRef.current) {
-      streamRef.current.volume = v;
+    const video = playerRef.current?.video;
+    if (video) {
+      video.volume = v;
       if (v === 0 && !isMuted) onToggleMute();
       if (v > 0 && isMuted) onToggleMute();
     }
     wakeControls();
   };
 
+  const currentLevelLabel =
+    currentLevel === -1
+      ? "Auto"
+      : levels.find((l) => l.index === currentLevel)?.label || "Auto";
+
   return (
     <>
-      {/* Click overlay invisible — tap-to-pause */}
       <button
         type="button"
         onClick={() => { onTogglePlay(); wakeControls(); }}
@@ -153,7 +162,6 @@ const LivePlayerControls = ({
         aria-label={isPlaying ? "Pausar" : "Reproducir"}
       />
 
-      {/* Spinner de buffering */}
       <AnimatePresence>
         {isBuffering && (
           <motion.div
@@ -167,7 +175,6 @@ const LivePlayerControls = ({
         )}
       </AnimatePresence>
 
-      {/* Ícono de play central cuando está pausado */}
       <AnimatePresence>
         {!isPlaying && !isBuffering && (
           <motion.div
@@ -184,7 +191,6 @@ const LivePlayerControls = ({
         )}
       </AnimatePresence>
 
-      {/* Barra de controles inferior con gradient */}
       <AnimatePresence>
         {controlsVisible && (
           <motion.div
@@ -245,6 +251,49 @@ const LivePlayerControls = ({
               )}
 
               <div className="flex-1" />
+
+              {levels.length > 0 && (
+                <DropdownMenu onOpenChange={(open) => { if (open) wakeControls(); }}>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      aria-label="Calidad de video"
+                      className="flex items-center gap-1.5 text-white hover:text-gold active:scale-90 transition-all"
+                    >
+                      <Settings size={20} />
+                      <span className="hidden sm:inline text-xs font-bold tabular-nums">{currentLevelLabel}</span>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    side="top"
+                    className="min-w-[160px] bg-darker/95 backdrop-blur-xl border-white/10"
+                  >
+                    <DropdownMenuLabel className="text-xs text-textMuted uppercase tracking-wider">
+                      Calidad
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => { onSelectLevel(-1); wakeControls(); }}
+                      className={cn("cursor-pointer", currentLevel === -1 && "text-gold")}
+                    >
+                      <span className="flex-1">Auto</span>
+                      {currentLevel === -1 && <Check size={14} className="text-gold" />}
+                    </DropdownMenuItem>
+                    {[...levels]
+                      .sort((a, b) => b.height - a.height)
+                      .map((lvl) => (
+                        <DropdownMenuItem
+                          key={lvl.index}
+                          onClick={() => { onSelectLevel(lvl.index); wakeControls(); }}
+                          className={cn("cursor-pointer", currentLevel === lvl.index && "text-gold")}
+                        >
+                          <span className="flex-1">{lvl.label}</span>
+                          {currentLevel === lvl.index && <Check size={14} className="text-gold" />}
+                        </DropdownMenuItem>
+                      ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
 
               <button
                 onClick={() => { handleFullscreenToggle(); wakeControls(); }}

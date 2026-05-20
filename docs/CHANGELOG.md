@@ -458,3 +458,75 @@ Durante esta sesión se auditó el código vs `docs/PROJECT_STATE.md` y se detec
 (Ambas se generan al crear un Redis database en upstash.com → tier gratis 10k cmds/día).
 
 **Verificación:** `npm run typecheck` ✅ limpio.
+
+---
+
+## 2026-05-20
+
+### Webhook de Cloudflare Stream para sync OBS ↔ panel admin
+
+**Qué**: nuevo endpoint `api/stream/cloudflare-webhook.ts` que recibe eventos de Cloudflare Stream (a nivel cuenta) y actualiza la tabla `lives` sin polling.
+
+**Por qué**: el polling `/api/stream/live-input-status` se apaga en DEV por diseño y se desactiva permanentemente tras un 500. Webhooks son la forma profesional, sin polling, sin DEV-blindness.
+
+**Eventos manejados**:
+- `live_input.connected` → sala en `scheduled` + `is_active=true` con ese `stream_live_input_id` pasa a `status='live'` automático.
+- `live_input.disconnected` → marca `is_paused=true` (NO finaliza para no perder sesión por microcortes de OBS).
+- `video.ready` con `liveInput` → vincula `recording_stream_uid` si está vacío (auto-vincular grabación al finalizar).
+
+**Seguridad**:
+- Firma HMAC-SHA256 con `CLOUDFLARE_WEBHOOK_SECRET`. Header `Webhook-Signature: time=<ts>,sig1=<hex>`.
+- Anti-replay: rechaza eventos con `time` fuera de ±300s.
+- `timingSafeEqual` para evitar timing attacks.
+- `export const config = { api: { bodyParser: false } }` — Vercel parsea el body por default y eso rompe HMAC porque `JSON.stringify(req.body)` no es idéntico al payload original. Hay que leer el raw body antes de cualquier parse.
+- Usa `SUPABASE_SERVICE_ROLE_KEY` para bypass RLS (webhook no tiene contexto de usuario).
+
+**Setup manual requerido en Cloudflare Dashboard**: configurar Stream → Webhooks con URL del endpoint y guardar el `secret` devuelto en Vercel envs.
+
+**El polling existente se mantiene** como fallback. Webhook + polling = defense-in-depth.
+
+### Rework del aviso del tab "Salas" en `AdminLiveManager`
+
+Pasó de tarjeta horizontal apretada en `text-xs` a info-card vertical con ícono en pill dorado, título `text-sm` semibold y 3 bullets. Mucho más legible especialmente en mobile.
+
+### Rework completo del gestor de contenido admin
+
+**Qué**: `AdminContentManager.tsx` pasó de archivo monolítico de 1005 líneas (lista expandible con formularios inline) a layout master-detail estilo Platzi/Linear, partido en 5 componentes con responsabilidad clara.
+
+**Por qué**: la versión previa mezclaba state, layout y 4 formularios distintos inline. El usuario pidió interfaz más intuitiva, inspirada en sistemas conocidos.
+
+**Estructura nueva**:
+- `src/pages/admin/AdminContentManager.tsx` (~280 líneas, solo orquestación)
+- `src/components/feature/admin-content/PlansSelector.tsx` — checkbox group reutilizable + `PLAN_BADGE_STYLES` export
+- `src/components/feature/admin-content/ModulesSidebar.tsx` — sidebar 320px con búsqueda, selección activa, reorder con flechas en hover
+- `src/components/feature/admin-content/ModuleDetail.tsx` — panel derecho con header del módulo, stats inline, lista de `LessonRow`, CTA crear lección
+- `src/components/feature/admin-content/ModuleFormSheet.tsx` — drawer crear/editar módulo
+- `src/components/feature/admin-content/LessonFormSheet.tsx` — drawer crear/editar lección con upload TUS a Cloudflare e indicador de progreso interno
+
+**Mejoras UX**: búsqueda de módulos (nuevo), edición en drawer lateral en vez de inline, header sobrio sin hero cinematográfico, acciones secundarias en menú `⋮`, tipografía calmada, upload bloquea cierre del drawer mientras sube (antes era posible cerrarlo y romper el progreso).
+
+### Rework del player de live: reemplazo de `@cloudflare/stream-react` por `hls.js` + `<video>` nativo
+
+**Problema acumulado** (reportado por usuario):
+- Buffering/reconexión cada ~5s, "como tratando de reconectar"
+- Calidad baja sin selector — no había forma de elegir 1080p/720p
+- Botón fullscreen no funciona en mobile (especialmente iOS)
+- Sin control sobre buffer ni recovery
+
+**Causa raíz común**: el SDK de Cloudflare encierra todo dentro de un iframe. Sin acceso a `hls.levels[]`, sin recovery configurable (cada stall = reload del manifest), sin acceso al `<video>` element interno (iOS Safari requiere `webkitEnterFullscreen()` sobre el `<video>`, no sobre el wrapper).
+
+**Solución** (`src\components\feature\LiveHLSPlayer.tsx` nuevo + `LivePlayerControls.tsx` reescrito + `VIPLiveRoom.tsx` modificado):
+
+1. **`LiveHLSPlayer`**: componente con `<video>` HTML nativo + `hls.js` apuntando al manifest URL directo `https://customer-XXX.cloudflarestream.com/<input>/manifest/video.m3u8`. Detecta iOS Safari (HLS nativo) vs resto (hls.js polyfill). Cleanup explícito con `hls.destroy()` en useEffect.
+2. **Config hls.js low-latency**: `lowLatencyMode: true`, `liveSyncDuration: 4`, `liveMaxLatencyDuration: 10`, `backBufferLength: 30`, `startLevel: -1` (ABR auto).
+3. **Recovery silencioso**: `NETWORK_ERROR` → `hls.startLoad()`. `MEDIA_ERROR` → `hls.recoverMediaError()` con retry counter (max 2). Solo dispara `onError` si la recuperación falla.
+4. **Selector de calidad**: hls.js expone `hls.levels[]`. Nuevo dropdown en `LivePlayerControls` con menú "Auto / 1080p / 720p / 480p..." usando shadcn `DropdownMenu`. Click forza nivel via `hls.currentLevel = N` (o `-1` para Auto).
+5. **Fullscreen iOS**: `LiveHLSPlayer.enterFullscreen()` detecta iOS Safari y llama `video.webkitEnterFullscreen()` (la única API que iOS soporta), resto usa `requestFullscreen()` standard sobre el wrapper. Listeners `webkitbeginfullscreen` / `webkitendfullscreen` para sync de estado.
+6. **API forwarded**: `LiveHLSPlayerHandle` expone `video`, `enterFullscreen`, `exitFullscreen`, `setQualityLevel`, `getQualityLevels` via `useImperativeHandle`. El parent maneja play/pause/mute directo sobre `livePlayerRef.current?.video`.
+
+**Por qué NO repite el problema de `removeChild` del CHANGELOG 2026-05-16**: no hay iframe. No hay `window.Stream()` mutando DOM por fuera de React. hls.js sólo escribe sobre el `<video>` ref que React controla. Cleanup explícito.
+
+**Dependencia agregada**: `hls.js` (~50KB gzip). Se usa SÓLO para `VIPLiveRoom`. VOD (`LessonPlayer`, `HistoryPage`) sigue con `@cloudflare/stream-react`.
+
+**Verificación**: `npm run typecheck` ✅ limpio.
+
