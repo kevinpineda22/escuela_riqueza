@@ -2,56 +2,19 @@ import { Check } from "lucide-react";
 import { motion, type Variants } from "motion/react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { usePlatformSettings, formatPrice } from "@/hooks/usePlatformSettings";
 
-const plans = [
-  {
-    id: "free",
-    name: "Gratuito",
-    description: "Puerta de entrada. Sostenido por pauta de aliados.",
-    price: "$0",
-    period: " /mes",
-    actionLabel: "Empezar Gratis",
-    features: [
-      "Contenido introductorio seleccionado",
-      "Anuncios de empresarios aliados",
-      "Acceso limitado a la comunidad",
-    ],
-    highlight: false,
-  },
-  {
-    id: "individual",
-    name: "Individual",
-    badge: "Más Elegido",
-    description: "Transformación personal profunda y sin interrupciones.",
-    price: "Mensual o Anual",
-    period: "",
-    actionLabel: "Suscribirse Ahora",
-    features: [
-      "Todo el contenido sin anuncios",
-      "Modo Podcast habilitado",
-      "Notas personales y barra progreso",
-      "Certificados digitales",
-      "Acceso completo a la comunidad",
-    ],
-    highlight: true,
-  },
-  {
-    id: "vip",
-    name: "Grupal / VIP",
-    description: "Para equipos empresariales y líderes de alto nivel.",
-    price: "Empresarial",
-    period: " a medida",
-    actionLabel: "Acceso VIP",
-    features: [
-      "Todo lo del plan Individual",
-      "Videoconferencias 1 a 1 con Iván",
-      "Consultoría grupal exclusiva",
-      "Descuento en eventos presenciales",
-      "Soporte prioritario",
-    ],
-    highlight: false,
-  },
-];
+interface PlanCard {
+  id: "free" | "individual" | "vip";
+  name: string;
+  description: string;
+  price: string;
+  period: string;
+  actionLabel: string;
+  features: string[];
+  highlight: boolean;
+  badge?: string;
+}
 
 const containerVariants: Variants = {
   hidden: { opacity: 0 },
@@ -69,6 +32,64 @@ const itemVariants: Variants = {
 };
 
 export const PlansAct = () => {
+  const { data: settings } = usePlatformSettings();
+
+  const currency = settings?.currency ?? "USD";
+  const individualPrice = settings?.price_individual_monthly ?? 19;
+  const vipPrice = settings?.price_vip_monthly ?? 99;
+  const trialDays = settings?.trial_days ?? 0;
+
+  const plans: PlanCard[] = [
+    {
+      id: "free",
+      name: "Gratuito",
+      description: "Puerta de entrada. Sostenido por pauta de aliados.",
+      price: formatPrice(0, currency),
+      period: " /mes",
+      actionLabel: "Empezar Gratis",
+      features: [
+        "Contenido introductorio seleccionado",
+        "Anuncios de empresarios aliados",
+        "Acceso limitado a la comunidad",
+      ],
+      highlight: false,
+    },
+    {
+      id: "individual",
+      name: "Individual",
+      badge: "Más Elegido",
+      description: "Transformación personal profunda y sin interrupciones.",
+      price: formatPrice(individualPrice, currency),
+      period: " /mes",
+      actionLabel: trialDays > 0 ? `Probar ${trialDays} días gratis` : "Suscribirse Ahora",
+      features: [
+        "Todo el contenido sin anuncios",
+        "Modo Podcast habilitado",
+        "Notas personales y barra progreso",
+        "Certificados digitales",
+        "Acceso completo a la comunidad",
+        ...(trialDays > 0 ? [`${trialDays} días de prueba gratis`] : []),
+      ],
+      highlight: true,
+    },
+    {
+      id: "vip",
+      name: "Grupal / VIP",
+      description: "Para equipos empresariales y líderes de alto nivel.",
+      price: formatPrice(vipPrice, currency),
+      period: " /mes",
+      actionLabel: "Acceso VIP",
+      features: [
+        "Todo lo del plan Individual",
+        "Videoconferencias 1 a 1 con Iván",
+        "Consultoría grupal exclusiva",
+        "Descuento en eventos presenciales",
+        "Soporte prioritario",
+      ],
+      highlight: false,
+    },
+  ];
+
   return (
     <section id="planes" className="relative z-10 max-w-7xl mx-auto px-5 sm:px-6 py-20 sm:py-24 md:py-32 border-t border-white/5">
       <motion.div
@@ -113,7 +134,7 @@ export const PlansAct = () => {
             <p className="text-textMuted text-sm mb-5 sm:mb-6 sm:h-10 text-pretty">{plan.description}</p>
 
             <div className="mb-6 sm:mb-8 flex items-baseline gap-1 flex-wrap">
-              <span className={`font-bold ${plan.id === "free" ? "text-4xl sm:text-5xl text-white" : "text-xl sm:text-2xl text-textMuted"}`}>
+              <span className="font-bold text-4xl sm:text-5xl text-white">
                 {plan.price}
               </span>
               <span className="text-textMuted text-sm sm:text-base">{plan.period}</span>

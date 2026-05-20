@@ -11,6 +11,7 @@ import HistoryPage from "@/pages/public/HistoryPage";
 import TermsPage from "@/pages/public/TermsPage";
 import PrivacyPage from "@/pages/public/PrivacyPage";
 import ModulePreview from "@/pages/public/ModulePreview";
+import MaintenancePage from "@/pages/public/MaintenancePage";
 import StudentDashboard from "@/pages/student/StudentDashboard";
 import VIPLiveRoom from "@/pages/student/VIPLiveRoom";
 import AdminMetrics from "@/pages/admin/AdminMetrics";
@@ -22,6 +23,8 @@ import AdminLiveManager from "@/pages/admin/AdminLiveManager";
 import RequireAuth from "@/components/layout/RequireAuth";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { USER_ROLES } from "@/types/user";
+import { usePlatformSettings } from "@/hooks/usePlatformSettings";
+import { useAuthStore } from "@/stores/auth.store";
 
 const PageTransition = ({ children }: { children: React.ReactNode }) => (
   <motion.div
@@ -35,9 +38,38 @@ const PageTransition = ({ children }: { children: React.ReactNode }) => (
   </motion.div>
 );
 
+/**
+ * Rutas que siguen siendo accesibles durante el modo mantenimiento:
+ * - `/login` para que el admin pueda entrar.
+ * - `/admin/**` para que el admin pueda desactivar el modo mantenimiento.
+ * - `/cuenta-verificada` para no romper links de confirmación de email.
+ */
+const MAINTENANCE_ALLOWED_PREFIXES = ["/login", "/admin", "/cuenta-verificada"];
+
+const isMaintenanceAllowedPath = (pathname: string) =>
+  MAINTENANCE_ALLOWED_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+
 const AppRoutes = () => {
   const location = useLocation();
   useScrollToHash();
+  const { data: settings } = usePlatformSettings();
+  const { user } = useAuthStore();
+  const isAdmin = user?.role === "admin";
+
+  const maintenanceActive =
+    settings?.maintenance_mode === true &&
+    !isAdmin &&
+    !isMaintenanceAllowedPath(location.pathname);
+
+  if (maintenanceActive) {
+    return (
+      <AnimatePresence mode="wait">
+        <PageTransition key="maintenance">
+          <MaintenancePage />
+        </PageTransition>
+      </AnimatePresence>
+    );
+  }
 
   return (
     <AnimatePresence mode="wait">

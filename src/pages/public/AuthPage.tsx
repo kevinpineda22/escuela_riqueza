@@ -31,10 +31,11 @@ import { requestPasswordReset } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
 import { USER_ROLES } from "@/types/user";
 import { cn } from "@/lib/utils";
+import { usePlatformSettings, formatPrice } from "@/hooks/usePlatformSettings";
 
-const LOGO_LIGHT =
+const LOGO_LIGHT_FALLBACK =
   "https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/18dc9190-6625-4b89-8f1e-3f221e96b500/public";
-const LOGO_DARK =
+const LOGO_DARK_FALLBACK =
   "https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/34057238-d679-4d4e-b56c-cb8da11c9300/public";
 
 type Mode = "signin" | "signup" | "forgot";
@@ -256,6 +257,11 @@ const SignUpForm = ({ onSuccess, onSwitch, compact = false }: SignUpFormProps) =
   const initialPlan = searchParams.get("plan") as "free" | "individual" | "vip" || "free";
   const [selectedPlan, setSelectedPlan] = useState<"free" | "individual" | "vip">(initialPlan);
   const [isProcessing, setIsProcessing] = useState(false);
+  const { data: platformSettings } = usePlatformSettings();
+  const currency = platformSettings?.currency ?? "USD";
+  const individualPrice = platformSettings?.price_individual_monthly ?? 19;
+  const vipPrice = platformSettings?.price_vip_monthly ?? 99;
+  const allowSignups = platformSettings?.allow_signups ?? true;
 
   const {
     register,
@@ -361,7 +367,7 @@ const SignUpForm = ({ onSuccess, onSwitch, compact = false }: SignUpFormProps) =
           <button onClick={() => handlePlanSelect("free")} className="w-full text-left bg-black/40 border border-white/10 hover:border-white/30 rounded-xl p-4 transition-all group">
             <div className="flex justify-between items-center">
               <h3 className="font-bold text-white group-hover:text-gold transition-colors">Free</h3>
-              <span className="text-sm font-semibold text-white/50">$0</span>
+              <span className="text-sm font-semibold text-white/50">{formatPrice(0, currency)}</span>
             </div>
             <p className="text-xs text-textMuted mt-1">Con publicidad y funciones limitadas.</p>
           </button>
@@ -370,7 +376,7 @@ const SignUpForm = ({ onSuccess, onSwitch, compact = false }: SignUpFormProps) =
           <button onClick={() => handlePlanSelect("individual")} className="w-full text-left bg-blue-500/10 border border-blue-500/30 hover:border-blue-400/50 rounded-xl p-4 transition-all group relative overflow-hidden">
             <div className="flex justify-between items-center relative z-10">
               <h3 className="font-bold text-blue-400 group-hover:text-blue-300 transition-colors">Individual</h3>
-              <span className="text-sm font-bold text-blue-400">$19<span className="text-xs opacity-50">/mes</span></span>
+              <span className="text-sm font-bold text-blue-400">{formatPrice(individualPrice, currency)}<span className="text-xs opacity-50">/mes</span></span>
             </div>
             <p className="text-xs text-blue-200/60 mt-1 relative z-10">Catálogo sin interrupciones y notas.</p>
           </button>
@@ -380,7 +386,7 @@ const SignUpForm = ({ onSuccess, onSwitch, compact = false }: SignUpFormProps) =
             <div className="absolute top-0 right-0 bg-gold text-darker text-[9px] font-black uppercase px-2 py-0.5 rounded-bl-lg">Recomendado</div>
             <div className="flex justify-between items-center relative z-10">
               <h3 className="font-bold text-gold group-hover:text-goldHover transition-colors flex items-center gap-1"><Crown size={14}/> VIP</h3>
-              <span className="text-sm font-bold text-gold">$99<span className="text-xs opacity-50">/mes</span></span>
+              <span className="text-sm font-bold text-gold">{formatPrice(vipPrice, currency)}<span className="text-xs opacity-50">/mes</span></span>
             </div>
             <p className="text-xs text-gold/60 mt-1 relative z-10">Acceso total, lives y mentoría grupal.</p>
           </button>
@@ -401,6 +407,15 @@ const SignUpForm = ({ onSuccess, onSwitch, compact = false }: SignUpFormProps) =
         </h2>
         <div className="w-10 h-1 bg-gold rounded-full mx-auto mt-2" />
       </div>
+
+      {!allowSignups && (
+        <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-2 text-amber-300">
+          <AlertCircle size={18} className="shrink-0 mt-0.5" />
+          <p className="text-sm font-medium leading-tight">
+            Los registros nuevos están temporalmente pausados. Volvé a intentarlo en un rato.
+          </p>
+        </div>
+      )}
 
       {submitError && (
         <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-2 text-red-400">
@@ -471,7 +486,8 @@ const SignUpForm = ({ onSuccess, onSwitch, compact = false }: SignUpFormProps) =
 
       <button
         type="submit"
-        className="mt-1 w-full py-3 bg-gold hover:bg-goldHover text-darker font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-[0_8px_24px_-8px_rgba(204,164,59,0.6)] hover:shadow-[0_8px_28px_-6px_rgba(204,164,59,0.8)]"
+        disabled={!allowSignups}
+        className="mt-1 w-full py-3 bg-gold hover:bg-goldHover text-darker font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-[0_8px_24px_-8px_rgba(204,164,59,0.6)] hover:shadow-[0_8px_28px_-6px_rgba(204,164,59,0.8)] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-gold"
       >
         Continuar <ArrowRight size={18} />
       </button>
@@ -618,6 +634,8 @@ interface WelcomePanelProps {
   ctaLabel: string;
   ctaHelper: string;
   onCta: () => void;
+  logoSrc: string;
+  platformName: string;
 }
 
 const WelcomePanel = ({
@@ -626,11 +644,13 @@ const WelcomePanel = ({
   ctaLabel,
   ctaHelper,
   onCta,
+  logoSrc,
+  platformName,
 }: WelcomePanelProps) => (
   <div className="h-full w-full px-8 py-10 flex flex-col items-center justify-center text-center gap-5 text-darker">
     <img
-      src={LOGO_DARK}
-      alt="Escuela de la Riqueza"
+      src={logoSrc}
+      alt={platformName}
       className="h-24 xl:h-28 w-auto object-contain drop-shadow-[0_4px_14px_rgba(0,0,0,0.25)]"
     />
     <h3 className="text-3xl xl:text-[34px] font-extrabold uppercase tracking-tight leading-[1.1] max-w-[280px]">
@@ -755,6 +775,10 @@ const AuthPage = ({ initialMode = "signin" }: AuthPageProps) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [mode, setMode] = useState<Mode>(initialMode);
+  const { data: platformSettings } = usePlatformSettings();
+  const logoLight = platformSettings?.logo_url || LOGO_LIGHT_FALLBACK;
+  const logoDark = platformSettings?.logo_url || LOGO_DARK_FALLBACK;
+  const platformName = platformSettings?.platform_name || "Escuela de la Riqueza";
 
   // Revisar si viene ?plan=vip en la URL
   useEffect(() => {
@@ -887,6 +911,8 @@ const AuthPage = ({ initialMode = "signin" }: AuthPageProps) => {
                     ctaLabel="Iniciar sesión"
                     ctaHelper="¿Ya tienes cuenta?"
                     onCta={() => switchTo("signin")}
+                    logoSrc={logoDark}
+                    platformName={platformName}
                   />
                 ) : (
                   <WelcomePanel
@@ -895,6 +921,8 @@ const AuthPage = ({ initialMode = "signin" }: AuthPageProps) => {
                     ctaLabel="Crear cuenta"
                     ctaHelper="¿Aún no tienes cuenta?"
                     onCta={() => switchTo("signup")}
+                    logoSrc={logoDark}
+                    platformName={platformName}
                   />
                 )}
               </motion.div>
@@ -911,8 +939,8 @@ const AuthPage = ({ initialMode = "signin" }: AuthPageProps) => {
           aria-label="Inicio"
         >
           <img
-            src={LOGO_LIGHT}
-            alt="Escuela de la Riqueza"
+            src={logoLight}
+            alt={platformName}
             className="h-20 sm:h-24 w-auto object-contain drop-shadow-[0_0_22px_rgba(204,164,59,0.4)]"
           />
         </Link>

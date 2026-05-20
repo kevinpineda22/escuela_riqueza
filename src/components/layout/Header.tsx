@@ -18,6 +18,7 @@ import { useAuthStore } from "@/stores/auth.store";
 import { supabase } from "@/lib/supabase";
 import { PLANS } from "@/types/user";
 import AnimationToggle from "@/components/feature/AnimationToggle";
+import { usePlatformSettings } from "@/hooks/usePlatformSettings";
 import {
   Sheet,
   SheetContent,
@@ -28,7 +29,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const LOGO_URL =
+const LOGO_FALLBACK =
   "https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/18dc9190-6625-4b89-8f1e-3f221e96b500/public";
 
 const getInitials = (name: string) => {
@@ -61,6 +62,9 @@ const Header = () => {
   const [searchParams] = useSearchParams();
   const { user, clearSession } = useAuthStore();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { data: settings } = usePlatformSettings();
+  const platformName = settings?.platform_name || "Escuela de la Riqueza";
+  const logoUrl = settings?.logo_url || LOGO_FALLBACK;
 
   const handleLogout = async () => {
     setIsMobileMenuOpen(false);
@@ -83,12 +87,12 @@ const Header = () => {
         <Link
           to="/"
           className="flex items-center group shrink-0"
-          title="Escuela de la Riqueza — Inicio"
-          aria-label="Escuela de la Riqueza — Inicio"
+          title={`${platformName} — Inicio`}
+          aria-label={`${platformName} — Inicio`}
         >
           <img
-            src={LOGO_URL}
-            alt="Escuela de la Riqueza"
+            src={logoUrl}
+            alt={platformName}
             className="h-10 sm:h-12 md:h-14 w-auto drop-shadow-[0_0_12px_rgba(204,164,59,0.25)] group-hover:scale-105 transition-transform"
           />
         </Link>
@@ -204,8 +208,8 @@ const Header = () => {
               <div className="px-6 pt-8 pb-6 border-b border-white/5">
                 <Link to="/" onClick={closeMenu} className="flex justify-center mb-5">
                   <img
-                    src={LOGO_URL}
-                    alt="Escuela de la Riqueza"
+                    src={logoUrl}
+                    alt={platformName}
                     className="h-12 w-auto drop-shadow-[0_0_12px_rgba(204,164,59,0.25)]"
                   />
                 </Link>
