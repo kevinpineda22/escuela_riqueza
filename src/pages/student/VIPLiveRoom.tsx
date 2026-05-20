@@ -10,11 +10,11 @@ import { useAuthStore } from "@/stores/auth.store";
 import { supabase } from "@/lib/supabase";
 import { fetchActiveLive, checkLiveInputStatus, type LiveEvent } from "@/lib/api/stream/lives";
 import { useIsDesktop } from "@/hooks/useMediaQuery";
-import { Stream } from "@cloudflare/stream-react";
+import LiveHLSPlayer, { type LiveHLSPlayerHandle, type QualityLevel } from "@/components/feature/LiveHLSPlayer";
 import LivePlayerControls from "@/components/feature/LivePlayerControls";
 
 // Extraer customer code del subdominio "customer-XXX.cloudflarestream.com"
-// para que @cloudflare/stream-react use el mismo dominio que el resto del proyecto.
+// para construir el manifest URL de Cloudflare Stream.
 const CF_CUSTOMER_CODE = (import.meta.env.VITE_CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN || "").match(/customer-([^.]+)/)?.[1] || "";
 
 interface ViewerInfo {
@@ -46,11 +46,12 @@ const VIPLiveRoom = () => {
   const [showViewersList, setShowViewersList] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
+  const [qualityLevels, setQualityLevels] = useState<QualityLevel[]>([]);
+  const [currentQualityLevel, setCurrentQualityLevel] = useState(-1);
   const playerWrapperRef = useRef<HTMLDivElement>(null);
   const isDesktop = useIsDesktop();
   const { clearPlayer } = usePlayerStore();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const streamRef = useRef<any>(null);
+  const livePlayerRef = useRef<LiveHLSPlayerHandle | null>(null);
 
   useEffect(() => { clearPlayer(); }, [clearPlayer]);
 
@@ -71,12 +72,12 @@ const VIPLiveRoom = () => {
   const handleEnableAudio = () => {
     setAudioPromptDismissed(true);
     setIsMuted(false);
-    const player = streamRef.current;
-    if (!player) return;
+    const video = livePlayerRef.current?.video;
+    if (!video) return;
     try {
-      player.muted = false;
-      player.volume = 1;
-      const result = player.play();
+      video.muted = false;
+      video.volume = 1;
+      const result = video.play();
       if (result && typeof result.catch === "function") {
         result.catch(() => {});
       }
@@ -86,13 +87,13 @@ const VIPLiveRoom = () => {
   };
 
   const handleTogglePlay = () => {
-    const player = streamRef.current;
-    if (!player) return;
+    const video = livePlayerRef.current?.video;
+    if (!video) return;
     try {
       if (isPlaying) {
-        player.pause();
+        video.pause();
       } else {
-        const result = player.play();
+        const result = video.play();
         if (result && typeof result.catch === "function") result.catch(() => {});
       }
     } catch (e) {
@@ -101,16 +102,21 @@ const VIPLiveRoom = () => {
   };
 
   const handleToggleMute = () => {
-    const player = streamRef.current;
-    if (!player) return;
+    const video = livePlayerRef.current?.video;
+    if (!video) return;
     const next = !isMuted;
     setIsMuted(next);
     try {
-      player.muted = next;
-      if (!next && player.volume === 0) player.volume = 1;
+      video.muted = next;
+      if (!next && video.volume === 0) video.volume = 1;
     } catch (e) {
       console.warn("[VIPLiveRoom] toggle mute error:", e);
     }
+  };
+
+  const handleSelectQualityLevel = (index: number) => {
+    livePlayerRef.current?.setQualityLevel(index);
+    setCurrentQualityLevel(index);
   };
 
   const isLive = live?.status === "live" && !live?.is_paused;
@@ -432,31 +438,32 @@ const VIPLiveRoom = () => {
                   className="absolute inset-0 z-20 bg-black pointer-events-none"
                 />
                 <div ref={playerWrapperRef} className="w-full h-full absolute inset-0 z-0 bg-black">
-                  <Stream
-                    streamRef={streamRef}
-                    src={live.stream_live_input_id!}
-                    customerCode={CF_CUSTOMER_CODE || undefined}
-                    controls={false}
-                    autoplay
+                  <LiveHLSPlayer
+                    ref={livePlayerRef}
+                    liveInputId={live.stream_live_input_id!}
+                    customerCode={CF_CUSTOMER_CODE}
                     muted={isMuted}
-                    preload="auto"
-                    responsive={false}
-                    height="100%"
-                    width="100%"
-                    className="w-full h-full border-none"
+                    autoPlay
+                    className="w-full h-full object-contain bg-black"
                     onPlay={() => { setIsPlaying(true); setIsBuffering(false); }}
                     onPause={() => setIsPlaying(false)}
                     onWaiting={() => setIsBuffering(true)}
                     onPlaying={() => { setIsBuffering(false); setIsPlaying(true); }}
+                    onLevelsChange={(lvls, current) => {
+                      setQualityLevels(lvls);
+                      setCurrentQualityLevel(current);
+                    }}
                   />
                   <LivePlayerControls
-                    streamRef={streamRef}
-                    wrapperRef={playerWrapperRef}
+                    playerRef={livePlayerRef}
                     isPlaying={isPlaying}
                     isBuffering={isBuffering}
                     isMuted={isMuted}
+                    levels={qualityLevels}
+                    currentLevel={currentQualityLevel}
                     onTogglePlay={handleTogglePlay}
                     onToggleMute={handleToggleMute}
+                    onSelectLevel={handleSelectQualityLevel}
                   />
                   {/* Audio overlay — solo aparece UNA VEZ al ingresar al live.
                       Una vez dismissed, no reaparece aunque el usuario mutee o
