@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef, type RefObject, type ChangeEvent } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Loader2, Settings, Check } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Loader2, Settings, Check, Radio } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
@@ -34,7 +34,12 @@ const LivePlayerControls = ({
   const [volume, setVolume] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [liveDelta, setLiveDelta] = useState(0);
+  // Spinner solo si el buffering supera 1.5s — micropausas del HLS no
+  // dispararan más el loader visible y aparente que el stream "se traba"
+  // cada pocos segundos.
+  const [showBufferingSpinner, setShowBufferingSpinner] = useState(false);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bufferTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const scheduleHide = useCallback(() => {
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
@@ -56,6 +61,21 @@ const LivePlayerControls = ({
       if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     };
   }, [scheduleHide]);
+
+  useEffect(() => {
+    if (bufferTimerRef.current) {
+      clearTimeout(bufferTimerRef.current);
+      bufferTimerRef.current = null;
+    }
+    if (isBuffering) {
+      bufferTimerRef.current = setTimeout(() => setShowBufferingSpinner(true), 1500);
+    } else {
+      setShowBufferingSpinner(false);
+    }
+    return () => {
+      if (bufferTimerRef.current) clearTimeout(bufferTimerRef.current);
+    };
+  }, [isBuffering]);
 
   useEffect(() => {
     if (!isPlaying) return;
@@ -90,7 +110,9 @@ const LivePlayerControls = ({
     const handle = () => {
       const fs =
         document.fullscreenElement ||
-        (document as unknown as { webkitFullscreenElement?: Element }).webkitFullscreenElement;
+        (document as unknown as { webkitFullscreenElement?: Element }).webkitFullscreenElement ||
+        (document as unknown as { mozFullScreenElement?: Element }).mozFullScreenElement ||
+        (document as unknown as { msFullscreenElement?: Element }).msFullscreenElement;
       setIsFullscreen(Boolean(fs));
     };
     const videoEl = playerRef.current?.video;
@@ -99,6 +121,8 @@ const LivePlayerControls = ({
 
     document.addEventListener("fullscreenchange", handle);
     document.addEventListener("webkitfullscreenchange", handle);
+    document.addEventListener("mozfullscreenchange", handle);
+    document.addEventListener("MSFullscreenChange", handle);
     if (videoEl) {
       videoEl.addEventListener("webkitbeginfullscreen", handleIosFsBegin);
       videoEl.addEventListener("webkitendfullscreen", handleIosFsEnd);
@@ -106,6 +130,8 @@ const LivePlayerControls = ({
     return () => {
       document.removeEventListener("fullscreenchange", handle);
       document.removeEventListener("webkitfullscreenchange", handle);
+      document.removeEventListener("mozfullscreenchange", handle);
+      document.removeEventListener("MSFullscreenChange", handle);
       if (videoEl) {
         videoEl.removeEventListener("webkitbeginfullscreen", handleIosFsBegin);
         videoEl.removeEventListener("webkitendfullscreen", handleIosFsEnd);
@@ -151,6 +177,8 @@ const LivePlayerControls = ({
       ? "Auto"
       : levels.find((l) => l.index === currentLevel)?.label || "Auto";
 
+  const isBehind = liveDelta > 3;
+
   return (
     <>
       <button
@@ -162,21 +190,46 @@ const LivePlayerControls = ({
         aria-label={isPlaying ? "Pausar" : "Reproducir"}
       />
 
+      {/* Pill flotante "VOLVER A VIVO" — SIEMPRE visible cuando hay delta > 3s.
+          Vive en una capa propia, ajeno al auto-hide de la barra de controles.
+          Posicionado abajo-centro para que el pulgar lo alcance fácil en mobile. */}
       <AnimatePresence>
-        {isBuffering && (
+        {isBehind && (
+          <motion.button
+            key="go-live-pill"
+            type="button"
+            onClick={() => { handleGoLive(); wakeControls(); }}
+            initial={{ opacity: 0, y: 12, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 12, scale: 0.9 }}
+            transition={{ type: "spring", damping: 18, stiffness: 220 }}
+            aria-label={`Volver al filo del vivo, atrasado ${Math.floor(liveDelta)} segundos`}
+            className="absolute left-1/2 -translate-x-1/2 bottom-20 sm:bottom-24 z-[35] flex items-center gap-2 px-4 py-2.5 rounded-full bg-red-600/95 backdrop-blur-md text-white text-xs font-black tracking-widest shadow-[0_10px_40px_-5px_rgba(220,38,38,0.5)] active:scale-95 hover:bg-red-500 transition-colors pointer-events-auto"
+          >
+            <Radio size={14} className="shrink-0" />
+            <span>
+              VOLVER A VIVO {liveDelta >= 60 ? `-${Math.floor(liveDelta / 60)}m` : `-${Math.floor(liveDelta)}s`}
+            </span>
+          </motion.button>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showBufferingSpinner && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
             className="absolute inset-0 z-[25] flex items-center justify-center pointer-events-none"
           >
-            <Loader2 size={48} strokeWidth={2} className="animate-spin text-gold" />
+            <Loader2 size={40} strokeWidth={2.5} className="animate-spin text-gold/80" />
           </motion.div>
         )}
       </AnimatePresence>
 
       <AnimatePresence>
-        {!isPlaying && !isBuffering && (
+        {!isPlaying && !showBufferingSpinner && (
           <motion.div
             initial={{ opacity: 0, scale: 0.7 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -229,18 +282,7 @@ const LivePlayerControls = ({
                 />
               </div>
 
-              {liveDelta > 3 ? (
-                <button
-                  onClick={() => { handleGoLive(); wakeControls(); }}
-                  aria-label="Volver al filo del vivo"
-                  className="flex items-center gap-1.5 sm:gap-2 ml-1 px-2 py-1 rounded-full border border-white/15 bg-white/5 text-white/70 hover:text-white hover:border-red-500/50 hover:bg-red-500/10 active:scale-95 transition-all"
-                >
-                  <span className="w-2 h-2 rounded-full bg-white/40" />
-                  <span className="text-[10px] sm:text-xs font-black tracking-widest">
-                    VOLVER A VIVO {liveDelta >= 60 ? `-${Math.floor(liveDelta / 60)}m` : `-${Math.floor(liveDelta)}s`}
-                  </span>
-                </button>
-              ) : (
+              {!isBehind && (
                 <div className="flex items-center gap-1.5 sm:gap-2 ml-1 text-red-500 text-[10px] sm:text-xs font-black tracking-widest">
                   <span className="relative flex w-2 h-2">
                     <span className="absolute inset-0 rounded-full bg-red-500 animate-ping opacity-75" />
@@ -252,34 +294,41 @@ const LivePlayerControls = ({
 
               <div className="flex-1" />
 
-              {levels.length > 0 && (
-                <DropdownMenu onOpenChange={(open) => { if (open) wakeControls(); }}>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      aria-label="Calidad de video"
-                      className="flex items-center gap-1.5 text-white hover:text-gold active:scale-90 transition-all"
-                    >
-                      <Settings size={20} />
-                      <span className="hidden sm:inline text-xs font-bold tabular-nums">{currentLevelLabel}</span>
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="end"
-                    side="top"
-                    className="min-w-[160px] bg-darker/95 backdrop-blur-xl border-white/10"
+              {/* Selector de calidad SIEMPRE visible. Si Cloudflare manda 1 sola
+                  rendition, mostramos solo "Auto" — más predecible que esconder
+                  el botón. */}
+              <DropdownMenu onOpenChange={(open) => { if (open) wakeControls(); }}>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    aria-label="Calidad de video"
+                    className="flex items-center gap-1.5 text-white hover:text-gold active:scale-90 transition-all"
                   >
-                    <DropdownMenuLabel className="text-xs text-textMuted uppercase tracking-wider">
-                      Calidad
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => { onSelectLevel(-1); wakeControls(); }}
-                      className={cn("cursor-pointer", currentLevel === -1 && "text-gold")}
-                    >
-                      <span className="flex-1">Auto</span>
-                      {currentLevel === -1 && <Check size={14} className="text-gold" />}
+                    <Settings size={20} />
+                    <span className="hidden sm:inline text-xs font-bold tabular-nums">{currentLevelLabel}</span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  side="top"
+                  className="min-w-[160px] bg-darker/95 backdrop-blur-xl border-white/10"
+                >
+                  <DropdownMenuLabel className="text-xs text-textMuted uppercase tracking-wider">
+                    Calidad
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => { onSelectLevel(-1); wakeControls(); }}
+                    className={cn("cursor-pointer", currentLevel === -1 && "text-gold")}
+                  >
+                    <span className="flex-1">Auto</span>
+                    {currentLevel === -1 && <Check size={14} className="text-gold" />}
+                  </DropdownMenuItem>
+                  {levels.length === 0 ? (
+                    <DropdownMenuItem disabled className="text-textMuted text-xs italic">
+                      Sin renditions adicionales
                     </DropdownMenuItem>
-                    {[...levels]
+                  ) : (
+                    [...levels]
                       .sort((a, b) => b.height - a.height)
                       .map((lvl) => (
                         <DropdownMenuItem
@@ -290,10 +339,10 @@ const LivePlayerControls = ({
                           <span className="flex-1">{lvl.label}</span>
                           {currentLevel === lvl.index && <Check size={14} className="text-gold" />}
                         </DropdownMenuItem>
-                      ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
+                      ))
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
 
               <button
                 onClick={() => { handleFullscreenToggle(); wakeControls(); }}

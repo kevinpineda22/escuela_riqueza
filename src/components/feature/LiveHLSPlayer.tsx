@@ -56,26 +56,41 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       enterFullscreen: async () => {
         const v = videoRef.current;
         if (!v) return;
-        // iOS Safari: solo el <video> element soporta fullscreen, vía webkitEnterFullscreen
+
+        // iOS Safari: el único path posible es webkitEnterFullscreen sobre el <video>.
+        // El iframe/wrapper NO soporta requestFullscreen en iOS Safari < 17.
         const iosFs = (v as unknown as { webkitEnterFullscreen?: () => void }).webkitEnterFullscreen;
         if (typeof iosFs === "function") {
-          iosFs.call(v);
-          return;
+          try { iosFs.call(v); return; } catch (e) { console.warn("[LiveHLSPlayer] iOS fs failed", e); }
         }
-        // Resto: fullscreen estándar sobre el wrapper si existe, sino sobre el video
-        const target = v.parentElement || v;
-        const req =
-          target.requestFullscreen ||
-          (target as unknown as { webkitRequestFullscreen?: () => Promise<void> }).webkitRequestFullscreen;
-        if (req) {
-          await req.call(target);
+
+        // Defensivo: probar wrapper → video, con todos los prefijos legacy.
+        const wrapper = v.parentElement;
+        const candidates: Array<{ el: Element; methods: string[] }> = [];
+        if (wrapper) candidates.push({ el: wrapper, methods: ["requestFullscreen", "webkitRequestFullscreen", "mozRequestFullScreen", "msRequestFullscreen"] });
+        candidates.push({ el: v, methods: ["requestFullscreen", "webkitRequestFullscreen", "mozRequestFullScreen", "msRequestFullscreen"] });
+
+        for (const { el, methods } of candidates) {
+          for (const m of methods) {
+            const fn = (el as unknown as Record<string, unknown>)[m];
+            if (typeof fn === "function") {
+              try { await (fn as () => Promise<void>).call(el); return; }
+              catch (e) { console.warn(`[LiveHLSPlayer] ${m} failed`, e); }
+            }
+          }
         }
+
+        console.warn("[LiveHLSPlayer] No fullscreen API available");
       },
       exitFullscreen: async () => {
-        const exit =
-          document.exitFullscreen ||
-          (document as unknown as { webkitExitFullscreen?: () => Promise<void> }).webkitExitFullscreen;
-        if (exit) await exit.call(document);
+        const exits = ["exitFullscreen", "webkitExitFullscreen", "mozCancelFullScreen", "msExitFullscreen"];
+        for (const m of exits) {
+          const fn = (document as unknown as Record<string, unknown>)[m];
+          if (typeof fn === "function") {
+            try { await (fn as () => Promise<void>).call(document); return; }
+            catch (e) { console.warn(`[LiveHLSPlayer] ${m} failed`, e); }
+          }
+        }
       },
       setQualityLevel: (index: number) => {
         if (hlsRef.current) {
@@ -95,16 +110,28 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       let mediaErrorRetries = 0;
 
       if (Hls.isSupported()) {
+        // Config priorizando ESTABILIDAD + ABR sobre baja latencia.
+        // Requiere que el Live Input en Cloudflare tenga "Low-Latency HLS Support"
+        // DESACTIVADO para que Cloudflare exponga el ladder de renditions.
+        // Latencia esperada: 8–15s. A cambio: selector de calidad real + auto-down
+        // en redes malas sin parpadear el buffer.
         hls = new Hls({
           enableWorker: true,
-          lowLatencyMode: true,
+          lowLatencyMode: false,
           backBufferLength: 30,
           maxBufferLength: 30,
           maxMaxBufferLength: 60,
-          liveSyncDuration: 4,
-          liveMaxLatencyDuration: 10,
+          liveSyncDuration: 3,
+          liveMaxLatencyDuration: 12,
           liveDurationInfinity: true,
           startLevel: -1,
+          nudgeOffset: 0.2,
+          nudgeMaxRetry: 5,
+          maxLiveSyncPlaybackRate: 1.5,
+          // ABR conservador al SUBIR de calidad — evita oscilaciones que se ven
+          // como buffering periódico. Bajar a 480p cuando hace falta es instantáneo.
+          abrBandWidthFactor: 0.9,
+          abrBandWidthUpFactor: 0.7,
         });
         hlsRef.current = hls;
 
