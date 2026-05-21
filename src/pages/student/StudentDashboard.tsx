@@ -1203,7 +1203,7 @@ const StudentDashboard = () => {
                 key="comunidad"
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}
               >
-                {user.plan === PLANS.VIP || user.role === "admin" ? (
+                {user.plan === PLANS.VIP || user.plan === PLANS.INDIVIDUAL || user.role === "admin" ? (
                   <CommunityFeed currentUserId={user.id} isAdmin={user.role === "admin"} />
                 ) : (
                   <div className="p-8 sm:p-16 text-center border border-transparent rounded-3xl bg-gradient-to-br from-gold/20 to-darker min-h-[400px] flex flex-col justify-center relative overflow-hidden">
@@ -1211,9 +1211,9 @@ const StudentDashboard = () => {
                     <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-64 sm:w-80 h-64 sm:h-80 bg-gold/5 rounded-full blur-3xl mix-blend-screen" />
                     <div className="relative z-10">
                       <Lock size={48} className="mx-auto text-gold mb-6 drop-shadow-[0_0_15px_rgba(204,164,59,0.4)]" />
-                      <h3 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">Comunidad exclusiva VIP</h3>
+                      <h3 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">Comunidad exclusiva</h3>
                       <p className="text-white/80 mt-4 max-w-md mx-auto text-lg leading-relaxed">
-                        Conecta con cientos de líderes y haz networking del más alto nivel. Disponible para miembros VIP.
+                        Conecta con cientos de líderes y haz networking del más alto nivel. Disponible para miembros Individuales y VIP.
                       </p>
                       <button
                         type="button"

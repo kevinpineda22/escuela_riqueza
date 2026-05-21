@@ -17,6 +17,7 @@ export interface CommunityPost {
   author_id: string;
   title: string;
   body: string;
+  image_url?: string | null;
   category: CommunityCategory;
   is_pinned: boolean;
   is_locked: boolean;
@@ -42,7 +43,7 @@ export interface CommunityComment {
 }
 
 const POST_SELECT = `
-  id, author_id, title, body, category, is_pinned, is_locked,
+  id, author_id, title, body, image_url, category, is_pinned, is_locked,
   like_count, comment_count, created_at, updated_at,
   author:profiles!community_posts_author_id_fkey(id, full_name, avatar_url, role, plan)
 `;
@@ -108,17 +109,21 @@ export async function createPost(input: {
   title: string;
   body: string;
   category: CommunityCategory;
+  image_url?: string;
+  is_pinned?: boolean;
 }): Promise<CommunityPost> {
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) throw new Error("No autenticado");
+  const { data: user } = await supabase.auth.getUser();
+  if (!user.user) throw new Error("No autenticado");
 
   const { data, error } = await supabase
     .from("community_posts")
     .insert({
-      author_id: userData.user.id,
-      title: input.title.trim(),
-      body: input.body.trim(),
+      author_id: user.user.id,
+      title: input.title,
+      body: input.body,
       category: input.category,
+      image_url: input.image_url,
+      is_pinned: input.is_pinned ?? false,
     })
     .select(POST_SELECT)
     .single();
@@ -129,6 +134,14 @@ export async function createPost(input: {
 
 export async function deletePost(id: string): Promise<void> {
   const { error } = await supabase.from("community_posts").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function togglePinPost(id: string, pinned: boolean): Promise<void> {
+  const { error } = await supabase
+    .from("community_posts")
+    .update({ is_pinned: pinned })
+    .eq("id", id);
   if (error) throw error;
 }
 

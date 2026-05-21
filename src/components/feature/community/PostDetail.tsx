@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowLeft, Loader2, MessageSquare, Pin, Send, Trash2, CornerDownRight } from "lucide-react";
+import { ArrowLeft, Loader2, MessageSquare, Pin, PinOff, Send, Shield, Trash2, CornerDownRight } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
@@ -10,6 +10,7 @@ import {
   deletePost,
   fetchComments,
   fetchPost,
+  togglePinPost,
   type CommunityComment,
   type CommunityPost,
 } from "@/lib/api/community";
@@ -64,7 +65,43 @@ export function PostDetail({ postId, currentUserId, isAdmin, onBack, onDeleted }
         { event: "DELETE", schema: "public", table: "community_comments", filter: `post_id=eq.${postId}` },
         (payload) => {
           const oldId = (payload.old as { id?: string }).id;
-          if (oldId) setComments((prev) => prev.filter((c) => c.id !== oldId));
+          if (oldId) setComments((prev) => prev.filter((c) => c.id !== oldId && c.parent_id !== oldId));
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "community_comments", filter: `post_id=eq.${postId}` },
+        (payload) => {
+          const updated = payload.new as Partial<CommunityComment>;
+          setComments((prev) =>
+            prev.map((c) => {
+              if (c.id === updated.id) {
+                return {
+                  ...c,
+                  ...updated,
+                  author: c.author,
+                  liked_by_me: c.liked_by_me,
+                };
+              }
+              return c;
+            })
+          );
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "community_posts", filter: `id=eq.${postId}` },
+        (payload) => {
+          const updated = payload.new as Partial<CommunityPost>;
+          setPost((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              ...updated,
+              author: prev.author,
+              liked_by_me: prev.liked_by_me,
+            };
+          });
         }
       )
       .subscribe();
@@ -98,6 +135,19 @@ export function PostDetail({ postId, currentUserId, isAdmin, onBack, onDeleted }
     } catch (err) {
       console.error(err);
       toast.error("No se pudo eliminar");
+    }
+  };
+
+  const handleTogglePin = async () => {
+    if (!post) return;
+    try {
+      const next = !post.is_pinned;
+      await togglePinPost(post.id, next);
+      setPost({ ...post, is_pinned: next });
+      toast.success(next ? "Publicación fijada" : "Publicación desfijada");
+    } catch (err) {
+      console.error(err);
+      toast.error("No se pudo actualizar");
     }
   };
 
@@ -183,77 +233,131 @@ export function PostDetail({ postId, currentUserId, isAdmin, onBack, onDeleted }
       <motion.article
         layout
         className={cn(
-          "relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-white/[0.05] to-white/[0.015] p-6 sm:p-8",
-          cat.accent
+          "relative overflow-hidden rounded-3xl border bg-darker/60 transition-all",
+          post.is_pinned
+            ? "border-gold/40 shadow-[0_12px_48px_-20px_rgba(204,164,59,0.55)]"
+            : "border-white/10"
         )}
       >
+        {post.is_pinned && (
+          <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-gold to-transparent" />
+        )}
         <div className="pointer-events-none absolute -top-32 -right-20 h-64 w-64 rounded-full bg-gold/10 blur-3xl" />
 
-        <header className="relative mb-5 flex items-start gap-4">
-          <div className="relative shrink-0">
-            <div className="absolute inset-0 rounded-full bg-gold/40 blur-md opacity-60" />
-            <div className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-gold/30 to-gold/5 text-base font-bold text-gold ring-2 ring-gold/40">
-              {post.author?.avatar_url ? (
-                <img src={post.author.avatar_url} alt="" className="h-full w-full object-cover" />
-              ) : (
-                authorInitials(post.author)
-              )}
-            </div>
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2 text-xs text-textMuted">
-              <span className="font-semibold text-white">{authorName(post.author)}</span>
-              {isPostAuthorAdmin && (
-                <span className="rounded bg-gradient-to-r from-gold/30 to-gold/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gold ring-1 ring-gold/30">
-                  Admin
-                </span>
-              )}
-              <span className="text-white/20">·</span>
-              <span>{formatRelative(post.created_at)}</span>
-              <span
+        <div className="relative p-6 sm:p-8">
+          <header className="mb-5 flex items-start gap-4">
+            <div className="relative shrink-0">
+              <div
                 className={cn(
-                  "inline-flex items-center gap-1 rounded-full border bg-gradient-to-r px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                  cat.chip
+                  "relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-full text-lg font-bold ring-2 transition-all",
+                  isPostAuthorAdmin
+                    ? "bg-gradient-to-br from-gold/30 to-gold/10 text-gold ring-gold/50"
+                    : "bg-gradient-to-br from-white/15 to-white/5 text-white/90 ring-white/15"
                 )}
               >
-                <CatIcon size={10} />
-                {cat.label}
-              </span>
-              {post.is_pinned && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-[10px] font-bold uppercase text-gold">
-                  <Pin size={10} /> Fijado
-                </span>
+                {post.author?.avatar_url ? (
+                  <img src={post.author.avatar_url} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  authorInitials(post.author)
+                )}
+              </div>
+              {isPostAuthorAdmin && (
+                <div className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-gold ring-2 ring-darker">
+                  <Shield size={10} className="text-darker" strokeWidth={3} />
+                </div>
               )}
             </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
+                <span className="font-semibold text-white">{authorName(post.author)}</span>
+                {isPostAuthorAdmin && (
+                  <span className="rounded-full bg-gold/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gold ring-1 ring-gold/30">
+                    Admin
+                  </span>
+                )}
+                <span className="text-xs text-textMuted">· {formatRelative(post.created_at)}</span>
+              </div>
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full border bg-gradient-to-r px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                    cat.chip
+                  )}
+                >
+                  <CatIcon size={10} />
+                  {cat.label}
+                </span>
+                {post.is_pinned && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-[10px] font-bold uppercase text-gold ring-1 ring-gold/30">
+                    <Pin size={10} /> Fijado
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {(canDeletePost || isAdmin) && (
+              <div className="flex shrink-0 items-center gap-1">
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={handleTogglePin}
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs transition-colors",
+                      post.is_pinned
+                        ? "bg-gold/15 text-gold ring-1 ring-gold/30 hover:bg-gold/20"
+                        : "text-textMuted hover:bg-white/5 hover:text-gold"
+                    )}
+                  >
+                    {post.is_pinned ? <PinOff size={14} /> : <Pin size={14} />}
+                    <span className="hidden sm:inline">{post.is_pinned ? "Desfijar" : "Fijar"}</span>
+                  </button>
+                )}
+                {canDeletePost && (
+                  <button
+                    type="button"
+                    onClick={handleDeletePost}
+                    className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300"
+                  >
+                    <Trash2 size={14} />
+                    <span className="hidden sm:inline">Eliminar</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </header>
+
+          <h2 className="mb-4 text-2xl font-extrabold leading-tight text-white sm:text-3xl">
+            {post.title}
+          </h2>
+          <div className="whitespace-pre-wrap text-[15px] leading-relaxed text-textMain sm:text-base">
+            {post.body}
           </div>
-          {canDeletePost && (
-            <button
-              type="button"
-              onClick={handleDeletePost}
-              className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300"
-            >
-              <Trash2 size={14} /> Eliminar
-            </button>
+
+          {post.image_url && (
+            <div className="mt-5 overflow-hidden rounded-2xl border border-white/10 bg-black">
+              <img
+                src={post.image_url}
+                alt="Imagen adjunta"
+                className="w-full max-h-[600px] object-contain"
+              />
+            </div>
           )}
-        </header>
 
-        <h2 className="relative mb-4 text-2xl font-extrabold leading-tight text-white sm:text-3xl">
-          {post.title}
-        </h2>
-        <div className="relative whitespace-pre-wrap text-base leading-relaxed text-textMain">
-          {post.body}
-        </div>
-
-        <div className="relative mt-6 flex items-center gap-2 border-t border-white/10 pt-5">
-          <LikeButton
-            targetType="post"
-            targetId={post.id}
-            liked={post.liked_by_me ?? false}
-            count={post.like_count}
-          />
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.04] px-3 py-1.5 text-sm text-textMuted ring-1 ring-white/5">
-            <MessageSquare size={15} />
-            <span className="font-semibold tabular-nums">{comments.length}</span>
+          <div className="mt-5 flex items-center gap-1 border-t border-white/5 pt-4">
+            <LikeButton
+              targetType="post"
+              targetId={post.id}
+              liked={post.liked_by_me ?? false}
+              count={post.like_count}
+            />
+            <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-textMuted">
+              <MessageSquare size={15} />
+              <span className="font-semibold tabular-nums">{comments.length}</span>
+              <span className="hidden sm:inline">
+                {comments.length === 1 ? "Comentario" : "Comentarios"}
+              </span>
+            </div>
           </div>
         </div>
       </motion.article>
@@ -421,27 +525,39 @@ function CommentBody({ comment, currentUserId, isAdmin, onReply, onDelete, isRep
   return (
     <div className="group/comment flex items-start gap-3">
       <div className="relative shrink-0">
-        <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-gold/20 to-gold/5 text-xs font-bold text-gold ring-1 ring-gold/30">
+        <div
+          className={cn(
+            "flex items-center justify-center overflow-hidden rounded-full text-xs font-bold ring-1 transition-all",
+            isReply ? "h-8 w-8" : "h-10 w-10",
+            authorIsAdmin
+              ? "bg-gradient-to-br from-gold/25 to-gold/5 text-gold ring-gold/40"
+              : "bg-gradient-to-br from-white/15 to-white/5 text-white/90 ring-white/15"
+          )}
+        >
           {comment.author?.avatar_url ? (
             <img src={comment.author.avatar_url} alt="" className="h-full w-full object-cover" />
           ) : (
             authorInitials(comment.author)
           )}
         </div>
+        {authorIsAdmin && (
+          <div className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-gold ring-2 ring-darker">
+            <Shield size={8} className="text-darker" strokeWidth={3} />
+          </div>
+        )}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-textMuted">
-          <span className="font-semibold text-white/90">{authorName(comment.author)}</span>
+        <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+          <span className="font-semibold text-white">{authorName(comment.author)}</span>
           {authorIsAdmin && (
-            <span className="rounded bg-gradient-to-r from-gold/30 to-gold/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gold ring-1 ring-gold/30">
+            <span className="rounded-full bg-gold/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-gold ring-1 ring-gold/30">
               Admin
             </span>
           )}
-          <span className="text-white/20">·</span>
-          <span>{formatRelative(comment.created_at)}</span>
+          <span className="text-textMuted">· {formatRelative(comment.created_at)}</span>
         </div>
-        <p className="whitespace-pre-wrap text-sm leading-relaxed text-textMain">{comment.body}</p>
-        <div className="mt-2 flex items-center gap-1.5">
+        <p className="whitespace-pre-wrap text-[14px] leading-relaxed text-textMain">{comment.body}</p>
+        <div className="mt-2 flex items-center gap-1">
           <LikeButton
             targetType="comment"
             targetId={comment.id}

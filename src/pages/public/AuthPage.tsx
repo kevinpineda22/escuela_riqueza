@@ -35,7 +35,7 @@ import { usePlatformSettings, formatPrice } from "@/hooks/usePlatformSettings";
 
 const LOGO_LIGHT_FALLBACK =
   "https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/18dc9190-6625-4b89-8f1e-3f221e96b500/public";
-const LOGO_DARK_FALLBACK =
+const LOGO_DARK_OVERLAY =
   "https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/34057238-d679-4d4e-b56c-cb8da11c9300/public";
 
 type Mode = "signin" | "signup" | "forgot";
@@ -647,11 +647,11 @@ const WelcomePanel = ({
   logoSrc,
   platformName,
 }: WelcomePanelProps) => (
-  <div className="h-full w-full px-8 py-10 flex flex-col items-center justify-center text-center gap-5 text-darker">
+  <div className="h-full w-full px-8 py-10 flex flex-col items-center justify-center text-center gap-5 text-[#120e05]">
     <img
       src={logoSrc}
       alt={platformName}
-      className="h-24 xl:h-28 w-auto object-contain drop-shadow-[0_4px_14px_rgba(0,0,0,0.25)]"
+      className="relative h-28 xl:h-32 w-auto object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
     />
     <h3 className="text-3xl xl:text-[34px] font-extrabold uppercase tracking-tight leading-[1.1] max-w-[280px]">
       {title}
@@ -660,15 +660,14 @@ const WelcomePanel = ({
       {body}
     </p>
     <div className="mt-2 flex flex-col items-center gap-2">
-      <span className="text-xs font-semibold opacity-70 uppercase tracking-wider">
+      <span className="text-xs font-semibold opacity-60 uppercase tracking-wider">
         {ctaHelper}
       </span>
       <button
-        type="button"
         onClick={onCta}
-        className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full border-2 border-darker text-darker font-bold text-sm hover:bg-darker hover:text-gold transition-all"
+        className="mt-1 px-10 py-2.5 border-2 border-[#120e05] hover:bg-[#120e05]/5 text-[#120e05] font-bold rounded-full transition-all flex items-center gap-2"
       >
-        {ctaLabel} <ArrowRight size={16} />
+        {ctaLabel} <ArrowRight size={18} strokeWidth={2.5} />
       </button>
     </div>
   </div>
@@ -777,7 +776,7 @@ const AuthPage = ({ initialMode = "signin" }: AuthPageProps) => {
   const [mode, setMode] = useState<Mode>(initialMode);
   const { data: platformSettings } = usePlatformSettings();
   const logoLight = platformSettings?.logo_url || LOGO_LIGHT_FALLBACK;
-  const logoDark = platformSettings?.logo_url || LOGO_DARK_FALLBACK;
+  const logoDark = LOGO_DARK_OVERLAY;
   const platformName = platformSettings?.platform_name || "Escuela de la Riqueza";
 
   // Revisar si viene ?plan=vip en la URL
@@ -884,16 +883,24 @@ const AuthPage = ({ initialMode = "signin" }: AuthPageProps) => {
           animate={{ x: overlayOnLeft ? "0%" : "100%" }}
           transition={slideTransition}
         >
-          <div className="relative h-full w-full bg-gradient-to-br from-gold via-goldHover to-amber-300">
-            {/* Brillo radial interno */}
+          <div className="relative h-full w-full bg-gradient-to-br from-goldHover via-gold to-[#a88224] overflow-hidden">
+            {/* Brillo lineal súper suave arriba */}
             <div
               aria-hidden
-              className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.35),transparent_55%)] pointer-events-none"
+              className="absolute top-0 inset-x-0 h-[40vh] bg-gradient-to-b from-white/15 to-transparent pointer-events-none"
             />
+            {/* Sombras en bordes para enmarcar */}
             <div
               aria-hidden
-              className="absolute inset-0 bg-[radial-gradient(circle_at_80%_90%,rgba(0,0,0,0.18),transparent_55%)] pointer-events-none"
+              className="absolute inset-0 shadow-[inset_0_0_60px_rgba(0,0,0,0.1)] pointer-events-none"
             />
+            {/* Ruido elegante */}
+            <div
+              aria-hidden
+              className="absolute inset-0 opacity-[0.06] mix-blend-overlay"
+              style={{ backgroundImage: `url("${NOISE_SVG}")`, backgroundSize: "150px 150px" }}
+            />
+
             {/* Contenido dentro del overlay con crossfade */}
             <AnimatePresence mode="wait">
               <motion.div

@@ -6,22 +6,28 @@ import { toast } from "@/components/ui/toaster";
 import { createPost, type CommunityCategory, type CommunityPost } from "@/lib/api/community";
 import { CATEGORIES } from "./community-utils";
 import { cn } from "@/lib/utils";
+import { PostImageUploader } from "./PostImageUploader";
 
 interface NewPostDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated: (post: CommunityPost) => void;
+  isAdmin?: boolean;
 }
 
-export function NewPostDialog({ open, onOpenChange, onCreated }: NewPostDialogProps) {
+export function NewPostDialog({ open, onOpenChange, onCreated, isAdmin }: NewPostDialogProps) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [isPinned, setIsPinned] = useState(false);
   const [category, setCategory] = useState<CommunityCategory>("pregunta");
   const [submitting, setSubmitting] = useState(false);
 
   const reset = () => {
     setTitle("");
     setBody("");
+    setImageUrl(null);
+    setIsPinned(false);
     setCategory("pregunta");
   };
 
@@ -40,7 +46,13 @@ export function NewPostDialog({ open, onOpenChange, onCreated }: NewPostDialogPr
     }
     setSubmitting(true);
     try {
-      const post = await createPost({ title: t, body: b, category });
+      const post = await createPost({ 
+        title: t, 
+        body: b, 
+        category, 
+        image_url: imageUrl || undefined,
+        is_pinned: isPinned
+      });
       toast.success("¡Publicación creada!");
       onCreated(post);
       reset();
@@ -60,11 +72,11 @@ export function NewPostDialog({ open, onOpenChange, onCreated }: NewPostDialogPr
         if (!submitting) onOpenChange(v);
       }}
     >
-      <DialogContent className="max-w-2xl overflow-hidden border-white/10 bg-gradient-to-br from-darker via-darker to-dark p-0">
+      <DialogContent className="max-w-2xl flex-col overflow-hidden gap-0 border-white/10 bg-gradient-to-br from-darker via-darker to-dark p-0">
         {/* gold glow */}
         <div className="pointer-events-none absolute -top-32 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full bg-gold/15 blur-3xl" />
 
-        <DialogHeader className="relative border-b border-white/10 px-6 pb-5 pt-6 sm:px-8">
+        <DialogHeader className="relative shrink-0 border-b border-white/10 bg-darker/95 px-6 pb-5 pt-6 sm:px-8">
           <div className="mb-2 inline-flex w-fit items-center gap-1.5 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gold">
             <Sparkles size={10} /> Comunidad VIP
           </div>
@@ -76,7 +88,8 @@ export function NewPostDialog({ open, onOpenChange, onCreated }: NewPostDialogPr
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-5 px-6 pb-6 pt-5 sm:px-8 sm:pb-8">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="flex-1 space-y-5 overflow-y-auto px-6 pb-6 pt-5 sm:px-8">
           {/* Categoría — cards */}
           <div>
             <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-textMuted">
@@ -150,7 +163,33 @@ export function NewPostDialog({ open, onOpenChange, onCreated }: NewPostDialogPr
             />
           </div>
 
-          <div className="flex items-center justify-end gap-2 border-t border-white/10 pt-4">
+          {/* Image Upload */}
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-textMuted mb-2">
+              Imagen adjunta (Opcional)
+            </label>
+            <PostImageUploader value={imageUrl} onChange={setImageUrl} disabled={submitting} />
+          </div>
+
+          {/* Admin: Pin Post */}
+          {isAdmin && (
+            <div className="flex items-center gap-3 rounded-xl border border-gold/30 bg-gold/5 p-4">
+              <input
+                type="checkbox"
+                id="pin-post"
+                checked={isPinned}
+                onChange={(e) => setIsPinned(e.target.checked)}
+                className="h-4 w-4 rounded border-white/20 bg-black/40 text-gold focus:ring-gold/50 focus:ring-offset-0"
+              />
+              <label htmlFor="pin-post" className="text-sm font-medium text-white cursor-pointer select-none">
+                Fijar publicación
+                <p className="text-xs text-textMuted font-normal">Aparecerá siempre arriba en el foro.</p>
+              </label>
+            </div>
+          )}
+          </div>
+
+          <div className="shrink-0 flex items-center justify-end gap-2 border-t border-white/10 bg-darker/95 px-6 py-4 sm:px-8">
             <button
               type="button"
               onClick={() => onOpenChange(false)}

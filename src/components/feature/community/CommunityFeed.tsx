@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Flame, MessageSquare, Plus, Sparkles, Clock, Users } from "lucide-react";
+import { Flame, MessageSquare, Pin, Plus, Sparkles, Clock, Users } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
@@ -59,6 +59,26 @@ export function CommunityFeed({ currentUserId, isAdmin }: CommunityFeedProps) {
           if (oldId) setPosts((prev) => prev.filter((p) => p.id !== oldId));
         }
       )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "community_posts" },
+        (payload) => {
+          const updated = payload.new as Partial<CommunityPost>;
+          setPosts((prev) =>
+            prev.map((p) => {
+              if (p.id === updated.id) {
+                return {
+                  ...p,
+                  ...updated,
+                  author: p.author, // Preserve joined relation
+                  liked_by_me: p.liked_by_me, // Preserve user-specific state
+                };
+              }
+              return p;
+            })
+          );
+        }
+      )
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
@@ -109,18 +129,22 @@ export function CommunityFeed({ currentUserId, isAdmin }: CommunityFeedProps) {
       <motion.div
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-3xl border border-gold/20 bg-gradient-to-br from-gold/[0.08] via-white/[0.02] to-transparent p-6 sm:p-8"
+        className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-gold/[0.12] via-darker to-darker p-6 sm:p-8"
       >
-        <div className="pointer-events-none absolute -top-24 -right-24 h-64 w-64 rounded-full bg-gold/20 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-32 -left-20 h-72 w-72 rounded-full bg-purple-500/10 blur-3xl" />
+        <div className="pointer-events-none absolute -top-24 -right-24 h-72 w-72 rounded-full bg-gold/20 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-32 -left-20 h-72 w-72 rounded-full bg-purple-500/8 blur-3xl" />
+        <div className="pointer-events-none absolute inset-0 opacity-[0.03] [background-image:radial-gradient(circle_at_1px_1px,white_1px,transparent_0)] [background-size:20px_20px]" />
 
-        <div className="relative flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+        <div className="relative flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-gold/30 bg-gold/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-gold">
-              <Sparkles size={12} /> Espacio exclusivo VIP
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-gold/30 bg-gold/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-gold backdrop-blur-sm">
+              <Sparkles size={12} /> Espacio exclusivo
             </div>
             <h2 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
-              Comunidad <span className="bg-gradient-to-r from-gold to-goldHover bg-clip-text text-transparent">VIP</span>
+              Comunidad{" "}
+              <span className="bg-gradient-to-r from-gold to-goldHover bg-clip-text text-transparent">
+                VIP
+              </span>
             </h2>
             <p className="mt-2 max-w-xl text-sm text-textMuted sm:text-base">
               Conecta con otros miembros, comparte preguntas, ideas y recursos.
@@ -132,7 +156,7 @@ export function CommunityFeed({ currentUserId, isAdmin }: CommunityFeedProps) {
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}
             onClick={() => setDialogOpen(true)}
-            className="group relative inline-flex items-center justify-center gap-2 self-start overflow-hidden rounded-2xl bg-gold px-6 py-3 font-bold text-darker shadow-[0_8px_32px_-8px_rgba(204,164,59,0.6)] transition-all hover:bg-goldHover sm:self-end"
+            className="group relative inline-flex items-center justify-center gap-2 self-start overflow-hidden rounded-2xl bg-gold px-6 py-3 font-bold text-darker shadow-[0_8px_32px_-8px_rgba(204,164,59,0.6)] transition-all hover:bg-goldHover sm:self-auto"
           >
             <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/40 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
             <Plus size={18} /> Nueva publicación
@@ -140,7 +164,7 @@ export function CommunityFeed({ currentUserId, isAdmin }: CommunityFeedProps) {
         </div>
 
         {/* mini stats strip */}
-        <div className="relative mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="relative mt-6 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
           <StatPill icon={MessageSquare} label="Publicaciones" value={stats.totalPosts} />
           <StatPill icon={Flame} label="Me gusta" value={stats.totalLikes} />
           <StatPill icon={MessageSquare} label="Comentarios" value={stats.totalComments} />
@@ -239,15 +263,66 @@ export function CommunityFeed({ currentUserId, isAdmin }: CommunityFeedProps) {
       ) : (
         <motion.div layout className="space-y-3">
           <AnimatePresence mode="popLayout" initial={false}>
-            {posts.map((post) => (
-              <PostCard
-                key={post.id}
-                post={post}
-                canDelete={isAdmin || post.author_id === currentUserId}
-                onOpen={() => setSelectedPostId(post.id)}
-                onDelete={() => handleDeleteFromCard(post)}
-              />
-            ))}
+            {(() => {
+              const pinned = posts.filter((p) => p.is_pinned);
+              const regular = posts.filter((p) => !p.is_pinned);
+              return (
+                <>
+                  {pinned.length > 0 && (
+                    <motion.div
+                      key="pinned-header"
+                      layout
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="flex items-center gap-2 pt-1 text-[11px] font-bold uppercase tracking-wider text-gold/90"
+                    >
+                      <Pin size={12} /> Fijado por el equipo
+                      <div className="h-px flex-1 bg-gradient-to-r from-gold/40 to-transparent" />
+                    </motion.div>
+                  )}
+                  {pinned.map((post) => (
+                    <PostCard
+                      key={post.id}
+                      post={post}
+                      canDelete={isAdmin || post.author_id === currentUserId}
+                      isAdmin={isAdmin}
+                      onOpen={() => setSelectedPostId(post.id)}
+                      onDelete={() => handleDeleteFromCard(post)}
+                      onPinChanged={(updated) =>
+                        setPosts((prev) => prev.map((p) => (p.id === updated.id ? { ...p, is_pinned: updated.is_pinned } : p)))
+                      }
+                    />
+                  ))}
+                  {pinned.length > 0 && regular.length > 0 && (
+                    <motion.div
+                      key="recent-header"
+                      layout
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="flex items-center gap-2 pt-3 text-[11px] font-bold uppercase tracking-wider text-textMuted"
+                    >
+                      <Clock size={12} /> Recientes
+                      <div className="h-px flex-1 bg-gradient-to-r from-white/15 to-transparent" />
+                    </motion.div>
+                  )}
+                  {regular.map((post) => (
+                    <PostCard
+                      key={post.id}
+                      post={post}
+                      canDelete={isAdmin || post.author_id === currentUserId}
+                      isAdmin={isAdmin}
+                      onOpen={() => setSelectedPostId(post.id)}
+                      onDelete={() => handleDeleteFromCard(post)}
+                      onPinChanged={(updated) =>
+                        setPosts((prev) => prev.map((p) => (p.id === updated.id ? { ...p, is_pinned: updated.is_pinned } : p)))
+                      }
+                    />
+                  ))}
+                </>
+              );
+            })()}
           </AnimatePresence>
         </motion.div>
       )}
@@ -255,6 +330,7 @@ export function CommunityFeed({ currentUserId, isAdmin }: CommunityFeedProps) {
       <NewPostDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
+        isAdmin={isAdmin}
         onCreated={(post) => {
           setPosts((prev) => [post, ...prev]);
           setSelectedPostId(post.id);
