@@ -61,7 +61,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const form = new URLSearchParams();
+    const form = new FormData();
     form.append('requireSignedURLs', 'false');
     form.append(
       'metadata',
@@ -74,9 +74,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${apiToken}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: form.toString(),
+        body: form,
       },
     );
 
