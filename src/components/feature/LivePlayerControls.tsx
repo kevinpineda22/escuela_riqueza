@@ -77,15 +77,18 @@ const LivePlayerControls = ({
     };
   }, [isBuffering]);
 
+  // Para HLS live, video.duration === Infinity (estándar HTML5). El filo real del
+  // vivo se obtiene de video.seekable.end(last) — la ventana DVR que va expandiendo
+  // hls.js a medida que llegan segmentos.
   useEffect(() => {
     if (!isPlaying) return;
     const interval = setInterval(() => {
       const video = playerRef.current?.video;
-      if (!video) return;
-      const d = video.duration;
+      if (!video || !video.seekable.length) return;
+      const liveEdge = video.seekable.end(video.seekable.length - 1);
       const c = video.currentTime;
-      if (!isFinite(d) || !isFinite(c) || d <= 0) return;
-      const delta = d - c;
+      if (!isFinite(liveEdge) || !isFinite(c)) return;
+      const delta = liveEdge - c;
       setLiveDelta(delta > 0 ? delta : 0);
     }, 1000);
     return () => clearInterval(interval);
@@ -93,11 +96,11 @@ const LivePlayerControls = ({
 
   const handleGoLive = useCallback(() => {
     const video = playerRef.current?.video;
-    if (!video) return;
+    if (!video || !video.seekable.length) return;
     try {
-      const d = video.duration;
-      if (!isFinite(d) || d <= 0) return;
-      video.currentTime = Math.max(0, d - 0.5);
+      const liveEdge = video.seekable.end(video.seekable.length - 1);
+      if (!isFinite(liveEdge)) return;
+      video.currentTime = Math.max(0, liveEdge - 0.5);
       if (video.paused) {
         video.play().catch(() => {});
       }
@@ -214,6 +217,57 @@ const LivePlayerControls = ({
         )}
       </AnimatePresence>
 
+      {/* Selector de calidad — FLOTANTE y SIEMPRE visible. Vive fuera de la barra
+          que se auto-oculta, así el usuario lo encuentra sin necesidad de hovereár
+          el video. Posicionado bottom-right por encima del bar. */}
+      <DropdownMenu onOpenChange={(open) => { if (open) wakeControls(); }}>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label="Calidad de video"
+            className="absolute right-3 sm:right-5 bottom-16 sm:bottom-20 z-[32] flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/15 text-white/90 hover:text-gold hover:bg-black/80 active:scale-95 transition-all pointer-events-auto shadow-lg"
+          >
+            <Settings size={16} />
+            <span className="text-[10px] sm:text-xs font-black tracking-wider tabular-nums">{currentLevelLabel}</span>
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          side="top"
+          className="min-w-[160px] bg-darker/95 backdrop-blur-xl border-white/10"
+        >
+          <DropdownMenuLabel className="text-xs text-textMuted uppercase tracking-wider">
+            Calidad
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={() => { onSelectLevel(-1); wakeControls(); }}
+            className={cn("cursor-pointer", currentLevel === -1 && "text-gold")}
+          >
+            <span className="flex-1">Auto</span>
+            {currentLevel === -1 && <Check size={14} className="text-gold" />}
+          </DropdownMenuItem>
+          {levels.length === 0 ? (
+            <DropdownMenuItem disabled className="text-textMuted text-xs italic">
+              Sin renditions adicionales
+            </DropdownMenuItem>
+          ) : (
+            [...levels]
+              .sort((a, b) => b.height - a.height)
+              .map((lvl) => (
+                <DropdownMenuItem
+                  key={lvl.index}
+                  onClick={() => { onSelectLevel(lvl.index); wakeControls(); }}
+                  className={cn("cursor-pointer", currentLevel === lvl.index && "text-gold")}
+                >
+                  <span className="flex-1">{lvl.label}</span>
+                  {currentLevel === lvl.index && <Check size={14} className="text-gold" />}
+                </DropdownMenuItem>
+              ))
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
       <AnimatePresence>
         {showBufferingSpinner && (
           <motion.div
@@ -293,56 +347,6 @@ const LivePlayerControls = ({
               )}
 
               <div className="flex-1" />
-
-              {/* Selector de calidad SIEMPRE visible. Si Cloudflare manda 1 sola
-                  rendition, mostramos solo "Auto" — más predecible que esconder
-                  el botón. */}
-              <DropdownMenu onOpenChange={(open) => { if (open) wakeControls(); }}>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    aria-label="Calidad de video"
-                    className="flex items-center gap-1.5 text-white hover:text-gold active:scale-90 transition-all"
-                  >
-                    <Settings size={20} />
-                    <span className="hidden sm:inline text-xs font-bold tabular-nums">{currentLevelLabel}</span>
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  side="top"
-                  className="min-w-[160px] bg-darker/95 backdrop-blur-xl border-white/10"
-                >
-                  <DropdownMenuLabel className="text-xs text-textMuted uppercase tracking-wider">
-                    Calidad
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => { onSelectLevel(-1); wakeControls(); }}
-                    className={cn("cursor-pointer", currentLevel === -1 && "text-gold")}
-                  >
-                    <span className="flex-1">Auto</span>
-                    {currentLevel === -1 && <Check size={14} className="text-gold" />}
-                  </DropdownMenuItem>
-                  {levels.length === 0 ? (
-                    <DropdownMenuItem disabled className="text-textMuted text-xs italic">
-                      Sin renditions adicionales
-                    </DropdownMenuItem>
-                  ) : (
-                    [...levels]
-                      .sort((a, b) => b.height - a.height)
-                      .map((lvl) => (
-                        <DropdownMenuItem
-                          key={lvl.index}
-                          onClick={() => { onSelectLevel(lvl.index); wakeControls(); }}
-                          className={cn("cursor-pointer", currentLevel === lvl.index && "text-gold")}
-                        >
-                          <span className="flex-1">{lvl.label}</span>
-                          {currentLevel === lvl.index && <Check size={14} className="text-gold" />}
-                        </DropdownMenuItem>
-                      ))
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
 
               <button
                 onClick={() => { handleFullscreenToggle(); wakeControls(); }}

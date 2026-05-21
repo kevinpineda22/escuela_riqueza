@@ -138,24 +138,33 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
         hls.loadSource(manifestUrl);
         hls.attachMedia(video);
 
+        // Mapea hls.levels[] a QualityLevel[]. Helper para reusar tanto en
+        // MANIFEST_PARSED como en LEVEL_SWITCHED — éste último necesita recomputar
+        // y NO leer del state React, porque la closure del useEffect captura el
+        // `levels` inicial vacío (stale closure clásico).
+        const computeLevels = (h: Hls): QualityLevel[] =>
+          h.levels.map((lvl, i) => ({
+            index: i,
+            height: lvl.height || 0,
+            bitrate: lvl.bitrate || 0,
+            label: lvl.height ? `${lvl.height}p` : `${Math.round((lvl.bitrate || 0) / 1000)} kbps`,
+          }));
+
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           if (autoPlay) {
             video.play().catch(() => {
               // Autoplay con sonido bloqueado por el browser — el overlay "Activar sonido" lo resuelve
             });
           }
-          const parsed: QualityLevel[] = hls!.levels.map((lvl, i) => ({
-            index: i,
-            height: lvl.height || 0,
-            bitrate: lvl.bitrate || 0,
-            label: lvl.height ? `${lvl.height}p` : `${Math.round((lvl.bitrate || 0) / 1000)} kbps`,
-          }));
+          const parsed = computeLevels(hls!);
           setLevels(parsed);
           onLevelsChange?.(parsed, hls!.currentLevel);
         });
 
         hls.on(Hls.Events.LEVEL_SWITCHED, (_, data) => {
-          onLevelsChange?.(levels, data.level);
+          if (!hlsRef.current) return;
+          const parsed = computeLevels(hlsRef.current);
+          onLevelsChange?.(parsed, data.level);
         });
 
         hls.on(Hls.Events.ERROR, (_, data) => {
