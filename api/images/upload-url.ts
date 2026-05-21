@@ -18,7 +18,7 @@ import { applyRateLimit } from '../_lib/ratelimit.js';
  *   - deliveryUrl: URL pública final una vez subida (https://imagedelivery.net/<hash>/<id>/public)
  */
 const BodySchema = z.object({
-  purpose: z.enum(['logo', 'banner']).default('logo'),
+  purpose: z.enum(['logo', 'banner', 'post_image']).default('logo'),
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

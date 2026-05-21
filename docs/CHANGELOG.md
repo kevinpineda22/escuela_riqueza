@@ -5,6 +5,33 @@
 
 ---
 
+## 2026-05-21
+
+### Comunidad VIP — fix UX + diseño red social
+- **Fix final UX Modal "Crear publicación"**: el modal `NewPostDialog` ya no usa header/footer `sticky`. Ahora usa una estructura flex perfecta: `DialogContent` está limitado a la altura de la pantalla y no hace scroll (`overflow-hidden`); el form interno usa `flex-1 overflow-y-auto` en el cuerpo de los campos, dejando el header y los botones fijos naturalmente en la parte superior e inferior sin flotar sobre el contenido de forma invasiva.
+- **`isAdmin` no llegaba a `NewPostDialog`**: `CommunityFeed` no pasaba la prop. Corregido.
+- **Pin/unpin desde el feed (admin)**: nueva API `togglePinPost(id, pinned)` en `src/lib/api/community.ts`. Admin puede fijar/desfijar CUALQUIER post (suyo o ajeno) desde:
+  - **PostCard**: menú "⋯" → "Fijar publicación" / "Desfijar publicación".
+  - **PostDetail**: botón Pin/PinOff junto a Eliminar en el header del post.
+- **Separación visual fijados vs recientes** en `CommunityFeed`: headers "📌 Fijado por el equipo" (gold) y "🕐 Recientes" (muted) con línea gradient. Auto-ocultos cuando no aplican.
+- **Rediseño `PostCard` estilo red social profesional**:
+  - Avatar 48px con ring dinámico (gold si admin, blanco si user normal) + badge `Shield` dorado para admin.
+  - Header inline: nombre + badge admin + timestamp en una línea, categoría + pin chips en otra.
+  - Menú "⋯" agrupado (top-right) con dropdown que contiene pin (admin) y delete (autor/admin).
+  - Body con `whitespace-pre-wrap` para respetar saltos de línea + "Ver más" / "Ver menos" para posts >280 chars.
+  - Borde gold + accent line en top para posts fijados.
+  - Action bar inferior separada por `border-t` con LikeButton + contador de comentarios.
+- **Rediseño `PostDetail`**:
+  - Header tipo Twitter: avatar 56px con shield admin badge + ring dinámico, autor/timestamp en una línea, categoría+pin en otra.
+  - Borde dorado y línea de acento gradient arriba para posts fijados (consistente con PostCard).
+  - Body `whitespace-pre-wrap` respeta saltos de línea.
+  - Action bar inferior con border-t separador.
+  - `CommentBody`: avatares responsivos (40px raíz, 32px reply), shield admin badge, "Admin" pill, tipografía mejorada.
+- **Banner welcome `CommunityFeed`** más profesional: dot pattern de fondo, gold glow asimétrico, blob purple sutil, badge "Espacio exclusivo" con backdrop-blur.
+- **Fix Likes y contador de comentarios en tiempo real**:
+  - `LikeButton`: reescrito el manejo de estado optimista con `useEffect` separados para `liked` y `count`. Antes, el botón revertía visualmente el like si el prop del padre (que era viejo) causaba un re-render antes de que llegara el evento de Realtime.
+  - `CommunityFeed` y `PostDetail`: agregados listeners de Supabase Realtime para el evento `UPDATE` en las tablas `community_posts` y `community_comments`. Como los conteos están desnormalizados vía triggers en la BD (`like_count`, `comment_count`), escuchar los `UPDATE`s hace que todo el UI reaccione en tiempo real globalmente cuando cualquier usuario da like o comenta.
+
 ## 2026-05-11
 
 ### API de lives alineada al schema real de Supabase

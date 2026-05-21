@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from "motion/react";
 import { Heart } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { toggleLike, type LikeTarget } from "@/lib/api/community";
 
@@ -19,8 +19,13 @@ export function LikeButton({ targetType, targetId, liked, count, size = "md", on
   const [loading, setLoading] = useState(false);
   const [burst, setBurst] = useState(0);
 
-  if (liked !== optimisticLiked && !loading) setOptimisticLiked(liked);
-  if (count !== optimisticCount && !loading) setOptimisticCount(count);
+  useEffect(() => {
+    setOptimisticLiked(liked);
+  }, [liked]);
+
+  useEffect(() => {
+    setOptimisticCount(count);
+  }, [count]);
 
   const handleClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -33,10 +38,12 @@ export function LikeButton({ targetType, targetId, liked, count, size = "md", on
     setLoading(true);
     try {
       const result = await toggleLike(targetType, targetId);
+      // Wait for real-time trigger to update DB, but we already have optimistic state
       setOptimisticLiked(result);
       onChange?.(result, newCount);
     } catch (err) {
       console.error(err);
+      // Revert on error
       setOptimisticLiked(!newLiked);
       setOptimisticCount(count);
     } finally {

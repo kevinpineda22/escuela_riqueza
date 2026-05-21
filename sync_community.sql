@@ -203,6 +203,27 @@ CREATE POLICY "Users can unlike own" ON public.community_likes
 -- 5. Realtime: habilitar broadcast en publicaciones y comentarios
 -- (corre esto en Supabase Dashboard → Database → Replication si no se aplica)
 -- ============================================================================
-ALTER PUBLICATION supabase_realtime ADD TABLE public.community_posts;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.community_comments;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.community_likes;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'community_posts'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.community_posts;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'community_comments'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.community_comments;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'community_likes'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.community_likes;
+  END IF;
+END
+$$;
