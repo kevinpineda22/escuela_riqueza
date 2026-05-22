@@ -110,26 +110,24 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       let mediaErrorRetries = 0;
 
       if (Hls.isSupported()) {
-        // Config priorizando ESTABILIDAD + ABR sobre baja latencia.
-        // Requiere que el Live Input en Cloudflare tenga "Low-Latency HLS Support"
-        // DESACTIVADO para que Cloudflare exponga el ladder de renditions.
-        // Latencia esperada: 8–15s. A cambio: selector de calidad real + auto-down
-        // en redes malas sin parpadear el buffer.
+        // Modelo YouTube/Twitch: el player NUNCA acelera, NUNCA hace seek
+        // automático para perseguir el filo. Si el viewer se atrasa por un
+        // microcorte, se queda atrasado hasta que clickea "VOLVER A VIVO".
+        // Requiere LL-HLS activado en el Live Input de Cloudflare para latencia
+        // sub-3s. Con LL-HLS off cae a HLS estándar (~6-10s) sin romper nada.
         hls = new Hls({
           enableWorker: true,
-          lowLatencyMode: false,
-          backBufferLength: 30,
-          maxBufferLength: 30,
-          maxMaxBufferLength: 60,
-          liveSyncDuration: 3,
-          liveMaxLatencyDuration: 12,
+          lowLatencyMode: true,
+          backBufferLength: 4,
+          maxBufferLength: 6,
+          maxMaxBufferLength: 10,
+          liveSyncDuration: 2,
           liveDurationInfinity: true,
           startLevel: -1,
-          nudgeOffset: 0.2,
-          nudgeMaxRetry: 5,
-          maxLiveSyncPlaybackRate: 1.5,
-          // ABR conservador al SUBIR de calidad — evita oscilaciones que se ven
-          // como buffering periódico. Bajar a 480p cuando hace falta es instantáneo.
+          // Anti-latigazo: sin nudge ni catchup. Stalls reales se recuperan vía
+          // BUFFER_STALLED_ERROR + recoverMediaError, no vía seek implícito.
+          nudgeMaxRetry: 0,
+          maxLiveSyncPlaybackRate: 1.0,
           abrBandWidthFactor: 0.9,
           abrBandWidthUpFactor: 0.7,
         });
