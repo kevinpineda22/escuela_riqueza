@@ -104,17 +104,19 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       const video = videoRef.current;
       if (!video || !liveInputId || !customerCode) return;
 
-      const manifestUrl = `https://customer-${customerCode}.cloudflarestream.com/${liveInputId}/manifest/video.m3u8`;
+      // El query `?protocol=llhls` es OBLIGATORIO para que Cloudflare devuelva
+      // manifests con tags LL-HLS (EXT-X-SERVER-CONTROL, EXT-X-PART-INF). Sin él
+      // sirve HLS clásico con `targetduration: 3` y sin parts. El toggle del UI
+      // del Live Input no es suficiente — hay que pedir explícitamente el endpoint.
+      const manifestUrl = `https://customer-${customerCode}.cloudflarestream.com/${liveInputId}/manifest/video.m3u8?protocol=llhls`;
 
       let hls: Hls | null = null;
       let mediaErrorRetries = 0;
 
       if (Hls.isSupported()) {
-        // Modelo YouTube/Twitch: el player NUNCA acelera, NUNCA hace seek
-        // automático para perseguir el filo. Si el viewer se atrasa por un
-        // microcorte, se queda atrasado hasta que clickea "VOLVER A VIVO".
-        // Requiere LL-HLS activado en el Live Input de Cloudflare para latencia
-        // sub-3s. Con LL-HLS off cae a HLS estándar (~6-10s) sin romper nada.
+        // LL-HLS via Cloudflare con `?protocol=llhls`. Modelo YouTube/Twitch:
+        // sin catchup automático. Si el viewer se atrasa, se queda atrasado
+        // hasta clickear "VOLVER A VIVO". Latencia esperada 2-4s.
         hls = new Hls({
           enableWorker: true,
           lowLatencyMode: true,
@@ -124,8 +126,6 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           liveSyncDuration: 2,
           liveDurationInfinity: true,
           startLevel: -1,
-          // Anti-latigazo: sin nudge ni catchup. Stalls reales se recuperan vía
-          // BUFFER_STALLED_ERROR + recoverMediaError, no vía seek implícito.
           nudgeMaxRetry: 0,
           maxLiveSyncPlaybackRate: 1.0,
           abrBandWidthFactor: 0.9,
@@ -157,6 +157,26 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           const parsed = computeLevels(hls!);
           setLevels(parsed);
           onLevelsChange?.(parsed, hls!.currentLevel);
+        });
+
+        // Diagnóstico LL-HLS — TEMPORAL. Loggea una vez si el manifest expone los
+        // tags de Low-Latency HLS. Si no, latencia se queda en 6-10s aunque el
+        // cliente tenga lowLatencyMode: true.
+        let llhlsLogged = false;
+        hls.on(Hls.Events.LEVEL_LOADED, (_, data) => {
+          if (llhlsLogged) return;
+          llhlsLogged = true;
+          const d = data.details;
+          const isLLHLS = !!(d.partTarget || (d.partList && d.partList.length > 0));
+          console.log("%c[LL-HLS Check]", "color:#CCA43B;font-weight:bold", {
+            "✓ LL-HLS activo": isLLHLS ? "SÍ" : "NO",
+            partTarget: d.partTarget,
+            holdBack: d.holdBack,
+            partHoldBack: d.partHoldBack,
+            targetduration: d.targetduration,
+            live: d.live,
+            manifestUrl,
+          });
         });
 
         hls.on(Hls.Events.LEVEL_SWITCHED, (_, data) => {
