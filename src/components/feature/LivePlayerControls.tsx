@@ -180,7 +180,11 @@ const LivePlayerControls = ({
       ? "Auto"
       : levels.find((l) => l.index === currentLevel)?.label || "Auto";
 
-  const isBehind = liveDelta > 3;
+  // Con LL-HLS apuntando a ~2s del filo, delta >5s indica atraso REAL
+  // (microcorte de red, pausa larga, recuperación de buffer). El player no
+  // persigue el filo automáticamente — el viewer clickea para volver, como
+  // YouTube/Twitch.
+  const isBehind = liveDelta > 5;
 
   return (
     <>
