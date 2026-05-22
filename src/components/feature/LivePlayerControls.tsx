@@ -38,6 +38,10 @@ const LivePlayerControls = ({
   // dispararan más el loader visible y aparente que el stream "se traba"
   // cada pocos segundos.
   const [showBufferingSpinner, setShowBufferingSpinner] = useState(false);
+  // Histéresis del pill "VOLVER A VIVO". LL-HLS hace que liveDelta oscile
+  // naturalmente entre 2-7s por la llegada de chunks parciales. Sin histéresis,
+  // el pill flickearía constantemente. Aparece >8s, oculta solo si baja a <3s.
+  const [isBehind, setIsBehind] = useState(false);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bufferTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -100,7 +104,10 @@ const LivePlayerControls = ({
     try {
       const liveEdge = video.seekable.end(video.seekable.length - 1);
       if (!isFinite(liveEdge)) return;
-      video.currentTime = Math.max(0, liveEdge - 0.5);
+      // Seek con 1.5s de margen pre-cargado: evita que el browser stallee
+      // buscando segmentos no bufferizados (causa principal del latigazo
+      // visible al clickear el pill con LL-HLS y buffer chico).
+      video.currentTime = Math.max(0, liveEdge - 1.5);
       if (video.paused) {
         video.play().catch(() => {});
       }
@@ -180,11 +187,13 @@ const LivePlayerControls = ({
       ? "Auto"
       : levels.find((l) => l.index === currentLevel)?.label || "Auto";
 
-  // Con LL-HLS apuntando a ~2s del filo, delta >5s indica atraso REAL
-  // (microcorte de red, pausa larga, recuperación de buffer). El player no
-  // persigue el filo automáticamente — el viewer clickea para volver, como
-  // YouTube/Twitch.
-  const isBehind = liveDelta > 5;
+  // Histéresis dura: el pill solo aparece si delta supera 8s (atraso real),
+  // y solo desaparece cuando baja a <3s. Entre medio mantiene el estado.
+  // Sin esto, `liveDelta` oscilante de LL-HLS hace flickear el pill cada 1s.
+  useEffect(() => {
+    if (isBehind && liveDelta < 3) setIsBehind(false);
+    else if (!isBehind && liveDelta > 8) setIsBehind(true);
+  }, [liveDelta, isBehind]);
 
   return (
     <>
