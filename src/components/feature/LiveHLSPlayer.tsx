@@ -50,6 +50,12 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
     const videoRef = useRef<HTMLVideoElement>(null);
     const hlsRef = useRef<Hls | null>(null);
     const [levels, setLevels] = useState<QualityLevel[]>([]);
+    // Fallback automático LL-HLS → HLS clásico. Cuando Cloudflare expone tags
+    // LL-HLS pero los parts retornan 5xx (inconsistencia conocida server-side),
+    // intentamos primero LL-HLS y caemos a HLS clásico tras 5 fragLoadError
+    // fatales. Una vez en fallback, el componente se queda ahí hasta remount.
+    const [llhlsFallback, setLlhlsFallback] = useState(false);
+    const fragErrorCountRef = useRef(0);
 
     useImperativeHandle(ref, () => ({
       video: videoRef.current,
@@ -108,22 +114,22 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       // manifests con tags LL-HLS (EXT-X-SERVER-CONTROL, EXT-X-PART-INF). Sin él
       // sirve HLS clásico con `targetduration: 3` y sin parts. El toggle del UI
       // del Live Input no es suficiente — hay que pedir explícitamente el endpoint.
-      const manifestUrl = `https://customer-${customerCode}.cloudflarestream.com/${liveInputId}/manifest/video.m3u8?protocol=llhls`;
+      const useLlhls = !llhlsFallback;
+      const manifestUrl = `https://customer-${customerCode}.cloudflarestream.com/${liveInputId}/manifest/video.m3u8${useLlhls ? "?protocol=llhls" : ""}`;
 
       let hls: Hls | null = null;
       let mediaErrorRetries = 0;
 
       if (Hls.isSupported()) {
-        // LL-HLS via Cloudflare con `?protocol=llhls`. Modelo YouTube/Twitch:
-        // sin catchup automático. Si el viewer se atrasa, se queda atrasado
-        // hasta clickear "VOLVER A VIVO". Latencia esperada 2-4s.
+        // Modelo YouTube/Twitch sin catchup automático. Config dinámica según si
+        // LL-HLS está rindiendo (sub-3s) o cayó a fallback HLS clásico (5-7s).
         hls = new Hls({
           enableWorker: true,
-          lowLatencyMode: true,
+          lowLatencyMode: useLlhls,
           backBufferLength: 4,
-          maxBufferLength: 6,
-          maxMaxBufferLength: 10,
-          liveSyncDuration: 2,
+          maxBufferLength: useLlhls ? 6 : 8,
+          maxMaxBufferLength: useLlhls ? 10 : 14,
+          liveSyncDuration: useLlhls ? 2 : 3,
           liveDurationInfinity: true,
           startLevel: -1,
           nudgeMaxRetry: 0,
@@ -186,6 +192,18 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
         });
 
         hls.on(Hls.Events.ERROR, (_, data) => {
+          // Fallback auto LL-HLS → HLS clásico ante 5xx persistentes en frags.
+          // Cloudflare a veces expone tags LL-HLS en el manifest pero falla los
+          // parts con 500. Mejor latencia 5-7s con video estable que 2s rota.
+          if (useLlhls && data.details === Hls.ErrorDetails.FRAG_LOAD_ERROR) {
+            fragErrorCountRef.current++;
+            if (fragErrorCountRef.current >= 5) {
+              console.warn("%c[LL-HLS Fallback]", "color:#E1B846;font-weight:bold", "Parts fallando con 5xx, cayendo a HLS clásico");
+              fragErrorCountRef.current = 0;
+              setLlhlsFallback(true);
+              return;
+            }
+          }
           if (!data.fatal) return;
           if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
             console.warn("[LiveHLSPlayer] network error, recovering...", data.details);
@@ -227,7 +245,7 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
         }
       };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [liveInputId, customerCode]);
+    }, [liveInputId, customerCode, llhlsFallback]);
 
     return (
       <video
