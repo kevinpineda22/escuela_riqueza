@@ -32,6 +32,15 @@
   - `LikeButton`: reescrito el manejo de estado optimista con `useEffect` separados para `liked` y `count`. Antes, el botón revertía visualmente el like si el prop del padre (que era viejo) causaba un re-render antes de que llegara el evento de Realtime.
   - `CommunityFeed` y `PostDetail`: agregados listeners de Supabase Realtime para el evento `UPDATE` en las tablas `community_posts` y `community_comments`. Como los conteos están desnormalizados vía triggers en la BD (`like_count`, `comment_count`), escuchar los `UPDATE`s hace que todo el UI reaccione en tiempo real globalmente cuando cualquier usuario da like o comenta.
 
+- **Configuración avanzada de publicidad (Plan Free)**:
+  - Nueva migración SQL `sync_platform_ads.sql` para agregar `free_ad_type` ('preroll', 'midroll', 'both', 'none') y `free_ads_per_block` a la tabla `platform_settings`.
+  - El Panel de Admin (pestaña Operativa) ahora permite elegir:
+    - Modo de aparición: Solo al inicio, Solo intervalos, Inicio + Intervalos, Desactivados.
+    - Anuncios por pausa (consecutivos, e.g. 1 o 2).
+    - Frecuencia en segundos (sólo visible si hay intervalos activados).
+  - `LikeButton`: reescrito el manejo de estado optimista con `useEffect` separados para `liked` y `count`. Antes, el botón revertía visualmente el like si el prop del padre (que era viejo) causaba un re-render antes de que llegara el evento de Realtime.
+  - `CommunityFeed` y `PostDetail`: agregados listeners de Supabase Realtime para el evento `UPDATE` en las tablas `community_posts` y `community_comments`. Como los conteos están desnormalizados vía triggers en la BD (`like_count`, `comment_count`), escuchar los `UPDATE`s hace que todo el UI reaccione en tiempo real globalmente cuando cualquier usuario da like o comenta.
+
 ## 2026-05-11
 
 ### API de lives alineada al schema real de Supabase

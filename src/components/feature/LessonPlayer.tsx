@@ -7,6 +7,8 @@ import { Stream } from "@cloudflare/stream-react";
 import { fetchUserProgress, saveUserProgress } from "@/lib/api/stream/progress";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { fetchPlatformSettings, type PlatformSettings } from "@/lib/api/admin/settings";
+import { fetchActiveAdsCatalog, pickWeightedAd, incrementAdImpression, type ActiveAdVideo } from "@/lib/api/ads";
 
 interface LessonPlayerProps {
   videoSrc?: string;
@@ -16,10 +18,33 @@ interface LessonPlayerProps {
 }
 
 const AD_DURATION = 41;
-const AD_VIDEO_ID = "e5d953d28c8b3d1c1ae8f0b0825191be";
+const AD_VIDEO_ID_FALLBACK = "e5d953d28c8b3d1c1ae8f0b0825191be";
 
 const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayerProps) => {
   const { playTrack, isPodcastMode, closePlayer, track, lastKnownTime, lastVideoId, setPlaybackProgress } = usePlayerStore();
+
+  // Settings
+  const [settings, setSettings] = useState<PlatformSettings | null>(null);
+  useEffect(() => {
+    fetchPlatformSettings().then(setSettings).catch(console.error);
+  }, []);
+
+  // Catálogo de anuncios (aliados activos + videos activos)
+  const [adsCatalog, setAdsCatalog] = useState<ActiveAdVideo[]>([]);
+  useEffect(() => {
+    if (isPremium) return;
+    fetchActiveAdsCatalog().then(setAdsCatalog).catch(console.error);
+  }, [isPremium]);
+
+  // Anuncio actual seleccionado (se re-pickea en cada nueva instancia)
+  const [currentAd, setCurrentAd] = useState<ActiveAdVideo | null>(null);
+  const currentAdSrc = currentAd?.streamUid ?? AD_VIDEO_ID_FALLBACK;
+
+  const adConfig = {
+    type: settings?.free_ad_type ?? "both",
+    frequency: settings?.free_ad_frequency_seconds ?? 120,
+    perBlock: settings?.free_ads_per_block ?? 1,
+  };
 
   const isPlayingThisInPodcast = isPodcastMode && track?.videoId === videoSrc;
 
@@ -42,9 +67,19 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
   const lessonRef = useRef(lesson);
   useEffect(() => { lessonRef.current = lesson; }, [lesson]);
 
+  // Ads state (Logic using Ref to avoid stale closures in event handlers)
   const [showAd, setShowAd] = useState(false);
-  const [hasAdPlayed, setHasAdPlayed] = useState(false);
   const [adCurrentTime, setAdCurrentTime] = useState(0);
+  // Key incremental para forzar remount del <Stream> de anuncio entre anuncios del mismo bloque
+  const [adInstanceKey, setAdInstanceKey] = useState(0);
+  
+  const adTrackingRef = useRef({
+    hasPrerollPlayed: false,
+    lastAdTime: 0,
+    remainingInBlock: 0,
+    isTransitioning: false, // Lock para evitar dobles invocaciones (click + onEnded simultáneos)
+  });
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const adStreamRef = useRef<any>(null);
 
@@ -65,24 +100,30 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
     if (isPlayingThisInPodcast) return;
     setPlayRequested(false);
     setShowAd(false);
-    setHasAdPlayed(false);
-      setAdCurrentTime(0);
-      initializedTimeRef.current = false;
-      lastSavedTimeRef.current = 0;
-      endedRef.current = false;
+    adTrackingRef.current = {
+      hasPrerollPlayed: false,
+      lastAdTime: 0,
+      remainingInBlock: 0,
+      isTransitioning: false,
+    };
+    setAdCurrentTime(0);
+    setAdInstanceKey(0);
+    initializedTimeRef.current = false;
+    lastSavedTimeRef.current = 0;
+    endedRef.current = false;
       
-      // Buscar progreso real
-      const loadProgress = async () => {
-        if (!lesson || !videoSrc) return;
-        const progress = await fetchUserProgress(String(lesson.id));
-        if (progress && progress.progress_seconds > 5 && !progress.is_completed) {
-          setSavedProgressSeconds(progress.progress_seconds);
-        } else {
-          setSavedProgressSeconds(0);
-        }
-      };
-      loadProgress();
-    }, [videoSrc, lesson?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Buscar progreso real
+    const loadProgress = async () => {
+      if (!lesson || !videoSrc) return;
+      const progress = await fetchUserProgress(String(lesson.id));
+      if (progress && progress.progress_seconds > 5 && !progress.is_completed) {
+        setSavedProgressSeconds(progress.progress_seconds);
+      } else {
+        setSavedProgressSeconds(0);
+      }
+    };
+    loadProgress();
+  }, [videoSrc, lesson?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handlePlayRequest = () => {
     if (isPodcastMode) {
@@ -94,21 +135,46 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
       return;
     }
     
+    adTrackingRef.current.lastAdTime = 0;
     startPlayback();
+  };
+
+  /**
+   * Selecciona un anuncio ponderado del catálogo y registra una impresión.
+   * Si el catálogo está vacío, deja `currentAd` en null y el player usa el video fallback.
+   */
+  const pickAndTrackAd = () => {
+    const picked = adsCatalog.length > 0 ? pickWeightedAd(adsCatalog) : null;
+    setCurrentAd(picked);
+    if (picked) {
+      incrementAdImpression(picked.videoId);
+    }
   };
 
   const startPlayback = () => {
     endedRef.current = false;
-    setPlayRequested(true);
-    if (!isPremium && !hasAdPlayed) {
-      setShowAd(true);
+    
+    const shouldPlayPreroll =
+      !isPremium &&
+      (adConfig.type === "preroll" || adConfig.type === "both") &&
+      !adTrackingRef.current.hasPrerollPlayed;
+    
+    if (shouldPlayPreroll) {
+      adTrackingRef.current.remainingInBlock = adConfig.perBlock;
+      adTrackingRef.current.isTransitioning = false;
+      pickAndTrackAd();
+      setAdInstanceKey((k) => k + 1); // Monta una instancia fresca del Stream de anuncio
       setAdCurrentTime(0);
+      setShowAd(true);
+    } else {
+      setPlayRequested(true);
     }
   };
 
   const handleResume = () => {
     setShowResumeModal(false);
     pendingSeekRef.current = savedProgressSeconds;
+    adTrackingRef.current.lastAdTime = savedProgressSeconds;
     setSavedProgressSeconds(0);
     startPlayback();
   };
@@ -116,13 +182,49 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
   const handleStartOver = () => {
     setShowResumeModal(false);
     pendingSeekRef.current = 0;
+    adTrackingRef.current.lastAdTime = 0;
     setSavedProgressSeconds(0);
     startPlayback();
   };
 
-  const handleAdEnd = () => {
-    setShowAd(false);
-    setHasAdPlayed(true);
+  /**
+   * Avanza el bloque de anuncios — lo dispara TANTO el click de "Omitir" COMO el evento onEnded
+   * del Stream. Un lock (`isTransitioning`) garantiza que ambos eventos disparados de forma casi
+   * simultánea NO produzcan un doble decremento (causa del bug de bucle infinito).
+   */
+  const handleAdEnd = (e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    
+    if (adTrackingRef.current.isTransitioning) return;
+    adTrackingRef.current.isTransitioning = true;
+    
+    adTrackingRef.current.remainingInBlock = Math.max(0, adTrackingRef.current.remainingInBlock - 1);
+    
+    if (adTrackingRef.current.remainingInBlock > 0) {
+      // Aún quedan anuncios — fuerza un remount del Stream incrementando la key.
+      // Esto da una instancia 100% limpia (sin estado residual del iframe anterior).
+      pickAndTrackAd();
+      setAdCurrentTime(0);
+      setAdInstanceKey((k) => k + 1);
+      // Libera el lock después de que React re-renderice
+      setTimeout(() => { adTrackingRef.current.isTransitioning = false; }, 100);
+    } else {
+      // Bloque finalizado — vuelve al video principal
+      if (!adTrackingRef.current.hasPrerollPlayed && (adConfig.type === "preroll" || adConfig.type === "both")) {
+        adTrackingRef.current.hasPrerollPlayed = true;
+      }
+      setShowAd(false);
+      setPlayRequested(true);
+      
+      // Reanudar autoplay dentro del mismo gesto del usuario
+      setTimeout(() => {
+        try { streamRef.current?.play(); } catch { /* autoplay restringido */ }
+        adTrackingRef.current.isTransitioning = false;
+      }, 100);
+    }
   };
 
   const handlePodcastToggle = () => {
@@ -188,6 +290,23 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
 
     const currentTime = streamRef.current.currentTime;
     const duration = streamRef.current.duration;
+
+    // Check for midroll ad
+    if (!isPremium && playRequested && !showAd && (adConfig.type === "midroll" || adConfig.type === "both")) {
+      if (currentTime < adTrackingRef.current.lastAdTime) {
+        // User seeked backwards, reset the timer to current time
+        adTrackingRef.current.lastAdTime = currentTime;
+      } else if (currentTime - adTrackingRef.current.lastAdTime >= adConfig.frequency) {
+        adTrackingRef.current.lastAdTime = currentTime;
+        adTrackingRef.current.remainingInBlock = adConfig.perBlock;
+        adTrackingRef.current.isTransitioning = false;
+        pickAndTrackAd();
+        setAdInstanceKey((k) => k + 1);
+        setAdCurrentTime(0);
+        setShowAd(true);
+        return;
+      }
+    }
     
     if (Math.abs(currentTime - lastKnownTime) > 1 && videoSrc) {
       setPlaybackProgress(videoSrc, currentTime);
@@ -301,8 +420,9 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
 
             <div className="absolute inset-0 w-full h-full pointer-events-none flex items-center justify-center bg-black">
               <Stream
+                key={adInstanceKey}
                 streamRef={adStreamRef}
-                src={AD_VIDEO_ID}
+                src={currentAdSrc}
                 controls={false}
                 autoplay
                 preload="auto"
@@ -313,7 +433,7 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
                     setAdCurrentTime(adStreamRef.current.currentTime);
                   }
                 }}
-                onEnded={handleAdEnd}
+                onEnded={() => handleAdEnd()}
               />
             </div>
 
@@ -358,6 +478,7 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
               </div>
             ) : (
               <button
+                data-testid="main-play-button"
                 onClick={handlePlayRequest}
                 disabled={!videoSrc}
                 className={cn("w-20 h-20 rounded-full flex items-center justify-center transition-transform hover:scale-105 shadow-[0_0_30px_rgba(204,164,59,0.4)]", videoSrc ? "bg-gold hover:bg-goldHover" : "bg-gray-600 cursor-not-allowed")}

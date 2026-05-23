@@ -22,7 +22,10 @@ export interface PlatformSettings {
   price_individual_monthly: number;
   price_vip_monthly: number;
   trial_days: number;
+
   free_ad_frequency_seconds: number;
+  free_ad_type: "preroll" | "midroll" | "both" | "none";
+  free_ads_per_block: number;
 
   notif_welcome_email: boolean;
   notif_new_module: boolean;
