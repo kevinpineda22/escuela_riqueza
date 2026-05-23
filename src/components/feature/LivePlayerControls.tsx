@@ -104,10 +104,10 @@ const LivePlayerControls = ({
     try {
       const liveEdge = video.seekable.end(video.seekable.length - 1);
       if (!isFinite(liveEdge)) return;
-      // Seek con 1.5s de margen pre-cargado: evita que el browser stallee
-      // buscando segmentos no bufferizados (causa principal del latigazo
-      // visible al clickear el pill con LL-HLS y buffer chico).
-      video.currentTime = Math.max(0, liveEdge - 1.5);
+      // Volver al filo del vivo SIN romper el buffer: nos paramos a 8s del
+      // edge, coincidiendo con liveSyncDuration. Evita el latigazo de seek
+      // a una zona sin pre-cargar.
+      video.currentTime = Math.max(0, liveEdge - 8);
       if (video.paused) {
         video.play().catch(() => {});
       }
@@ -187,12 +187,12 @@ const LivePlayerControls = ({
       ? "Auto"
       : levels.find((l) => l.index === currentLevel)?.label || "Auto";
 
-  // Histéresis dura: el pill solo aparece si delta supera 8s (atraso real),
-  // y solo desaparece cuando baja a <3s. Entre medio mantiene el estado.
-  // Sin esto, `liveDelta` oscilante de LL-HLS hace flickear el pill cada 1s.
+  // Histéresis dura: con liveSyncDuration:8 el delta natural oscila 6-12s,
+  // así que el pill solo aparece si pasa los 20s (atraso real visible) y
+  // desaparece cuando baja a <12s (zona normal del perfil "fluidez primero").
   useEffect(() => {
-    if (isBehind && liveDelta < 3) setIsBehind(false);
-    else if (!isBehind && liveDelta > 8) setIsBehind(true);
+    if (isBehind && liveDelta < 12) setIsBehind(false);
+    else if (!isBehind && liveDelta > 20) setIsBehind(true);
   }, [liveDelta, isBehind]);
 
   return (
@@ -205,30 +205,6 @@ const LivePlayerControls = ({
         className="absolute inset-0 z-10 cursor-pointer bg-transparent"
         aria-label={isPlaying ? "Pausar" : "Reproducir"}
       />
-
-      {/* Pill flotante "VOLVER A VIVO" — SIEMPRE visible cuando hay delta > 3s.
-          Vive en una capa propia, ajeno al auto-hide de la barra de controles.
-          Posicionado abajo-centro para que el pulgar lo alcance fácil en mobile. */}
-      <AnimatePresence>
-        {isBehind && (
-          <motion.button
-            key="go-live-pill"
-            type="button"
-            onClick={() => { handleGoLive(); wakeControls(); }}
-            initial={{ opacity: 0, y: 12, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 12, scale: 0.9 }}
-            transition={{ type: "spring", damping: 18, stiffness: 220 }}
-            aria-label={`Volver al filo del vivo, atrasado ${Math.floor(liveDelta)} segundos`}
-            className="absolute left-1/2 -translate-x-1/2 bottom-20 sm:bottom-24 z-[35] flex items-center gap-2 px-4 py-2.5 rounded-full bg-red-600/95 backdrop-blur-md text-white text-xs font-black tracking-widest shadow-[0_10px_40px_-5px_rgba(220,38,38,0.5)] active:scale-95 hover:bg-red-500 transition-colors pointer-events-auto"
-          >
-            <Radio size={14} className="shrink-0" />
-            <span>
-              VOLVER A VIVO {liveDelta >= 60 ? `-${Math.floor(liveDelta / 60)}m` : `-${Math.floor(liveDelta)}s`}
-            </span>
-          </motion.button>
-        )}
-      </AnimatePresence>
 
       {/* Selector de calidad — FLOTANTE y SIEMPRE visible. Vive fuera de la barra
           que se auto-oculta, así el usuario lo encuentra sin necesidad de hovereár
@@ -349,7 +325,17 @@ const LivePlayerControls = ({
                 />
               </div>
 
-              {!isBehind && (
+              {isBehind ? (
+                <button
+                  type="button"
+                  onClick={() => { handleGoLive(); wakeControls(); }}
+                  aria-label={`Volver al filo del vivo, atrasado ${Math.floor(liveDelta)} segundos`}
+                  className="flex items-center gap-1.5 sm:gap-2 ml-1 px-2.5 py-1 rounded-full bg-red-600/80 hover:bg-red-500 active:scale-95 text-white text-[10px] sm:text-xs font-black tracking-widest transition-colors"
+                >
+                  <Radio size={12} className="shrink-0" />
+                  <span>VOLVER A VIVO {liveDelta >= 60 ? `-${Math.floor(liveDelta / 60)}m` : `-${Math.floor(liveDelta)}s`}</span>
+                </button>
+              ) : (
                 <div className="flex items-center gap-1.5 sm:gap-2 ml-1 text-red-500 text-[10px] sm:text-xs font-black tracking-widest">
                   <span className="relative flex w-2 h-2">
                     <span className="absolute inset-0 rounded-full bg-red-500 animate-ping opacity-75" />
