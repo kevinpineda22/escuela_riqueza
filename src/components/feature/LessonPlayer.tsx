@@ -216,6 +216,13 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
       if (!adTrackingRef.current.hasPrerollPlayed && (adConfig.type === "preroll" || adConfig.type === "both")) {
         adTrackingRef.current.hasPrerollPlayed = true;
       }
+      // Si era un midroll (lastAdTime > 0), restauramos el punto donde estaba el video.
+      // El <Stream> principal se desmontó al mostrar el anuncio, así que la nueva instancia
+      // arranca en 0 — usamos pendingSeekRef + reset de initializedTimeRef para hacer seek.
+      if (adTrackingRef.current.lastAdTime > 0) {
+        pendingSeekRef.current = adTrackingRef.current.lastAdTime;
+        initializedTimeRef.current = false;
+      }
       setShowAd(false);
       setPlayRequested(true);
       
