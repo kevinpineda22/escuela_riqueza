@@ -8,6 +8,8 @@ export interface QualityLevel {
   label: string;
 }
 
+export type LiveLatencyMode = "smooth" | "low";
+
 export interface LiveHLSPlayerHandle {
   video: HTMLVideoElement | null;
   enterFullscreen: () => Promise<void>;
@@ -21,6 +23,10 @@ interface LiveHLSPlayerProps {
   customerCode: string;
   muted: boolean;
   autoPlay?: boolean;
+  // "smooth" (default): perfil tipo Twitch/YouTube clásico — ~8s atrás del
+  // edge con buffer 20s, fluidez asegurada. "low": ~3s del edge con buffer 10s,
+  // baja latencia pero requiere red estable.
+  latencyMode?: LiveLatencyMode;
   className?: string;
   onPlay?: () => void;
   onPause?: () => void;
@@ -37,6 +43,7 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       customerCode,
       muted,
       autoPlay = true,
+      latencyMode = "smooth",
       className,
       onPlay,
       onPause,
@@ -104,11 +111,16 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       const video = videoRef.current;
       if (!video || !liveInputId || !customerCode) return;
 
-      // Perfil "fluidez primero" — HLS clásico (targetduration ~3s), sin
-      // low-latency parts. Entramos a ~8s del live edge con buffer gordo
-      // para absorber jitter de red, microcortes de OBS y reencodes lentos.
-      // Latencia resultante ≈ 6-10s, equivalente a Twitch/YouTube sin LL.
+      // Dos perfiles. Ninguno usa LL-HLS: los parts de Cloudflare Stream son
+      // 5xx intermitentes y reintroducen el problema de los "latigazos". Sin
+      // LL-HLS, el piso de latencia con CF es ~targetduration (≈3s).
+      // - "smooth" (default): ~8s del edge, buffer 20s. Tipo Twitch clásico.
+      // - "low": ~2s del edge, buffer 8s. Lo más bajo posible sin LL-HLS.
+      //   maxLiveSyncPlaybackRate sube a 1.05 para que pueda recuperar el
+      //   filo acelerando 5% si se atrasa (imperceptible al oído).
       const manifestUrl = `https://customer-${customerCode}.cloudflarestream.com/${liveInputId}/manifest/video.m3u8`;
+
+      const lowLatency = latencyMode === "low";
 
       let hls: Hls | null = null;
       let mediaErrorRetries = 0;
@@ -117,14 +129,14 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
         hls = new Hls({
           enableWorker: true,
           lowLatencyMode: false,
-          backBufferLength: 10,
-          maxBufferLength: 20,
-          maxMaxBufferLength: 40,
-          liveSyncDuration: 8,
-          liveMaxLatencyDuration: 20,
+          backBufferLength: lowLatency ? 4 : 10,
+          maxBufferLength: lowLatency ? 8 : 20,
+          maxMaxBufferLength: lowLatency ? 16 : 40,
+          liveSyncDuration: lowLatency ? 2 : 8,
+          liveMaxLatencyDuration: lowLatency ? 8 : 20,
           liveDurationInfinity: true,
           startLevel: -1,
-          maxLiveSyncPlaybackRate: 1.0,
+          maxLiveSyncPlaybackRate: lowLatency ? 1.05 : 1.0,
           abrBandWidthFactor: 0.8,
           abrBandWidthUpFactor: 0.7,
         });
@@ -224,7 +236,7 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
         }
       };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [liveInputId, customerCode]);
+    }, [liveInputId, customerCode, latencyMode]);
 
     return (
       <video

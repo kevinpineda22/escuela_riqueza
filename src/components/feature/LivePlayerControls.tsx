@@ -1,11 +1,11 @@
 import { useEffect, useState, useCallback, useRef, type RefObject, type ChangeEvent } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Loader2, Settings, Check, Radio } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Loader2, Settings, Check } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import type { LiveHLSPlayerHandle, QualityLevel } from "./LiveHLSPlayer";
+import type { LiveHLSPlayerHandle, LiveLatencyMode, QualityLevel } from "./LiveHLSPlayer";
 
 interface LivePlayerControlsProps {
   playerRef: RefObject<LiveHLSPlayerHandle | null>;
@@ -14,9 +14,11 @@ interface LivePlayerControlsProps {
   isMuted: boolean;
   levels: QualityLevel[];
   currentLevel: number;
+  latencyMode: LiveLatencyMode;
   onTogglePlay: () => void;
   onToggleMute: () => void;
   onSelectLevel: (index: number) => void;
+  onSelectLatencyMode: (mode: LiveLatencyMode) => void;
 }
 
 const LivePlayerControls = ({
@@ -26,9 +28,11 @@ const LivePlayerControls = ({
   isMuted,
   levels,
   currentLevel,
+  latencyMode,
   onTogglePlay,
   onToggleMute,
   onSelectLevel,
+  onSelectLatencyMode,
 }: LivePlayerControlsProps) => {
   const [controlsVisible, setControlsVisible] = useState(true);
   const [volume, setVolume] = useState(1);
@@ -254,6 +258,25 @@ const LivePlayerControls = ({
                 </DropdownMenuItem>
               ))
           )}
+
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel className="text-xs text-textMuted uppercase tracking-wider">
+            Latencia
+          </DropdownMenuLabel>
+          <DropdownMenuItem
+            onClick={() => { onSelectLatencyMode("smooth"); wakeControls(); }}
+            className={cn("cursor-pointer", latencyMode === "smooth" && "text-gold")}
+          >
+            <span className="flex-1">Fluidez</span>
+            {latencyMode === "smooth" && <Check size={14} className="text-gold" />}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => { onSelectLatencyMode("low"); wakeControls(); }}
+            className={cn("cursor-pointer", latencyMode === "low" && "text-gold")}
+          >
+            <span className="flex-1">Baja latencia</span>
+            {latencyMode === "low" && <Check size={14} className="text-gold" />}
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -325,25 +348,21 @@ const LivePlayerControls = ({
                 />
               </div>
 
-              {isBehind ? (
-                <button
-                  type="button"
-                  onClick={() => { handleGoLive(); wakeControls(); }}
-                  aria-label={`Volver al filo del vivo, atrasado ${Math.floor(liveDelta)} segundos`}
-                  className="flex items-center gap-1.5 sm:gap-2 ml-1 px-2.5 py-1 rounded-full bg-red-600/80 hover:bg-red-500 active:scale-95 text-white text-[10px] sm:text-xs font-black tracking-widest transition-colors"
-                >
-                  <Radio size={12} className="shrink-0" />
-                  <span>VOLVER A VIVO {liveDelta >= 60 ? `-${Math.floor(liveDelta / 60)}m` : `-${Math.floor(liveDelta)}s`}</span>
-                </button>
-              ) : (
-                <div className="flex items-center gap-1.5 sm:gap-2 ml-1 text-red-500 text-[10px] sm:text-xs font-black tracking-widest">
-                  <span className="relative flex w-2 h-2">
-                    <span className="absolute inset-0 rounded-full bg-red-500 animate-ping opacity-75" />
-                    <span className="relative w-2 h-2 rounded-full bg-red-500" />
-                  </span>
-                  EN VIVO
-                </div>
-              )}
+              <button
+                type="button"
+                onClick={() => { handleGoLive(); wakeControls(); }}
+                aria-label={isBehind ? `Volver al filo del vivo, atrasado ${Math.floor(liveDelta)} segundos` : "Saltar al filo del vivo"}
+                title={isBehind ? "Volver al vivo" : "Ya estás al filo del vivo"}
+                className="flex items-center gap-1.5 sm:gap-2 ml-1 text-red-500 hover:text-red-400 active:scale-95 text-[10px] sm:text-xs font-black tracking-widest transition-colors cursor-pointer"
+              >
+                <span className="relative flex w-2 h-2">
+                  <span className="absolute inset-0 rounded-full bg-red-500 animate-ping opacity-75" />
+                  <span className="relative w-2 h-2 rounded-full bg-red-500" />
+                </span>
+                <span>
+                  EN VIVO{isBehind && ` ${liveDelta >= 60 ? `-${Math.floor(liveDelta / 60)}m` : `-${Math.floor(liveDelta)}s`}`}
+                </span>
+              </button>
 
               <div className="flex-1" />
 
