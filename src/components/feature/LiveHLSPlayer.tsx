@@ -136,11 +136,17 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           backBufferLength: lowLatency ? 6 : 10,
           maxBufferLength: lowLatency ? 12 : 20,
           maxMaxBufferLength: lowLatency ? 24 : 40,
-          liveSyncDuration: lowLatency ? 2 : 8,
-          liveMaxLatencyDuration: lowLatency ? 12 : 20,
+          // Piso físico con HLS clásico + Cloudflare: targetduration ≈3s. Si te
+          // plantás MÁS cerca del edge, cualquier chunk lento te causa stall.
+          // 3s es el punto donde la matemática colapsa: margen suficiente para
+          // absorber jitter sin perder fluidez. Equivale a Twitch normal-latency.
+          liveSyncDuration: lowLatency ? 3 : 8,
+          // 2x el liveSyncDuration. Permite catchup suave; si excede, seek al edge.
+          liveMaxLatencyDuration: lowLatency ? 8 : 20,
           liveDurationInfinity: true,
           startLevel: -1,
-          maxLiveSyncPlaybackRate: lowLatency ? 1.04 : 1.0,
+          // Catchup 5% — recupera el filo si se atrasa, inaudible al oído humano.
+          maxLiveSyncPlaybackRate: lowLatency ? 1.05 : 1.0,
           abrBandWidthFactor: lowLatency ? 0.7 : 0.8,
           abrBandWidthUpFactor: lowLatency ? 0.5 : 0.7,
           abrEwmaFastLive: lowLatency ? 3.0 : 3.0,
