@@ -50,12 +50,6 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
     const videoRef = useRef<HTMLVideoElement>(null);
     const hlsRef = useRef<Hls | null>(null);
     const [levels, setLevels] = useState<QualityLevel[]>([]);
-    // Fallback automático LL-HLS → HLS clásico. Cuando Cloudflare expone tags
-    // LL-HLS pero los parts retornan 5xx (inconsistencia conocida server-side),
-    // intentamos primero LL-HLS y caemos a HLS clásico tras 5 fragLoadError
-    // fatales. Una vez en fallback, el componente se queda ahí hasta remount.
-    const [llhlsFallback, setLlhlsFallback] = useState(false);
-    const fragErrorCountRef = useRef(0);
 
     useImperativeHandle(ref, () => ({
       video: videoRef.current,
@@ -110,31 +104,28 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       const video = videoRef.current;
       if (!video || !liveInputId || !customerCode) return;
 
-      // El query `?protocol=llhls` es OBLIGATORIO para que Cloudflare devuelva
-      // manifests con tags LL-HLS (EXT-X-SERVER-CONTROL, EXT-X-PART-INF). Sin él
-      // sirve HLS clásico con `targetduration: 3` y sin parts. El toggle del UI
-      // del Live Input no es suficiente — hay que pedir explícitamente el endpoint.
-      const useLlhls = !llhlsFallback;
-      const manifestUrl = `https://customer-${customerCode}.cloudflarestream.com/${liveInputId}/manifest/video.m3u8${useLlhls ? "?protocol=llhls" : ""}`;
+      // Perfil "fluidez primero" — HLS clásico (targetduration ~3s), sin
+      // low-latency parts. Entramos a ~8s del live edge con buffer gordo
+      // para absorber jitter de red, microcortes de OBS y reencodes lentos.
+      // Latencia resultante ≈ 6-10s, equivalente a Twitch/YouTube sin LL.
+      const manifestUrl = `https://customer-${customerCode}.cloudflarestream.com/${liveInputId}/manifest/video.m3u8`;
 
       let hls: Hls | null = null;
       let mediaErrorRetries = 0;
 
       if (Hls.isSupported()) {
-        // Modelo YouTube/Twitch sin catchup automático. Config dinámica según si
-        // LL-HLS está rindiendo (sub-3s) o cayó a fallback HLS clásico (5-7s).
         hls = new Hls({
           enableWorker: true,
-          lowLatencyMode: useLlhls,
-          backBufferLength: 4,
-          maxBufferLength: useLlhls ? 6 : 8,
-          maxMaxBufferLength: useLlhls ? 10 : 14,
-          liveSyncDuration: useLlhls ? 2 : 3,
+          lowLatencyMode: false,
+          backBufferLength: 10,
+          maxBufferLength: 20,
+          maxMaxBufferLength: 40,
+          liveSyncDuration: 8,
+          liveMaxLatencyDuration: 20,
           liveDurationInfinity: true,
           startLevel: -1,
-          nudgeMaxRetry: 0,
           maxLiveSyncPlaybackRate: 1.0,
-          abrBandWidthFactor: 0.9,
+          abrBandWidthFactor: 0.8,
           abrBandWidthUpFactor: 0.7,
         });
         hlsRef.current = hls;
@@ -192,18 +183,6 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
         });
 
         hls.on(Hls.Events.ERROR, (_, data) => {
-          // Fallback auto LL-HLS → HLS clásico ante 5xx persistentes en frags.
-          // Cloudflare a veces expone tags LL-HLS en el manifest pero falla los
-          // parts con 500. Mejor latencia 5-7s con video estable que 2s rota.
-          if (useLlhls && data.details === Hls.ErrorDetails.FRAG_LOAD_ERROR) {
-            fragErrorCountRef.current++;
-            if (fragErrorCountRef.current >= 5) {
-              console.warn("%c[LL-HLS Fallback]", "color:#E1B846;font-weight:bold", "Parts fallando con 5xx, cayendo a HLS clásico");
-              fragErrorCountRef.current = 0;
-              setLlhlsFallback(true);
-              return;
-            }
-          }
           if (!data.fatal) return;
           if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
             console.warn("[LiveHLSPlayer] network error, recovering...", data.details);
@@ -245,7 +224,7 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
         }
       };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [liveInputId, customerCode, llhlsFallback]);
+    }, [liveInputId, customerCode]);
 
     return (
       <video
