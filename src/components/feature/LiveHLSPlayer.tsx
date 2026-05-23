@@ -112,12 +112,16 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       if (!video || !liveInputId || !customerCode) return;
 
       // Dos perfiles. Ninguno usa LL-HLS: los parts de Cloudflare Stream son
-      // 5xx intermitentes y reintroducen el problema de los "latigazos". Sin
-      // LL-HLS, el piso de latencia con CF es ~targetduration (≈3s).
+      // 5xx intermitentes y reintroducen los latigazos. Sin LL-HLS, el piso
+      // de latencia con CF es ~targetduration (≈3s) — `liveSyncDuration:2`
+      // se sienta justo ahí.
+      //
       // - "smooth" (default): ~8s del edge, buffer 20s. Tipo Twitch clásico.
-      // - "low": ~2s del edge, buffer 8s. Lo más bajo posible sin LL-HLS.
-      //   maxLiveSyncPlaybackRate sube a 1.05 para que pueda recuperar el
-      //   filo acelerando 5% si se atrasa (imperceptible al oído).
+      // - "low": ~2s del edge. La latencia la fija liveSyncDuration; los
+      //   stalls dependen del buffer + ABR + catchup. Para minimizar latigazos
+      //   SIN tocar el delay: subimos maxBufferLength (más colchón forward),
+      //   suavizamos el ABR (EWMA largo + factor conservador) y bajamos el
+      //   catchup a 1.04 (menos audible que 1.05).
       const manifestUrl = `https://customer-${customerCode}.cloudflarestream.com/${liveInputId}/manifest/video.m3u8`;
 
       const lowLatency = latencyMode === "low";
@@ -129,16 +133,21 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
         hls = new Hls({
           enableWorker: true,
           lowLatencyMode: false,
-          backBufferLength: lowLatency ? 4 : 10,
-          maxBufferLength: lowLatency ? 8 : 20,
-          maxMaxBufferLength: lowLatency ? 16 : 40,
+          backBufferLength: lowLatency ? 6 : 10,
+          maxBufferLength: lowLatency ? 12 : 20,
+          maxMaxBufferLength: lowLatency ? 24 : 40,
           liveSyncDuration: lowLatency ? 2 : 8,
-          liveMaxLatencyDuration: lowLatency ? 8 : 20,
+          liveMaxLatencyDuration: lowLatency ? 12 : 20,
           liveDurationInfinity: true,
           startLevel: -1,
-          maxLiveSyncPlaybackRate: lowLatency ? 1.05 : 1.0,
-          abrBandWidthFactor: 0.8,
-          abrBandWidthUpFactor: 0.7,
+          maxLiveSyncPlaybackRate: lowLatency ? 1.04 : 1.0,
+          abrBandWidthFactor: lowLatency ? 0.7 : 0.8,
+          abrBandWidthUpFactor: lowLatency ? 0.5 : 0.7,
+          abrEwmaFastLive: lowLatency ? 3.0 : 3.0,
+          abrEwmaSlowLive: lowLatency ? 9.0 : 9.0,
+          fragLoadingMaxRetry: 6,
+          manifestLoadingMaxRetry: 4,
+          levelLoadingMaxRetry: 4,
         });
         hlsRef.current = hls;
 
