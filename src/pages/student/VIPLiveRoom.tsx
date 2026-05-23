@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player.store";
 import { useAuthStore } from "@/stores/auth.store";
+import { usePreferencesStore } from "@/stores/preferences.store";
 import { supabase } from "@/lib/supabase";
 import { fetchActiveLive, checkLiveInputStatus, type LiveEvent } from "@/lib/api/stream/lives";
 import { useIsDesktop } from "@/hooks/useMediaQuery";
@@ -51,6 +52,8 @@ const VIPLiveRoom = () => {
   const playerWrapperRef = useRef<HTMLDivElement>(null);
   const isDesktop = useIsDesktop();
   const { clearPlayer } = usePlayerStore();
+  const liveLatencyMode = usePreferencesStore(s => s.liveLatencyMode);
+  const setLiveLatencyMode = usePreferencesStore(s => s.setLiveLatencyMode);
   const livePlayerRef = useRef<LiveHLSPlayerHandle | null>(null);
 
   useEffect(() => { clearPlayer(); }, [clearPlayer]);
@@ -444,6 +447,7 @@ const VIPLiveRoom = () => {
                     customerCode={CF_CUSTOMER_CODE}
                     muted={isMuted}
                     autoPlay
+                    latencyMode={liveLatencyMode}
                     className="w-full h-full object-contain bg-black"
                     onPlay={() => { setIsPlaying(true); setIsBuffering(false); }}
                     onPause={() => setIsPlaying(false)}
@@ -461,9 +465,11 @@ const VIPLiveRoom = () => {
                     isMuted={isMuted}
                     levels={qualityLevels}
                     currentLevel={currentQualityLevel}
+                    latencyMode={liveLatencyMode}
                     onTogglePlay={handleTogglePlay}
                     onToggleMute={handleToggleMute}
                     onSelectLevel={handleSelectQualityLevel}
+                    onSelectLatencyMode={setLiveLatencyMode}
                   />
                   {/* Audio overlay — solo aparece UNA VEZ al ingresar al live.
                       Una vez dismissed, no reaparece aunque el usuario mutee o
