@@ -20,6 +20,7 @@ import AdminUsers from "@/pages/admin/AdminUsers";
 import AdminUserDetail from "@/pages/admin/AdminUserDetail";
 import AdminSettings from "@/pages/admin/AdminSettings";
 import AdminLiveManager from "@/pages/admin/AdminLiveManager";
+import AdminSponsors from "@/pages/admin/AdminSponsors";
 import RequireAuth from "@/components/layout/RequireAuth";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { USER_ROLES } from "@/types/user";
@@ -122,6 +123,7 @@ const AppRoutes = () => {
           <Route path="lives" element={<AdminLiveManager />} />
           <Route path="users" element={<AdminUsers />} />
           <Route path="users/:id" element={<AdminUserDetail />} />
+          <Route path="sponsors" element={<AdminSponsors />} />
           <Route path="settings" element={<AdminSettings />} />
         </Route>
 

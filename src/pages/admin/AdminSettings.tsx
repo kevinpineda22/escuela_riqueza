@@ -22,6 +22,7 @@ import {
   Clock,
   Megaphone,
   Info,
+  Layers,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toaster";
@@ -512,16 +513,70 @@ const AdminSettings = () => {
 
                 <hr className="border-white/10" />
 
-                <Section title="Plan FREE" description="Configuración del modo gratuito." icon={Megaphone}>
-                  <Field
-                    label="Frecuencia de publicidad (segundos)"
-                    value={String(draft.free_ad_frequency_seconds)}
-                    onChange={(v) => update("free_ad_frequency_seconds", Math.max(30, Number(v) || 0))}
-                    type="number"
-                    min={30}
-                    icon={Clock}
-                    hint="Cada cuántos segundos se muestra publicidad a usuarios free. Mínimo 30."
-                  />
+                <Section title="Plan FREE (Anuncios)" description="Configuración de la publicidad para usuarios gratuitos." icon={Megaphone}>
+                  <div className="space-y-6">
+                    {/* Modo de aparición */}
+                    <div>
+                      <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-textMuted">Modo de aparición</label>
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        {(["preroll", "midroll", "both", "none"] as const).map((type) => {
+                          const labels = {
+                            preroll: "Solo al inicio",
+                            midroll: "Solo intervalos",
+                            both: "Inicio + Intervalos",
+                            none: "Desactivados",
+                          };
+                          const active = draft.free_ad_type === type;
+                          return (
+                            <button
+                              key={type}
+                              type="button"
+                              onClick={() => update("free_ad_type", type)}
+                              className={cn(
+                                "rounded-xl border px-3 py-2.5 text-xs font-bold transition-all",
+                                active
+                                  ? type === "none"
+                                    ? "border-red-500/50 bg-red-500/10 text-red-400 shadow-[0_0_12px_rgba(239,68,68,0.2)]"
+                                    : "border-gold bg-gradient-to-r from-gold/15 to-transparent text-white shadow-[0_0_12px_rgba(204,164,59,0.3)]"
+                                  : "border-white/10 bg-white/[0.03] text-textMuted hover:border-white/25 hover:text-white"
+                              )}
+                            >
+                              {labels[type]}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                      {/* Frecuencia (Solo si hay midroll) */}
+                      {(draft.free_ad_type === "midroll" || draft.free_ad_type === "both") && (
+                        <Field
+                          label="Frecuencia (segundos)"
+                          value={String(draft.free_ad_frequency_seconds)}
+                          onChange={(v) => update("free_ad_frequency_seconds", Math.max(30, Number(v) || 0))}
+                          type="number"
+                          min={30}
+                          icon={Clock}
+                          hint="Mínimo 30. Tiempo entre pausas publicitarias."
+                        />
+                      )}
+
+                      {/* Cantidad por bloque */}
+                      {draft.free_ad_type !== "none" && (
+                        <Field
+                          label="Anuncios por pausa"
+                          value={String(draft.free_ads_per_block)}
+                          onChange={(v) => update("free_ads_per_block", Math.max(1, Number(v) || 1))}
+                          type="number"
+                          min={1}
+                          max={5}
+                          icon={Layers}
+                          hint="Ej: 2 reproducirá dos anuncios seguidos por bloque."
+                        />
+                      )}
+                    </div>
+                  </div>
                 </Section>
               </motion.div>
             )}
