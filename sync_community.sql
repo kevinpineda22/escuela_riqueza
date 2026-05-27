@@ -92,7 +92,7 @@ BEGIN
   END IF;
   RETURN NULL;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 DROP TRIGGER IF EXISTS trg_likes_count ON public.community_likes;
 CREATE TRIGGER trg_likes_count
@@ -112,7 +112,7 @@ BEGIN
   END IF;
   RETURN NULL;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 DROP TRIGGER IF EXISTS trg_comments_count ON public.community_comments;
 CREATE TRIGGER trg_comments_count
@@ -127,7 +127,7 @@ RETURNS boolean
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   SELECT EXISTS (
     SELECT 1 FROM public.profiles
-    WHERE id = uid AND (role = 'admin' OR plan = 'vip')
+    WHERE id = uid AND (role = 'admin' OR plan IN ('vip', 'individual'))
   );
 $$;
 
@@ -180,6 +180,13 @@ CREATE POLICY "VIP can create comments" ON public.community_comments
 DROP POLICY IF EXISTS "Authors and admins can delete comments" ON public.community_comments;
 CREATE POLICY "Authors and admins can delete comments" ON public.community_comments
   FOR DELETE USING (
+    author_id = auth.uid()
+    OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+  );
+
+DROP POLICY IF EXISTS "Authors and admins can update comments" ON public.community_comments;
+CREATE POLICY "Authors and admins can update comments" ON public.community_comments
+  FOR UPDATE USING (
     author_id = auth.uid()
     OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
   );

@@ -348,9 +348,21 @@ const StudentDashboard = () => {
     setAvatarPreview(URL.createObjectURL(file));
   };
 
-  const handleDeleteAvatar = () => {
-    setAvatarFile(null);
-    setAvatarPreview(null);
+  const handleDeleteAvatar = async () => {
+    if (!user) return;
+    setIsUpdatingProfile(true);
+    try {
+      const { error } = await supabase.from("profiles").update({ avatar_url: null }).eq("id", user.id);
+      if (error) throw error;
+      setUser({ ...user, avatarUrl: null });
+      setAvatarPreview(null);
+      setAvatarFile(null);
+      toast.success("Foto eliminada", { description: "Tu perfil ahora usa la imagen por defecto." });
+    } catch (err) {
+      toast.error("Error al eliminar foto", { description: (err as any).message });
+    } finally {
+      setIsUpdatingProfile(false);
+    }
   };
 
   const handleManageBilling = async () => {
