@@ -3,6 +3,7 @@ import { motion, type Variants } from "motion/react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { usePlatformSettings, formatPrice } from "@/hooks/usePlatformSettings";
+import EditableField from "@/components/feature/EditableField";
 
 interface PlanCard {
   id: "free" | "individual" | "vip";
@@ -100,10 +101,10 @@ export const PlansAct = () => {
         className="text-center mb-12 sm:mb-16 md:mb-24"
       >
         <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-white mb-4 tracking-tight">
-          Elige tu Plan de Crecimiento
+          <EditableField textKey="plans_title" defaultValue="Elige tu Plan de Crecimiento" as="span" />
         </h2>
         <p className="text-textMuted max-w-xl mx-auto text-base sm:text-lg md:text-xl text-balance">
-          Impulsa tu desarrollo al nivel que necesitas. Comienza gratis o accede a la experiencia completa.
+          <EditableField textKey="plans_subtitle" defaultValue="Impulsa tu desarrollo al nivel que necesitas. Comienza gratis o accede a la experiencia completa." as="span" />
         </p>
       </motion.div>
 

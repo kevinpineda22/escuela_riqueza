@@ -10,7 +10,8 @@ import {
   Menu,
   Crown,
   Radio,
-  Megaphone
+  Megaphone,
+  Pencil
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -80,6 +81,18 @@ const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
       </nav>
 
       <div className="p-4 mt-auto border-t border-white/5 space-y-4">
+        <button
+          onClick={() => {
+            if (onNavigate) onNavigate();
+            navigate("/");
+          }}
+          className="group relative flex items-center w-full px-4 py-3.5 text-textMuted hover:text-gold font-semibold rounded-2xl transition-all overflow-hidden border border-transparent hover:border-gold/20 hover:bg-gold/5 hover:shadow-[0_0_15px_rgba(204,164,59,0.1)]"
+        >
+          <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-gold/10 to-transparent -translate-x-full group-hover:animate-[shimmer_2s_infinite]" />
+          <Pencil size={18} className="relative z-10 mr-3 transition-transform group-hover:scale-110" />
+          <span className="relative z-10">Editar Landing</span>
+        </button>
+
         <button
           onClick={() => {
             if (onNavigate) onNavigate();

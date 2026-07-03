@@ -57,7 +57,6 @@ const AdminLiveManager = () => {
   useEffect(() => {
     if (!activeLive?.stream_live_input_id || activeLive.status === "ended") return;
     let failCount = 0;
-    let poll: ReturnType<typeof setInterval>;
     const check = async () => {
       const { connected, isError, disabled } = await checkLiveInputStatus(activeLive.stream_live_input_id!);
       if (disabled) { clearInterval(poll); return; }
@@ -81,8 +80,8 @@ const AdminLiveManager = () => {
         }
       }
     };
+    const poll = setInterval(check, 10000);
     check();
-    poll = setInterval(check, 10000);
     return () => clearInterval(poll);
   }, [activeLive?.id, activeLive?.stream_live_input_id, activeLive?.status]);
 
@@ -626,7 +625,7 @@ const AdminLiveManager = () => {
                     ? "La transmisión está activa. Los usuarios VIP pueden ver el evento en vivo."
                     : formData.is_paused
                     ? "La transmisión está detenida temporalmente. Los usuarios verán un mensaje de pausa."
-                    : "Activa la sala para que los usuarios VIP vean la transmisión. Si transmites desde OBS se activará automáticamente."}
+                    : "Activa la sala para que los usuarios vean la transmisión."}
                 </p>
               {formData.starts_at && !isLive && (
                 <p className="text-xs text-gold mt-2 flex items-center gap-1">

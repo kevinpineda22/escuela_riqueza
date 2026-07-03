@@ -162,7 +162,7 @@ const StudentDashboard = () => {
         const progress = await fetchAllUserProgress();
         setUserProgress(progress);
         
-      } catch (err) {
+      } catch {
         toast.error("Error", { description: "No se pudo cargar el contenido" });
       } finally {
         setIsLoadingContent(false);
@@ -272,7 +272,7 @@ const StudentDashboard = () => {
       const { error } = await supabase.from("lesson_notes").upsert({ user_id: user.id, lesson_id: activeLesson.id, content: personalNote, updated_at: new Date().toISOString() }, { onConflict: 'user_id,lesson_id' });
       if (error) throw error;
       toast.success("Nota guardada", { description: "Tus apuntes se han sincronizado correctamente." });
-    } catch (err) {
+    } catch {
       localStorage.setItem(`note_${user.id}_${activeLesson.id}`, personalNote);
       toast.success("Nota guardada localmente", { description: "Tus apuntes se guardaron en este dispositivo." });
     } finally {

@@ -2,12 +2,15 @@ import type { ReactNode } from "react";
 import { useRef } from "react";
 import { motion, useScroll, useTransform } from "motion/react";
 import { Brain, Dumbbell, Sparkles } from "lucide-react";
+import EditableField from "@/components/feature/EditableField";
 
 interface Milestone {
   id: number;
   number: string;
-  title: string;
-  description: string;
+  titleKey: string;
+  descriptionKey: string;
+  defaultTitle: string;
+  defaultDescription: string;
   icon: ReactNode;
 }
 
@@ -15,24 +18,30 @@ const milestones: Milestone[] = [
   {
     id: 1,
     number: "01",
-    title: "Aprende",
-    description:
+    titleKey: "path_step_1_title",
+    descriptionKey: "path_step_1_desc",
+    defaultTitle: "Aprende",
+    defaultDescription:
       "Asimila los marcos mentales en clases pre-grabadas de alto valor. Cada lección entrega un concepto claro y aplicable desde el día uno.",
     icon: <Brain className="w-7 h-7" />,
   },
   {
     id: 2,
     number: "02",
-    title: "Practica",
-    description:
+    titleKey: "path_step_2_title",
+    descriptionKey: "path_step_2_desc",
+    defaultTitle: "Practica",
+    defaultDescription:
       "Aplica lo aprendido con ejercicios y desafíos semanales. La comunidad y los lives VIP te acompañan en la construcción de hábitos sólidos.",
     icon: <Dumbbell className="w-7 h-7" />,
   },
   {
     id: 3,
     number: "03",
-    title: "Transforma",
-    description:
+    titleKey: "path_step_3_title",
+    descriptionKey: "path_step_3_desc",
+    defaultTitle: "Transforma",
+    defaultDescription:
       "Resultados medibles en tu economía, decisiones y propósito. Esto no es teoría motivacional — es rediseño real, sostenido en el tiempo.",
     icon: <Sparkles className="w-7 h-7" />,
   },
@@ -60,10 +69,10 @@ const MilestoneRow = ({ milestone, index }: MilestoneRowProps) => {
         Paso {milestone.number}
       </span>
       <h3 className="text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight text-white mb-4 leading-tight">
-        {milestone.title}
+        <EditableField textKey={milestone.titleKey} defaultValue={milestone.defaultTitle} as="span" />
       </h3>
       <p className="text-textMuted leading-relaxed text-base md:text-lg max-w-xl text-pretty">
-        {milestone.description}
+        <EditableField textKey={milestone.descriptionKey} defaultValue={milestone.defaultDescription} as="span" multiline />
       </p>
     </motion.div>
   );
@@ -104,9 +113,9 @@ export const PathAct = () => {
           transition={{ duration: 0.7 }}
           className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tighter text-white leading-tight mb-4 text-balance"
         >
-          Tu camino en{" "}
+          <EditableField textKey="path_title" defaultValue="Tu camino en" as="span" />{" "}
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-gold via-amber-100 to-goldHover italic pr-5 box-decoration-clone">
-            tres pasos
+            <EditableField textKey="path_accent" defaultValue="tres pasos" as="span" className="inline" />
           </span>
           .
         </motion.h2>
@@ -117,7 +126,7 @@ export const PathAct = () => {
           transition={{ duration: 0.7, delay: 0.15 }}
           className="text-textMuted text-lg md:text-xl"
         >
-          Aprender, practicar, transformar. Sin atajos, sin promesas vacías.
+          <EditableField textKey="path_subtitle" defaultValue="Aprender, practicar, transformar. Sin atajos, sin promesas vacías." as="span" />
         </motion.p>
       </div>
 

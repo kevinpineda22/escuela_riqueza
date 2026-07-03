@@ -1,0 +1,26 @@
+-- Insertar nuevas keys de textos editables
+insert into public.landing_texts (key, value) values
+  ('hero_title', 'Una escuela de'),
+  ('hero_accent', 'rediseño cerebral'),
+  ('hero_subtitle', 'para que te conviertas en el'),
+  ('hero_accent_2', 'gigante mental'),
+  ('hero_subtitle_end', 'que llevas dentro.'),
+  ('awakening_question', '¿Cuántas oportunidades dejaste pasar?'),
+  ('awakening_answer', 'Es momento de'),
+  ('awakening_accent', 'cambiar.'),
+  ('stat_1_value', '15.000+'),
+  ('stat_1_label', 'Alumnos transformados'),
+  ('stat_2_value', '120 h'),
+  ('stat_2_label', 'Horas de contenido'),
+  ('stat_3_value', '6'),
+  ('stat_3_label', 'Inteligencias críticas'),
+  ('path_title', 'Tu camino en'),
+  ('path_accent', 'tres pasos'),
+  ('path_subtitle', 'Aprender, practicar, transformar. Sin atajos, sin promesas vacías.'),
+  ('path_step_1_title', 'Aprende'),
+  ('path_step_1_desc', 'Asimila los marcos mentales en clases pre-grabadas de alto valor. Cada lección entrega un concepto claro y aplicable desde el día uno.'),
+  ('path_step_2_title', 'Practica'),
+  ('path_step_2_desc', 'Aplica lo aprendido con ejercicios y desafíos semanales. La comunidad y los lives VIP te acompañan en la construcción de hábitos sólidos.'),
+  ('path_step_3_title', 'Transforma'),
+  ('path_step_3_desc', 'Resultados medibles en tu economía, decisiones y propósito. Esto no es teoría motivacional — es rediseño real, sostenido en el tiempo.')
+on conflict (key) do nothing;

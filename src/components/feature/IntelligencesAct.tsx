@@ -7,6 +7,7 @@ import { useIsDesktop, usePrefersReducedMotion } from "@/hooks/useMediaQuery";
 import { usePreferencesStore } from "@/stores/preferences.store";
 import { useAuthStore } from "@/stores/auth.store";
 import { PLANS } from "@/types/user";
+import EditableField from "@/components/feature/EditableField";
 
 interface Intelligence {
   id: number;
@@ -135,9 +136,9 @@ const IntroHeading = () => (
       transition={{ duration: 0.7 }}
       className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tighter text-white leading-tight max-w-3xl text-balance"
     >
-      Seis inteligencias.{" "}
+      <EditableField textKey="intelligences_title_prefix" defaultValue="Seis inteligencias." as="span" />{" "}
       <span className="text-transparent bg-clip-text bg-gradient-to-r from-gold via-amber-100 to-goldHover italic pr-5 box-decoration-clone">
-        Una transformación.
+        <EditableField textKey="intelligences_title_accent" defaultValue="Una transformación." as="span" className="inline" />
       </span>
     </motion.h2>
     <motion.p
@@ -147,7 +148,7 @@ const IntroHeading = () => (
       transition={{ duration: 0.7, delay: 0.15 }}
       className="text-textMuted text-lg mt-4 max-w-xl"
     >
-      Cada módulo es una pieza del rediseño. Recórrelas a tu ritmo.
+      <EditableField textKey="intelligences_description" defaultValue="Cada módulo es una pieza del rediseño. Recórrelas a tu ritmo." as="span" />
     </motion.p>
   </div>
 );
