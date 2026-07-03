@@ -221,7 +221,6 @@ const VIPLiveRoom = () => {
     if (!live?.stream_live_input_id || isEnded) return;
     
     let failCount = 0;
-    let poll: ReturnType<typeof setInterval>;
     
     const check = async () => {
       const { connected, isError, disabled } = await checkLiveInputStatus(live.stream_live_input_id!);
@@ -238,8 +237,8 @@ const VIPLiveRoom = () => {
       setLiveInputConnected(prev => connected !== prev ? connected : prev);
     };
     
+    const poll = setInterval(check, 10000);
     check();
-    poll = setInterval(check, 10000);
     return () => clearInterval(poll);
   }, [live?.id, live?.stream_live_input_id, isEnded]);
 

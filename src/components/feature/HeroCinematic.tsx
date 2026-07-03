@@ -1,4 +1,5 @@
 import { motion } from "motion/react";
+import EditableField from "@/components/feature/EditableField";
 
 const IVAN_IMAGE =
   "https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/0f50233e-863f-4032-5ccf-e57fa0254f00/public";
@@ -45,9 +46,9 @@ export const HeroCinematic = () => {
             transition={{ duration: 0.9, ease: "easeOut" }}
             className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-extrabold tracking-tight md:tracking-tighter mb-6 sm:mb-8 pb-2 text-white leading-[1.2] sm:leading-[1.25] drop-shadow-2xl text-balance"
           >
-            Una escuela de{" "}
+            <EditableField textKey="hero_title" defaultValue="Una escuela de" as="span" />{" "}
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-gold via-amber-100 to-goldHover italic pr-3 sm:pr-5 box-decoration-clone">
-              rediseño cerebral
+              <EditableField textKey="hero_accent" defaultValue="rediseño cerebral" as="span" className="inline" />
             </span>
           </motion.h1>
 
@@ -57,11 +58,11 @@ export const HeroCinematic = () => {
             transition={{ duration: 0.8, delay: 0.3, ease: "easeOut" }}
             className="text-base sm:text-xl md:text-2xl lg:text-3xl font-bold tracking-tight text-white/85 leading-[1.35] max-w-2xl text-pretty pb-2"
           >
-            para que te conviertas en el{" "}
+            <EditableField textKey="hero_subtitle" defaultValue="para que te conviertas en el" as="span" />{" "}
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-gold via-amber-100 to-goldHover italic pr-3 sm:pr-5 box-decoration-clone">
-              gigante mental
+              <EditableField textKey="hero_accent_2" defaultValue="gigante mental" as="span" className="inline" />
             </span>{" "}
-            que llevas dentro.
+            <EditableField textKey="hero_subtitle_end" defaultValue="que llevas dentro." as="span" />
           </motion.p>
         </div>
 

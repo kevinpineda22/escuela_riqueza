@@ -61,7 +61,7 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
   const [showResumeModal, setShowResumeModal] = useState(false);
   const [savedProgressSeconds, setSavedProgressSeconds] = useState(0);
   const lastSavedTimeRef = useRef(0);
-  const lastSaveCallTimeRef = useRef(Date.now());
+  const lastSaveCallTimeRef = useRef(0);
 
   // Ref sincronizada con props para evitar stale closures en handlers del Stream
   const lessonRef = useRef(lesson);

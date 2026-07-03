@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { Session } from "@supabase/supabase-js";
 import { useShallow } from "zustand/react/shallow";
 import { supabase } from "@/lib/supabase";
 import { getCurrentUser } from "@/lib/api/auth";
@@ -19,42 +20,64 @@ const AuthBootstrap = ({ children }: AuthBootstrapProps) => {
     })),
   );
   const [ready, setReady] = useState(false);
+  // Refs para no depender de valores capturados (obsoletos) dentro del
+  // setTimeout / listeners del efecto.
+  const settledRef = useRef(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     let isMounted = true;
-    let timeoutId: ReturnType<typeof setTimeout>;
 
-    const initializeAuth = async (session: any) => {
+    // Desbloquea el render una sola vez y cancela el failsafe.
+    const settle = () => {
+      settledRef.current = true;
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (isMounted) setReady(true);
+    };
+
+    // Arranque inicial: resuelve sesión + perfil. Es el ÚNICO punto donde se
+    // permite limpiar la sesión, y sólo si Supabase confirma que no hay sesión.
+    const initializeAuth = async (session: Session | null) => {
       try {
         if (!session) {
           clearSession();
         } else {
           const user = await getCurrentUser();
-          if (isMounted) {
-            if (user) {
-              setSession(user, session.access_token);
-            } else {
-              clearSession();
-            }
+          if (!isMounted) return;
+          if (user) {
+            setSession(user, session.access_token);
+          } else {
+            clearSession();
           }
         }
       } catch (error) {
         console.error("[AuthBootstrap] Error initializing auth:", error);
-        if (isMounted) clearSession();
+        // Un fallo transitorio de red NO debe desloguear si ya hay sesión persistida.
+        if (isMounted && !useAuthStore.getState().user) clearSession();
       } finally {
-        if (isMounted) {
-          clearTimeout(timeoutId);
-          setReady(true);
-        }
+        settle();
       }
     };
 
-    // Failsafe timeout
-    timeoutId = setTimeout(() => {
-      if (isMounted && !ready) {
-        console.warn("[AuthBootstrap] Failsafe timeout reached. Forcing ready state.");
-        clearSession();
-        setReady(true);
+    // Refresh de token en background (cada ~1h o al volver el foco). NUNCA
+    // desloguea por un error transitorio: sólo actualiza el token en el store.
+    const refreshToken = (session: Session | null) => {
+      const currentUser = useAuthStore.getState().user;
+      if (session && currentUser) {
+        setSession(currentUser, session.access_token);
+      } else if (session) {
+        // Había sesión pero no user en el store → hidratar el perfil.
+        initializeAuth(session);
+      }
+    };
+
+    // Failsafe: si Supabase no respondió en 8s, desbloqueamos el render igual.
+    // CRÍTICO: ya NO limpia la sesión — sólo deja de mostrar el splash. La
+    // sesión persistida se mantiene y se rehidrata cuando Supabase responda.
+    timeoutRef.current = setTimeout(() => {
+      if (isMounted && !settledRef.current) {
+        console.warn("[AuthBootstrap] Failsafe timeout. Desbloqueando render sin tocar la sesión.");
+        settle();
       }
     }, BOOTSTRAP_TIMEOUT_MS);
 
@@ -62,12 +85,14 @@ const AuthBootstrap = ({ children }: AuthBootstrapProps) => {
     // Usar getSession() manualmente a veces cuelga o crea race conditions en React 19.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!isMounted) return;
-      
-      if (event === "INITIAL_SESSION" || event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+
+      if (event === "INITIAL_SESSION" || event === "SIGNED_IN") {
         initializeAuth(session);
+      } else if (event === "TOKEN_REFRESHED") {
+        refreshToken(session);
       } else if (event === "SIGNED_OUT") {
         clearSession();
-        if (!ready) setReady(true);
+        settle();
       }
     });
 
@@ -96,7 +121,7 @@ const AuthBootstrap = ({ children }: AuthBootstrapProps) => {
 
     return () => {
       isMounted = false;
-      clearTimeout(timeoutId);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
       subscription.unsubscribe();
       window.removeEventListener("unhandledrejection", handleUnhandledAuthError);
     };

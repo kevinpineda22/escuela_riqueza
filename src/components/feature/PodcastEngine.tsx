@@ -125,7 +125,7 @@ const PodcastEngine = () => {
   } = usePlayerStore();
 
   const lastSavedTimeRef = useRef(0);
-  const lastSaveCallTimeRef = useRef(Date.now());
+  const lastSaveCallTimeRef = useRef(0);
   const endedRef = useRef(false);
 
   // Mantener refs sincronizadas
