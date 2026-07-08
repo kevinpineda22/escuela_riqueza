@@ -155,28 +155,37 @@ const AdminLiveManager = () => {
       
       if (!res.ok) {
         // Fallback local: Si la API de Vercel no está corriendo localmente (da 502),
-        // simplemente abrimos la pestaña.
+        // abrimos la pestaña directa — solo si tenemos el subdominio configurado.
         toast.dismiss(`dl-${videoUid}`);
-        window.open(`https://${CF_SUBDOMAIN}/${videoUid}/downloads/default.mp4`, "_blank");
+        openDownloadFallback(videoUid);
         return;
       }
 
       const data = await res.json();
-      
+
       if (data.status === "ready" && data.url) {
         toast.dismiss(`dl-${videoUid}`);
         window.open(data.url, "_blank");
-      } else if (data.status === "inprogress") {
-        toast.loading(`Cloudflare está procesando tu video... ${Math.round(data.percentComplete)}%`, { id: `dl-${videoUid}`, duration: 5000 });
+      } else if (data.status === "error") {
+        toast.error("Cloudflare no pudo generar el MP4", { description: "Volvé a intentar en unos minutos.", id: `dl-${videoUid}`, duration: 5000 });
       } else {
-        toast.info("La grabación se está preparando", { description: "Puede tardar unos minutos después de terminar el directo. Vuelve a intentar pronto.", id: `dl-${videoUid}`, duration: 5000 });
+        // 'inprogress' (o recién habilitada): Cloudflare está generando el MP4.
+        toast.loading(`Cloudflare está generando el MP4... ${Math.round(data.percentComplete)}%`, { id: `dl-${videoUid}`, duration: 6000 });
       }
     } catch (error) {
       console.error("Error comprobando descarga", error);
       toast.dismiss(`dl-${videoUid}`);
       // Fallback en caso de error de red
-      window.open(`https://${CF_SUBDOMAIN}/${videoUid}/downloads/default.mp4`, "_blank");
+      openDownloadFallback(videoUid);
     }
+  };
+
+  const openDownloadFallback = (videoUid: string) => {
+    if (!CF_SUBDOMAIN) {
+      toast.error("No se pudo abrir la descarga", { description: "Falta configurar VITE_CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN." });
+      return;
+    }
+    window.open(`https://${CF_SUBDOMAIN}/${videoUid}/downloads/default.mp4`, "_blank");
   };
 
   const handleSave = async () => {

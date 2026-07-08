@@ -38,26 +38,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: 'Faltan credenciales de Cloudflare' });
   }
 
-  try {
-    const response = await fetch(
-      `https://api.cloudflare.com/client/v4/accounts/${accountId}/stream/${encodeURIComponent(video_uid)}/downloads`,
-      {
-        headers: {
-          'Authorization': `Bearer ${apiToken}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
+  const downloadsUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/stream/${encodeURIComponent(video_uid)}/downloads`;
+  const authHeaders = {
+    'Authorization': `Bearer ${apiToken}`,
+    'Content-Type': 'application/json',
+  };
 
+  try {
+    // 1. Consultar el estado actual del MP4
+    const response = await fetch(downloadsUrl, { headers: authHeaders });
     if (!response.ok) {
       return res.status(500).json({ error: 'Error al consultar Cloudflare' });
     }
 
     const data = await response.json();
-    const defaultDl = data.result?.default;
+    let defaultDl = data.result?.default;
+
+    // 2. Si nunca se pidió la descarga, la habilitamos ahora (POST). Sin esto,
+    //    Cloudflare nunca genera el MP4 y el cliente se queda "preparando" para siempre.
+    if (!defaultDl) {
+      const enableRes = await fetch(downloadsUrl, { method: 'POST', headers: authHeaders });
+      if (enableRes.ok) {
+        const enableData = await enableRes.json();
+        defaultDl = enableData.result?.default;
+      }
+    }
 
     return res.status(200).json({
-      status: defaultDl?.status || 'unrequested', // 'inprogress', 'ready', 'error'
+      status: defaultDl?.status || 'inprogress', // 'inprogress', 'ready', 'error'
       percentComplete: defaultDl?.percentComplete || 0,
       url: defaultDl?.url || null
     });
