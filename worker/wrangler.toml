@@ -1,0 +1,19 @@
+# Worker de archivado de grabaciones: copia el MP4 de Cloudflare Stream a R2
+# y borra el video de Stream para cortar el cobro recurrente.
+# Ver docs/RECORDINGS_ARCHITECTURE.md.
+
+name = "escuela-archive-recording"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+
+# Binding al bucket R2 creado en el dashboard.
+[[r2_buckets]]
+binding = "RECORDINGS"
+bucket_name = "escuela-recordings"
+
+# Secrets (NO van acá — se cargan con `wrangler secret put <NOMBRE>`):
+#   CF_ACCOUNT_ID              -> tu Account ID de Cloudflare
+#   CF_STREAM_API_TOKEN        -> token con permiso Stream:Edit (leer/borrar videos)
+#   SUPABASE_URL               -> https://<ref>.supabase.co
+#   SUPABASE_SERVICE_ROLE_KEY  -> service role (bypass RLS, solo server)
+#   ARCHIVE_SHARED_SECRET      -> secreto compartido con la Vercel Function que lo dispara

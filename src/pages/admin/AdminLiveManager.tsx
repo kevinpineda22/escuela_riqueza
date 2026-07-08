@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
-import { Radio, Image as ImageIcon, Settings2, Save, Plus, Trash2, PlayCircle, StopCircle, Calendar, Clock, Monitor, Copy, Upload, Download, Video, Info } from "lucide-react";
+import { Radio, Image as ImageIcon, Settings2, Save, Plus, Trash2, PlayCircle, StopCircle, Calendar, Clock, Monitor, Copy, Upload, Download, Video, Info, Archive } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { fetchLives, fetchEndedLives, fetchRecording, createLive, updateLive, deleteLive, setActiveLive as apiSetActiveLive, deactivateAllLives, checkLiveInputStatus, type LiveEvent } from "@/lib/api/stream/lives";
+import { fetchLives, fetchEndedLives, fetchRecording, createLive, updateLive, deleteLive, setActiveLive as apiSetActiveLive, deactivateAllLives, checkLiveInputStatus, archiveRecording, fetchRecordingUrl, type LiveEvent } from "@/lib/api/stream/lives";
 import { supabase } from "@/lib/supabase";
 import { authedFetch } from "@/lib/api/client";
 import { toast } from "@/components/ui/toaster";
+import RecordingPlayer from "@/components/feature/RecordingPlayer";
 
 const CF_SUBDOMAIN = import.meta.env.VITE_CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN || "";
 const PRESET_INPUT_IDS = [
@@ -36,6 +37,7 @@ const AdminLiveManager = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [customInputId, setCustomInputId] = useState(false);
   const [obsConnected, setObsConnected] = useState(false);
+  const [archivingId, setArchivingId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<Partial<LiveEvent>>({
     title: "",
@@ -186,6 +188,44 @@ const AdminLiveManager = () => {
       return;
     }
     window.open(`https://${CF_SUBDOMAIN}/${videoUid}/downloads/default.mp4`, "_blank");
+  };
+
+  // Descarga de una grabación ya archivada en R2 (URL firmada de vida corta).
+  const handleDownloadR2 = async (liveId: string) => {
+    toast.loading("Generando enlace de descarga...", { id: `dl-r2-${liveId}` });
+    const url = await fetchRecordingUrl(liveId);
+    toast.dismiss(`dl-r2-${liveId}`);
+    if (url) window.open(url, "_blank");
+    else toast.error("No se pudo generar el enlace de descarga");
+  };
+
+  // Archiva la grabación en R2 (copia desde Stream + borra de Stream) para ahorrar costos.
+  const handleArchive = async (live: LiveEvent) => {
+    if (!live.recording_stream_uid) {
+      toast.error("Primero vinculá la grabación (Obtener grabación) antes de archivar");
+      return;
+    }
+    setArchivingId(live.id);
+    toast.loading("Archivando en R2...", { id: `arch-${live.id}` });
+    const result = await archiveRecording(live.id, live.recording_stream_uid);
+    setArchivingId(null);
+
+    if (result.status === "archived") {
+      toast.success("Grabación archivada en R2 y borrada de Stream", {
+        id: `arch-${live.id}`,
+        description: "Ya no genera costo recurrente en Cloudflare Stream.",
+      });
+      const ended = await fetchEndedLives();
+      setEndedLives(ended);
+    } else if (result.status === "processing") {
+      toast.info(`Cloudflare todavía está generando el MP4... ${Math.round(result.percent)}%`, {
+        id: `arch-${live.id}`,
+        description: "Reintentá en unos minutos.",
+        duration: 6000,
+      });
+    } else {
+      toast.error(result.message, { id: `arch-${live.id}` });
+    }
   };
 
   const handleSave = async () => {
@@ -846,12 +886,24 @@ const AdminLiveManager = () => {
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2 shrink-0">
-                    {live.recording_stream_uid && (
-                      <button type="button" onClick={() => handleDownloadRecording(live.recording_stream_uid!)}
+                    {live.recording_storage === "r2" && live.recording_r2_key ? (
+                      <button type="button" onClick={() => handleDownloadR2(live.id)}
                         className="flex-1 sm:flex-none bg-gold/10 hover:bg-gold/20 border border-gold/20 text-gold px-3 sm:px-4 py-2 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-bold transition-colors whitespace-nowrap">
                         <Download size={16} /> <span className="hidden sm:inline">Descargar grabación</span><span className="sm:hidden">Descargar</span>
                       </button>
-                    )}
+                    ) : live.recording_stream_uid ? (
+                      <>
+                        <button type="button" onClick={() => handleDownloadRecording(live.recording_stream_uid!)}
+                          className="flex-1 sm:flex-none bg-gold/10 hover:bg-gold/20 border border-gold/20 text-gold px-3 sm:px-4 py-2 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-bold transition-colors whitespace-nowrap">
+                          <Download size={16} /> <span className="hidden sm:inline">Descargar grabación</span><span className="sm:hidden">Descargar</span>
+                        </button>
+                        <button type="button" onClick={() => handleArchive(live)} disabled={archivingId === live.id}
+                          title="Copia la grabación a R2 y la borra de Stream para dejar de pagar storage"
+                          className="flex-1 sm:flex-none bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 text-emerald-400 px-3 sm:px-4 py-2 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-bold transition-colors whitespace-nowrap disabled:opacity-50">
+                          <Archive size={16} /> <span className="hidden sm:inline">{archivingId === live.id ? "Archivando..." : "Archivar en R2"}</span><span className="sm:hidden">Archivar</span>
+                        </button>
+                      </>
+                    ) : null}
                     <button onClick={async e => {
                       e.stopPropagation();
                       try {
@@ -874,18 +926,25 @@ const AdminLiveManager = () => {
                     </button>
                   </div>
                 </div>
-                {live.recording_stream_uid && (
-                  <div className="aspect-video bg-black rounded-xl overflow-hidden border border-white/10">
-                    <iframe
-                      src={`https://${CF_SUBDOMAIN}/${live.recording_stream_uid}/iframe`}
-                      allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
-                      allowFullScreen
-                      className="w-full h-full border-none"
-                      title={`Grabación: ${live.title}`}
-                    />
+                {(live.recording_storage === "r2" && live.recording_r2_key) || live.recording_stream_uid ? (
+                  <div className="space-y-2">
+                    <RecordingPlayer live={live} />
+                    <div className="flex items-center gap-2 text-[10px] text-textMuted/60">
+                      {live.recording_storage === "r2" ? (
+                        <span className="inline-flex items-center gap-1 text-emerald-400/80">
+                          <Archive size={11} /> Archivada en R2 (sin costo recurrente)
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-amber-400/70">
+                          <Video size={11} /> En Cloudflare Stream — archivá en R2 para dejar de pagar storage
+                        </span>
+                      )}
+                      {live.recording_duration_seconds != null && (
+                        <span>· {Math.round(live.recording_duration_seconds / 60)} min</span>
+                      )}
+                    </div>
                   </div>
-                )}
-                {!live.recording_stream_uid && (
+                ) : (
                   <div className="aspect-video bg-black/40 rounded-xl flex items-center justify-center border border-dashed border-white/10">
                     <div className="text-center">
                       <Video size={32} className="mx-auto text-white/20 mb-2" />

@@ -12,6 +12,11 @@ export interface LiveEvent {
   duration_minutes: number | null;
   stream_live_input_id: string | null;
   recording_stream_uid: string | null;
+  recording_r2_key: string | null;
+  recording_storage: "stream" | "r2" | null;
+  recording_bytes: number | null;
+  recording_duration_seconds: number | null;
+  archived_at: string | null;
   required_plan: PlanType;
   status: LiveStatus;
   is_active: boolean;
@@ -184,4 +189,46 @@ export async function fetchRecording(liveInputId: string): Promise<{ recording_u
 export async function deleteLive(id: string): Promise<void> {
   const { error } = await supabase.from("lives").delete().eq("id", id);
   if (error) throw error;
+}
+
+export type ArchiveResult =
+  | { status: "archived"; key: string; bytes: number | null; durationSeconds: number | null }
+  | { status: "processing"; percent: number }
+  | { status: "error"; message: string };
+
+/**
+ * Dispara el archivado de la grabación a R2 (copia desde Stream + borrado de Stream).
+ * Devuelve 'processing' si el MP4 todavía se está generando en Cloudflare.
+ */
+export async function archiveRecording(liveId: string, streamVideoUid: string): Promise<ArchiveResult> {
+  try {
+    const res = await authedFetch("/api/stream/archive-recording", {
+      method: "POST",
+      body: JSON.stringify({ live_id: liveId, stream_video_uid: streamVideoUid }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { status: "error", message: data?.error || "Error al archivar la grabación" };
+    }
+    return data as ArchiveResult;
+  } catch (err) {
+    console.error("Error archiving recording:", err);
+    return { status: "error", message: "Error de conexión con el servidor" };
+  }
+}
+
+/** Pide una URL firmada de vida corta para reproducir/descargar una grabación en R2. */
+export async function fetchRecordingUrl(liveId: string): Promise<string | null> {
+  try {
+    const res = await authedFetch("/api/stream/recording-url", {
+      method: "POST",
+      body: JSON.stringify({ live_id: liveId }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.url || null;
+  } catch (err) {
+    console.error("Error fetching recording URL:", err);
+    return null;
+  }
 }

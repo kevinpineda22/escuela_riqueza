@@ -18,7 +18,7 @@ _Última actualización: 2026-07-08_
 
 **Archivos:** `api/stream/download-status.ts`, `src/pages/admin/AdminLiveManager.tsx`
 
----
+---ace
 
 ## 2. Finalizar en vivo — que guarde correctamente 🔴
 
@@ -49,7 +49,32 @@ _Última actualización: 2026-07-08_
 - Guardar la duración de cada video (lección + grabación) al vincularlo.
 - Panel/KPI en admin que sume minutos totales y muestre costo estimado.
 
+> Parcialmente cubierto por el punto 6 (archivado R2): las columnas `recording_bytes` y `recording_duration_seconds` habilitan el tracking de minutos/costo de las grabaciones.
+
 **Archivos:** `src/lib/api/stream/content.ts`, `src/lib/api/admin/metrics.ts`, `api/stream/recording.ts`, migración SQL (columna `duration_seconds` en `lessons`).
+
+---
+
+## 6. Archivado de grabaciones en R2 (ahorro de costos) 🟡
+
+**Objetivo:** mover las grabaciones de Cloudflare Stream (caro, acumulativo) a Cloudflare R2 (egress cero, storage barato) al finalizar el vivo, y borrar de Stream. Ver spec completa en **`docs/RECORDINGS_ARCHITECTURE.md`**.
+
+**Hecho (2026-07-08):**
+- 📄 `docs/RECORDINGS_ARCHITECTURE.md` — spec completa (problema, solución, flujo, costos, componentes).
+- 🗄️ `docs/migrate-recordings-r2.sql` — columnas nuevas en `lives` (`recording_r2_key`, `recording_storage`, `recording_bytes`, `recording_duration_seconds`, `archived_at`) + backfill. **✅ Corrida en Supabase 2026-07-08 (5 columnas confirmadas).**
+- 🧩 Tipo `LiveEvent` actualizado con los campos nuevos. `npm run typecheck` ✅.
+- 🔐 `api/stream/recording-url.ts` — URL firmada de R2 (15 min), gateada por plan. Usa `aws4fetch` (instalado).
+- 🌐 Bucket `escuela-recordings` creado + 4 env R2 en Vercel (cliente, 2026-07-08).
+- ⚙️ `worker/` — Worker completo (copia Stream→R2 + borra de Stream + actualiza `lives`). Escrito, **falta deploy con wrangler**.
+- 🔗 `api/stream/archive-recording.ts` — dispara el Worker (admin).
+- 🖥️ Admin Finalizados: botón "Archivar en R2" + `RecordingPlayer` (video R2 firmado / iframe Stream legacy). `npm run typecheck` ✅ (frontend).
+
+**Falta (acción cliente + un paso mío):**
+- Deploy del Worker (`wrangler`) + env `ARCHIVE_WORKER_URL`/`ARCHIVE_SHARED_SECRET` en Vercel → ver sección 6b de `RECORDINGS_ARCHITECTURE.md`.
+- Player de replay del lado del alumno (VIPLiveRoom) preferir R2 — pendiente de revisar si muestra replays.
+- KPI de minutos/costo en admin (opcional, ya hay datos).
+
+**Archivos:** `docs/RECORDINGS_ARCHITECTURE.md`, `docs/migrate-recordings-r2.sql`, `src/lib/api/stream/lives.ts`
 
 ---
 
