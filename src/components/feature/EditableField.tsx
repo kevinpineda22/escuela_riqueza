@@ -128,7 +128,7 @@ const EditableField = ({
   return (
     <Tag
       className={cn(className, editableClasses, "whitespace-pre-wrap")}
-      onClick={(e) => {
+      onClick={(e: React.MouseEvent) => {
         if (showEditableUI) {
           e.preventDefault(); // no navegar si está dentro de un <Link>
           setIsEditing(true);
