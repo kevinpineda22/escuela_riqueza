@@ -17,6 +17,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
+import { useAdminStore } from "@/stores/admin.store";
 
 const sidebarVariants: Variants = {
   hidden: { x: -20, opacity: 0 },
@@ -35,6 +36,15 @@ const navItems = [
 const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  const setEditMode = useAdminStore((s) => s.setEditMode);
+
+  // Entra a la landing YA en modo edición: prende el flag en el store (global)
+  // antes de navegar, así el home monta con los lápices y el banner visibles.
+  const handleEditLanding = () => {
+    if (onNavigate) onNavigate();
+    setEditMode(true);
+    navigate("/");
+  };
 
   const handleLogout = async () => {
     if (onNavigate) onNavigate();
@@ -82,10 +92,7 @@ const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
 
       <div className="p-4 mt-auto border-t border-white/5 space-y-4">
         <button
-          onClick={() => {
-            if (onNavigate) onNavigate();
-            navigate("/");
-          }}
+          onClick={handleEditLanding}
           className="group relative flex items-center w-full px-4 py-3.5 text-textMuted hover:text-gold font-semibold rounded-2xl transition-all overflow-hidden border border-transparent hover:border-gold/20 hover:bg-gold/5 hover:shadow-[0_0_15px_rgba(204,164,59,0.1)]"
         >
           <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-gold/10 to-transparent -translate-x-full group-hover:animate-[shimmer_2s_infinite]" />

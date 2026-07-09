@@ -1,9 +1,104 @@
-import { Check } from "lucide-react";
+import { useEffect } from "react";
+import { Check, Plus, Trash2 } from "lucide-react";
 import { motion, type Variants } from "motion/react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { usePlatformSettings, formatPrice } from "@/hooks/usePlatformSettings";
 import EditableField from "@/components/feature/EditableField";
+import { useAdminStore, useIsCurrentUserAdmin } from "@/stores/admin.store";
+
+/* ============================================================ */
+/* Lista de features editable (agregar / quitar / editar)        */
+/* ============================================================ */
+
+// La lista se guarda como JSON en UNA key del store (mismo buffer de guardado).
+const parseFeatures = (raw: string, fallback: string[]): string[] => {
+  try {
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr) && arr.every((x) => typeof x === "string")) return arr;
+  } catch {
+    /* JSON inválido → usamos el default */
+  }
+  return fallback;
+};
+
+interface PlanFeaturesProps {
+  planId: string;
+  defaultFeatures: string[];
+  highlight: boolean;
+}
+
+const PlanFeatures = ({ planId, defaultFeatures, highlight }: PlanFeaturesProps) => {
+  const key = `plan_${planId}_features`;
+  const isAdmin = useIsCurrentUserAdmin();
+  const isEditMode = useAdminStore((s) => s.isEditMode);
+  const ensureLoaded = useAdminStore((s) => s.ensureLoaded);
+  const stageChange = useAdminStore((s) => s.stageChange);
+  const raw = useAdminStore((s) => s.pending[key] ?? s.values[key] ?? "");
+  const confirmedRaw = useAdminStore((s) => s.values[key] ?? "");
+
+  useEffect(() => {
+    ensureLoaded();
+  }, [ensureLoaded]);
+
+  const features = raw ? parseFeatures(raw, defaultFeatures) : defaultFeatures;
+  // Baseline para que revertir a lo confirmado limpie el pendiente.
+  const baseline = confirmedRaw || JSON.stringify(defaultFeatures);
+  const commit = (next: string[]) => stageChange(key, JSON.stringify(next), baseline);
+
+  const showEditor = isAdmin && isEditMode;
+
+  if (!showEditor) {
+    return (
+      <ul className="space-y-3 sm:space-y-4">
+        {features.map((feature, idx) => (
+          <li key={idx} className="flex items-start gap-3">
+            <Check className="text-gold w-5 h-5 shrink-0 mt-0.5" />
+            <span className={highlight ? "text-sm text-white/90" : "text-sm text-textMuted"}>
+              {feature}
+            </span>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {features.map((feature, idx) => (
+        <div key={idx} className="flex items-center gap-2">
+          <Check className="text-gold w-4 h-4 shrink-0" />
+          <input
+            value={feature}
+            onChange={(e) => {
+              const next = [...features];
+              next[idx] = e.target.value;
+              commit(next);
+            }}
+            placeholder="Describe el beneficio…"
+            className="flex-1 min-w-0 bg-darker border border-gold/30 focus:border-gold rounded-lg px-2.5 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-gold/40"
+          />
+          <button
+            type="button"
+            onClick={() => commit(features.filter((_, i) => i !== idx))}
+            title="Quitar este ítem"
+            aria-label="Quitar este ítem"
+            className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-white/40 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+          >
+            <Trash2 size={15} />
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => commit([...features, ""])}
+        className="mt-1 inline-flex items-center gap-1.5 text-xs font-bold text-gold hover:text-goldHover transition-colors"
+      >
+        <Plus size={14} /> Agregar ítem
+      </button>
+    </div>
+  );
+};
 
 interface PlanCard {
   id: "free" | "individual" | "vip";
@@ -131,8 +226,12 @@ export const PlansAct = () => {
               </div>
             )}
 
-            <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">{plan.name}</h3>
-            <p className="text-textMuted text-sm mb-5 sm:mb-6 sm:h-10 text-pretty">{plan.description}</p>
+            <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">
+              <EditableField textKey={`plan_${plan.id}_name`} defaultValue={plan.name} as="span" />
+            </h3>
+            <p className="text-textMuted text-sm mb-5 sm:mb-6 sm:h-10 text-pretty">
+              <EditableField textKey={`plan_${plan.id}_desc`} defaultValue={plan.description} as="span" multiline />
+            </p>
 
             <div className="mb-6 sm:mb-8 flex items-baseline gap-1 flex-wrap">
               <span className="font-bold text-4xl sm:text-5xl text-white">
@@ -154,16 +253,7 @@ export const PlansAct = () => {
               </Link>
             </Button>
 
-            <ul className="space-y-3 sm:space-y-4">
-              {plan.features.map((feature, idx) => (
-                <li key={idx} className="flex items-start gap-3">
-                  <Check className="text-gold w-5 h-5 shrink-0 mt-0.5" />
-                  <span className={plan.highlight ? "text-sm text-white/90" : "text-sm text-textMuted"}>
-                    {feature}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <PlanFeatures planId={plan.id} defaultFeatures={plan.features} highlight={plan.highlight} />
           </motion.div>
         ))}
       </motion.div>

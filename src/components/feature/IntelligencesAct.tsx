@@ -101,11 +101,20 @@ const IntelligenceCard = ({ intelligence, index, total, layout = "carousel" }: C
         </div>
 
         <h3 className={`${layout === "stack" ? "text-2xl sm:text-3xl" : "text-3xl md:text-4xl"} font-extrabold tracking-tight text-white leading-tight text-balance`}>
-          {intelligence.title}
+          <EditableField
+            textKey={`intelligence_${intelligence.id}_title`}
+            defaultValue={intelligence.title}
+            as="span"
+          />
         </h3>
 
         <p className={`text-textMuted leading-relaxed ${layout === "stack" ? "text-sm sm:text-base" : "text-base md:text-lg"} text-pretty`}>
-          {intelligence.description}
+          <EditableField
+            textKey={`intelligence_${intelligence.id}_desc`}
+            defaultValue={intelligence.description}
+            as="span"
+            multiline
+          />
         </p>
       </div>
 

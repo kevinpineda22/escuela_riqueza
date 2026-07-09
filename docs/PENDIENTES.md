@@ -78,22 +78,47 @@ _Última actualización: 2026-07-08_
 
 ---
 
-## 4. Mejorar el header de la escuela ⚪
+## 4. Zona inicial de la landing (header + hero) — nueva vida 🟡
 
-**Estado:** código sano (`src/components/layout/Header.tsx`). "Mejorar" es subjetivo — falta dirección concreta del cliente.
+**Dirección elegida por el cliente (2026-07-09):** vibe "Aurora dorada envolvente" para toda la zona inicial.
 
-**Pendiente de definir:** ¿qué se quiere mejorar? (jerarquía visual, navegación, logo, responsive, sticky, etc.)
+**Hecho:**
+- 🌌 `src/components/feature/AuroraBackground.tsx` — fondo ambiental reutilizable (luces doradas en movimiento, gateado a desktop, mobile con orbe estático).
+- 🦸 `HeroCinematic.tsx` — aurora de fondo + glow pulsante y anillo detrás de la foto de Iván + flotado sutil de la imagen. Header height sincronizado (`5rem` desktop).
+- 🎩 `Header.tsx` — más aire (`h-16 md:h-20`, padding `lg:px-8`) + scroll-aware (translúcido arriba → glass con borde y sombra al bajar).
+- `npm run typecheck` ✅.
 
-**Archivos:** `src/components/layout/Header.tsx`
+**Rework parallax (2026-07-09):** el cliente pidió que el header no parezca una barra separada, estilo web parallax, todo unido.
+- 🎩 `src/components/layout/LandingHeader.tsx` — header dedicado de la landing: flota transparente sobre el hero, se condensa en píldora glass al scrollear, logo con más presencia, botón "Iniciar sesión" premium (gradiente + brillo que barre + flecha).
+- 🌀 `HeroCinematic.tsx` — parallax con `useScroll`/`useTransform`: aurora lenta al fondo, foto sube, contenido baja y se desvanece. Hero a `100svh` con padding superior para el header flotante.
+- 🔁 `Header.tsx` compartido REVERTIDO a su estado original (dashboard/admin lo quieren sólido). Solo la landing usa `LandingHeader`.
+- `LandingPage.tsx` monta `LandingHeader` en vez de `Header`.
+- `npm run typecheck` ✅.
+
+**Falta:** aplicar la misma aurora al login (punto 5b) + validación visual del cliente.
+
+**Archivos:** `src/components/layout/LandingHeader.tsx`, `src/components/feature/AuroraBackground.tsx`, `src/components/feature/HeroCinematic.tsx`, `src/pages/public/LandingPage.tsx`
 
 ---
 
-## 5. Logo del inicio de sesión — que se vea correctamente ⚪
+## 5. Logo del inicio de sesión — que se vea correctamente 🟢
 
-**Estado:** falta detalle del defecto visual.
-- `AuthSplash.tsx` usa `LOGO_LIGHT` sobre fondo `#050505`.
-- `AuthPage.tsx` usa `logoLight` (fallback imagedelivery) en mobile y `logoDark` sobre el overlay dorado.
+**Problema (confirmado con screenshot):** el logo dorado se camuflaba sobre el panel dorado del login (oro-sobre-oro, sin contraste).
 
-**Pendiente de definir:** ¿qué se ve mal exactamente? (recortado, borroso, mal contraste, no carga, tamaño, versión equivocada).
+**Resuelto (2026-07-09):**
+- Medallón oscuro con glow detrás del logo en `WelcomePanel` (`AuthPage.tsx`) → el logo dorado resalta sobre fondo negro.
+- Cambio a `logoLight` (logo dorado) en vez del `logoDark` que se perdía; se eliminó la constante `LOGO_DARK_OVERLAY` y la variable `logoDark` (quedaban muertas).
+- Oro del panel profundizado a un degradé más rico (`#F0C959` → `gold` → `#7d5e18`).
+- `npm run typecheck` ✅.
 
-**Archivos:** `src/components/feature/AuthSplash.tsx`, `src/pages/public/AuthPage.tsx`
+**Archivos:** `src/pages/public/AuthPage.tsx`
+
+### 5b. Login "de otro nivel" (2026-07-09) 🟡
+
+- 🌌 Aurora dorada viva en `AuthBackground` **presente también en mobile** (antes los blobs eran `hidden md:block` → mobile casi negro). Coherente con la landing sin acoplar código.
+- ✨ **Signature: border-beam** — luz dorada giratoria en el borde de la tarjeta desktop (conic-gradient rotando, tapado por el `<article>` opaco → solo se ve el borde).
+- 💛 Tarjeta mobile con borde dorado + glow suave (el beam no sirve sobre bg translúcido).
+- `npm run typecheck` ✅.
+- **Pendiente (opcional, si el cliente quiere más):** shine en botón primario, focus glow en inputs.
+
+**Archivos:** `src/pages/public/AuthPage.tsx`

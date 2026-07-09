@@ -1,5 +1,7 @@
-import Header from "@/components/layout/Header";
+import LandingHeader from "@/components/layout/LandingHeader";
 import Footer from "@/components/layout/Footer";
+import ScrollToTop from "@/components/feature/ScrollToTop";
+import EditModeToggle from "@/components/feature/EditModeToggle";
 import { HeroCinematic } from "@/components/feature/HeroCinematic";
 import { AwakeningAct } from "@/components/feature/AwakeningAct";
 import { IntelligencesAct } from "@/components/feature/IntelligencesAct";
@@ -20,7 +22,7 @@ const LandingPage = () => {
         className="hidden md:block fixed top-0 right-0 -z-10 h-[600px] w-[600px] rounded-full bg-gold opacity-[0.12] blur-[150px] pointer-events-none"
       />
 
-      <Header />
+      <LandingHeader />
 
       <main>
         <HeroCinematic />
@@ -31,6 +33,8 @@ const LandingPage = () => {
       </main>
 
       <Footer />
+      <ScrollToTop />
+      <EditModeToggle />
     </div>
   );
 };
