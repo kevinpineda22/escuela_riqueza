@@ -4,6 +4,7 @@ import { ArrowLeft, Sparkles, User, Target } from "lucide-react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import EditableField from "@/components/feature/EditableField";
+import EditModeToggle from "@/components/feature/EditModeToggle";
 import { Stream } from "@cloudflare/stream-react";
 
 const HistoryPage = () => {
@@ -183,6 +184,7 @@ const HistoryPage = () => {
       </main>
 
       <Footer />
+      <EditModeToggle />
     </div>
   );
 };

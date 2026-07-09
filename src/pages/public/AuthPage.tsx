@@ -27,6 +27,7 @@ import {
   type ForgotPasswordInput,
 } from "@/schemas/auth.schema";
 import { useAuth } from "@/hooks/useAuth";
+import ParticleNetwork from "@/components/feature/ParticleNetwork";
 import { requestPasswordReset } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
 import { USER_ROLES } from "@/types/user";
@@ -35,8 +36,6 @@ import { usePlatformSettings, formatPrice } from "@/hooks/usePlatformSettings";
 
 const LOGO_LIGHT_FALLBACK =
   "https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/18dc9190-6625-4b89-8f1e-3f221e96b500/public";
-const LOGO_DARK_OVERLAY =
-  "https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/34057238-d679-4d4e-b56c-cb8da11c9300/public";
 
 type Mode = "signin" | "signup" | "forgot";
 
@@ -648,11 +647,21 @@ const WelcomePanel = ({
   platformName,
 }: WelcomePanelProps) => (
   <div className="h-full w-full px-8 py-10 flex flex-col items-center justify-center text-center gap-5 text-[#120e05]">
-    <img
-      src={logoSrc}
-      alt={platformName}
-      className="relative h-28 xl:h-32 w-auto object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
-    />
+    {/* Medallón oscuro: el logo dorado sobre fondo negro, con glow — resuelve el
+        contraste oro-sobre-oro y le da profundidad al panel. */}
+    <div className="relative">
+      <div
+        aria-hidden
+        className="absolute -inset-3 rounded-[2rem] bg-[#0a0a0a]/30 blur-2xl"
+      />
+      <div className="relative flex items-center justify-center rounded-[1.75rem] bg-gradient-to-b from-[#151515] to-[#0a0a0a] border border-white/10 px-9 py-7 shadow-[0_16px_40px_-12px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.06)]">
+        <img
+          src={logoSrc}
+          alt={platformName}
+          className="h-24 xl:h-28 w-auto object-contain drop-shadow-[0_0_22px_rgba(204,164,59,0.4)]"
+        />
+      </div>
+    </div>
     <h3 className="text-3xl xl:text-[34px] font-extrabold uppercase tracking-tight leading-[1.1] max-w-[280px]">
       {title}
     </h3>
@@ -674,88 +683,36 @@ const WelcomePanel = ({
 );
 
 /* ============================================================ */
-/* Fondo elegante (mesh + noise + sparkles)                      */
+/* Fondo: constelación dorada (canvas) + profundidad             */
 /* ============================================================ */
-
-const SPARKLES = [
-  { left: "12%", top: "18%", size: 4, delay: 0, duration: 7 },
-  { left: "82%", top: "24%", size: 3, delay: 1.4, duration: 9 },
-  { left: "22%", top: "78%", size: 5, delay: 2.2, duration: 8 },
-  { left: "70%", top: "82%", size: 3, delay: 0.7, duration: 10 },
-  { left: "48%", top: "12%", size: 2, delay: 3.1, duration: 6 },
-  { left: "92%", top: "60%", size: 4, delay: 1.9, duration: 11 },
-  { left: "8%", top: "48%", size: 3, delay: 2.8, duration: 9 },
-  { left: "58%", top: "92%", size: 2, delay: 0.4, duration: 7 },
-];
 
 const NOISE_SVG =
   "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.7 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>";
 
+/**
+ * Jerarquía clara, sin ruido de capas: base profunda → dos halos que dan color
+ * → constelación (el protagonista) → viñeta que centra la mirada en la card →
+ * grano sutil. Cada capa tiene UNA función.
+ */
 const AuthBackground = () => (
   <div aria-hidden className="absolute inset-0 overflow-hidden pointer-events-none">
-    {/* Capa 1: base oscura con gradient diagonal sutil */}
-    <div className="absolute inset-0 bg-[radial-gradient(ellipse_120%_80%_at_50%_0%,#1a1410_0%,#0a0a0a_50%,#050505_100%)]" />
+    {/* Base: negro profundo con un cálido dorado naciendo arriba. */}
+    <div className="absolute inset-0 bg-[radial-gradient(ellipse_130%_90%_at_50%_-10%,#1c150c_0%,#0a0a0a_48%,#050505_100%)]" />
 
-    {/* Capa 2: mesh radial multi-color animado — solo desktop (perf mobile) */}
-    <motion.div
-      className="hidden md:block absolute -top-1/3 -left-1/4 w-[80vw] h-[80vw] max-w-[900px] max-h-[900px] rounded-full bg-[radial-gradient(circle_at_center,rgba(204,164,59,0.35)_0%,rgba(204,164,59,0.05)_45%,transparent_70%)] blur-3xl"
-      animate={{ x: [0, 60, -20, 0], y: [0, -40, 20, 0] }}
-      transition={{ duration: 22, repeat: Infinity, ease: "easeInOut" }}
-    />
-    <motion.div
-      className="hidden md:block absolute -bottom-1/3 -right-1/4 w-[80vw] h-[80vw] max-w-[1000px] max-h-[1000px] rounded-full bg-[radial-gradient(circle_at_center,rgba(225,184,70,0.3)_0%,rgba(225,184,70,0.04)_50%,transparent_75%)] blur-3xl"
-      animate={{ x: [0, -50, 30, 0], y: [0, 30, -40, 0] }}
-      transition={{ duration: 26, repeat: Infinity, ease: "easeInOut", delay: 2 }}
-    />
-    <motion.div
-      className="hidden md:block absolute top-1/4 left-1/2 -translate-x-1/2 w-[60vw] h-[60vw] max-w-[700px] max-h-[700px] rounded-full bg-[radial-gradient(circle_at_center,rgba(180,120,30,0.18)_0%,transparent_60%)] blur-3xl"
-      animate={{ scale: [1, 1.15, 1], opacity: [0.5, 0.85, 0.5] }}
-      transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
-    />
-    {/* Capa 2 bis — mobile: un único orbe estático compacto */}
+    {/* Dos halos: uno vivo (arriba-izq), uno profundo (abajo-der). Dan color y
+        contraste sin lavar la escena. Fijos: el movimiento lo pone la constelación. */}
+    <div className="absolute -top-[18%] -left-[12%] w-[60vw] h-[60vw] max-w-[620px] max-h-[620px] rounded-full bg-[radial-gradient(circle_at_center,rgba(204,164,59,0.22),transparent_66%)] blur-[80px]" />
+    <div className="absolute -bottom-[20%] -right-[10%] w-[55vw] h-[55vw] max-w-[560px] max-h-[560px] rounded-full bg-[radial-gradient(circle_at_center,rgba(160,110,30,0.16),transparent_68%)] blur-[100px]" />
+
+    {/* La constelación dorada — protagonista del fondo. */}
+    <ParticleNetwork />
+
+    {/* Viñeta radial: oscurece los bordes para que la mirada caiga en el centro. */}
+    <div className="absolute inset-0 bg-[radial-gradient(ellipse_75%_75%_at_50%_50%,transparent_35%,rgba(5,5,5,0.55)_100%)]" />
+
+    {/* Grano sutil: mata el banding de los gradientes y da textura premium. */}
     <div
-      aria-hidden
-      className="md:hidden absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/3 w-[120vw] h-[120vw] rounded-full bg-[radial-gradient(circle_at_center,rgba(204,164,59,0.22),transparent_60%)] blur-2xl pointer-events-none"
-    />
-
-    {/* Capa 3: líneas diagonales finas (textura premium) */}
-    <div className="absolute inset-0 bg-[repeating-linear-gradient(115deg,transparent_0_120px,rgba(204,164,59,0.04)_120px_121px)]" />
-
-    {/* Capa 4: grid sutil con mask radial (estructura) */}
-    <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff06_1px,transparent_1px),linear-gradient(to_bottom,#ffffff06_1px,transparent_1px)] bg-[size:64px_64px] [mask-image:radial-gradient(ellipse_70%_60%_at_50%_50%,#000_30%,transparent_85%)]" />
-
-    {/* Capa 5: viñeta inferior y superior para profundidad */}
-    <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-black/60 to-transparent" />
-    <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/70 to-transparent" />
-
-    {/* Capa 6: sparkles dorados flotando */}
-    {SPARKLES.map((s, i) => (
-      <motion.span
-        key={i}
-        className="absolute rounded-full bg-gold shadow-[0_0_12px_rgba(204,164,59,0.7)]"
-        style={{
-          left: s.left,
-          top: s.top,
-          width: s.size,
-          height: s.size,
-        }}
-        animate={{
-          y: [0, -30, 0],
-          opacity: [0, 0.85, 0],
-          scale: [0.7, 1.2, 0.7],
-        }}
-        transition={{
-          duration: s.duration,
-          repeat: Infinity,
-          delay: s.delay,
-          ease: "easeInOut",
-        }}
-      />
-    ))}
-
-    {/* Capa 7: noise sutil (grano) — tope visual */}
-    <div
-      className="absolute inset-0 opacity-[0.06] mix-blend-overlay"
+      className="absolute inset-0 opacity-[0.05] mix-blend-overlay"
       style={{ backgroundImage: `url("${NOISE_SVG}")`, backgroundSize: "200px 200px" }}
     />
   </div>
@@ -776,7 +733,6 @@ const AuthPage = ({ initialMode = "signin" }: AuthPageProps) => {
   const [mode, setMode] = useState<Mode>(initialMode);
   const { data: platformSettings } = usePlatformSettings();
   const logoLight = platformSettings?.logo_url || LOGO_LIGHT_FALLBACK;
-  const logoDark = LOGO_DARK_OVERLAY;
   const platformName = platformSettings?.platform_name || "Escuela de la Riqueza";
 
   // Revisar si viene ?plan=vip en la URL
@@ -833,8 +789,27 @@ const AuthPage = ({ initialMode = "signin" }: AuthPageProps) => {
       </Link>
 
       {/* ==== DESKTOP CARD (lg+) ==== */}
+      <div className="hidden lg:block relative z-10">
+        {/* Signature: border-beam — una luz dorada recorre el borde de la tarjeta.
+            La caja NO rota (eso hacía asomar las esquinas): rota un cuadrado de
+            conic-gradient más grande que la diagonal de la card, recortado por el
+            overflow-hidden del marco a la silueta redondeada. El <article> opaco
+            tapa el centro y deja ver solo el ring del borde. */}
+        <div className="relative rounded-3xl p-[1.5px] overflow-hidden">
+          {/* Borde base tenue: mantiene el ring visible entre pasadas del haz. */}
+          <div
+            aria-hidden
+            className="absolute inset-0 rounded-3xl bg-white/10 pointer-events-none"
+          />
+          {/* Haz giratorio (cuadrado > diagonal ≈ 1030px, centrado). */}
+          <motion.div
+            aria-hidden
+            className="absolute left-1/2 top-1/2 aspect-square w-[1200px] -translate-x-1/2 -translate-y-1/2 bg-[conic-gradient(from_0deg,transparent_0deg,rgba(204,164,59,0.9)_30deg,transparent_90deg)] pointer-events-none"
+            animate={{ rotate: 360 }}
+            transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+          />
       <article
-        className="hidden lg:block relative w-[860px] h-[560px] rounded-3xl overflow-hidden bg-darker/95 border border-white/10 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.8)] z-10"
+        className="relative w-[860px] h-[560px] rounded-[22px] overflow-hidden bg-darker/95 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.8)]"
       >
         {/* Brillo de borde superior */}
         <div
@@ -883,7 +858,7 @@ const AuthPage = ({ initialMode = "signin" }: AuthPageProps) => {
           animate={{ x: overlayOnLeft ? "0%" : "100%" }}
           transition={slideTransition}
         >
-          <div className="relative h-full w-full bg-gradient-to-br from-goldHover via-gold to-[#a88224] overflow-hidden">
+          <div className="relative h-full w-full bg-gradient-to-br from-[#F0C959] via-gold to-[#7d5e18] overflow-hidden">
             {/* Brillo lineal súper suave arriba */}
             <div
               aria-hidden
@@ -918,7 +893,7 @@ const AuthPage = ({ initialMode = "signin" }: AuthPageProps) => {
                     ctaLabel="Iniciar sesión"
                     ctaHelper="¿Ya tienes cuenta?"
                     onCta={() => switchTo("signin")}
-                    logoSrc={logoDark}
+                    logoSrc={logoLight}
                     platformName={platformName}
                   />
                 ) : (
@@ -928,7 +903,7 @@ const AuthPage = ({ initialMode = "signin" }: AuthPageProps) => {
                     ctaLabel="Crear cuenta"
                     ctaHelper="¿Aún no tienes cuenta?"
                     onCta={() => switchTo("signup")}
-                    logoSrc={logoDark}
+                    logoSrc={logoLight}
                     platformName={platformName}
                   />
                 )}
@@ -937,6 +912,8 @@ const AuthPage = ({ initialMode = "signin" }: AuthPageProps) => {
           </div>
         </motion.div>
       </article>
+        </div>
+      </div>
 
       {/* ==== MOBILE / TABLET (< lg) ==== */}
       <div className="lg:hidden w-full max-w-md relative z-10 mt-16 sm:mt-14">
@@ -982,7 +959,7 @@ const AuthPage = ({ initialMode = "signin" }: AuthPageProps) => {
           </div>
         )}
 
-        <div className="bg-white/[0.04] border border-white/10 rounded-3xl p-5 sm:p-6 backdrop-blur-xl shadow-[0_20px_50px_-20px_rgba(0,0,0,0.8)]">
+        <div className="bg-white/[0.04] border border-gold/15 rounded-3xl p-5 sm:p-6 backdrop-blur-xl shadow-[0_20px_50px_-20px_rgba(0,0,0,0.8),0_0_44px_-12px_rgba(204,164,59,0.28)]">
           <AnimatePresence mode="wait">
             <motion.div
               key={mode}

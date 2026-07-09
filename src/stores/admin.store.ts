@@ -20,8 +20,12 @@ interface AdminStore {
   setEditMode: (value: boolean) => void;
   /** Carga los textos una sola vez (compartido por todos los campos). */
   ensureLoaded: () => void;
-  /** Registra una edición en el buffer, sin tocar la base. */
-  stageChange: (key: string, value: string) => void;
+  /**
+   * Registra una edición en el buffer, sin tocar la base. `baseline` es el valor
+   * confirmado (DB o default): si la edición coincide, se elimina del buffer —
+   * volver al original NO es un cambio pendiente.
+   */
+  stageChange: (key: string, value: string, baseline?: string) => void;
   /** Descarta la edición en buffer de un campo. */
   discardChange: (key: string) => void;
   /** Descarta todas las ediciones en buffer. */
@@ -54,8 +58,17 @@ export const useAdminStore = create<AdminStore>((set, get) => ({
       .catch(() => set({ loading: false }));
   },
 
-  stageChange: (key, value) =>
-    set((s) => ({ pending: { ...s.pending, [key]: value } })),
+  stageChange: (key, value, baseline) =>
+    set((s) => {
+      const next = { ...s.pending };
+      // Volvió al valor confirmado → deja de ser un cambio pendiente.
+      if (baseline !== undefined && value === baseline) {
+        delete next[key];
+      } else {
+        next[key] = value;
+      }
+      return { pending: next };
+    }),
 
   discardChange: (key) =>
     set((s) => {
@@ -102,8 +115,19 @@ export const useAdminStore = create<AdminStore>((set, get) => ({
   },
 }));
 
-/** Helper para verificar si el usuario actual es admin */
+/**
+ * Lectura NO reactiva (snapshot). Sólo para código fuera de React (efectos,
+ * handlers). En componentes usá `useIsCurrentUserAdmin` — sino no re-renderiza
+ * cuando la sesión hidrata de forma asíncrona y el rol cambia de null a admin.
+ */
 export const isCurrentUserAdmin = (): boolean => {
   const user = useAuthStore.getState().user;
   return user?.role === USER_ROLES.ADMIN;
 };
+
+/**
+ * Hook reactivo: se re-renderiza cuando cambia el usuario (login, hidratación
+ * de sesión, logout). Éste es el que deben usar los componentes.
+ */
+export const useIsCurrentUserAdmin = (): boolean =>
+  useAuthStore((s) => s.user?.role === USER_ROLES.ADMIN);

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ElementType, type ReactNode } from "react";
-import { Pencil } from "lucide-react";
-import { useAdminStore, isCurrentUserAdmin } from "@/stores/admin.store";
+import { Pencil, Undo2 } from "lucide-react";
+import { useAdminStore, useIsCurrentUserAdmin } from "@/stores/admin.store";
 import { cn } from "@/lib/utils";
 
 type EditableFieldProps = {
@@ -22,7 +22,7 @@ const EditableField = ({
   after,
   before,
 }: EditableFieldProps) => {
-  const isAdmin = isCurrentUserAdmin();
+  const isAdmin = useIsCurrentUserAdmin();
   const isEditMode = useAdminStore((s) => s.isEditMode);
   const ensureLoaded = useAdminStore((s) => s.ensureLoaded);
   const stageChange = useAdminStore((s) => s.stageChange);
@@ -31,6 +31,9 @@ const EditableField = ({
   const value = useAdminStore(
     (s) => s.pending[textKey] ?? s.values[textKey] ?? defaultValue,
   );
+  // Valor confirmado (base o default) — baseline para detectar si un cambio
+  // volvió al original y para el botón de deshacer.
+  const confirmedValue = useAdminStore((s) => s.values[textKey] ?? defaultValue);
   const isPending = useAdminStore((s) => textKey in s.pending);
 
   const [isEditing, setIsEditing] = useState(false);
@@ -46,7 +49,8 @@ const EditableField = ({
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     // Sólo guarda en el buffer local. NADA se escribe en la base hasta "Guardar".
-    stageChange(textKey, e.target.value);
+    // Pasa el baseline para que volver al original limpie el pendiente.
+    stageChange(textKey, e.target.value, confirmedValue);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -73,7 +77,15 @@ const EditableField = ({
       "focus:outline-none focus:ring-2 focus:ring-gold/50",
     );
     return (
-      <span className="relative inline-block w-full max-w-full min-w-[10ch] align-baseline not-italic">
+      <span
+        className="relative inline-block w-full max-w-full min-w-[10ch] align-baseline not-italic"
+        // Si el campo vive dentro de un <Link>, evita que interactuar con el
+        // input dispare la navegación del anchor.
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+      >
         {multiline ? (
           <textarea
             ref={inputRef as React.RefObject<HTMLTextAreaElement>}
@@ -101,20 +113,26 @@ const EditableField = ({
     );
   }
 
-  // Modo visualización. Realce sutil con box-shadow (no rompe el gradiente).
-  // Los campos con edición sin guardar se marcan con un punto ámbar.
+  // Modo visualización. Contorno punteado permanente mientras se edita → deja
+  // claro qué es clicleable (patrón Notion/Webflow). Se intensifica al hover.
+  // Pendiente = ámbar con tinte de fondo; guardado = dorado tenue.
   const editableClasses = showEditableUI
     ? cn(
-        "group cursor-pointer rounded-sm transition-shadow hover:ring-2 hover:ring-gold/40",
-        isPending && "ring-2 ring-amber-400/60",
+        "group cursor-pointer rounded-[3px] outline-dashed outline-1 outline-offset-2 transition-colors",
+        isPending
+          ? "outline-amber-400/70 bg-amber-400/5"
+          : "outline-gold/30 hover:outline-gold/70 hover:bg-gold/5",
       )
     : "";
 
   return (
     <Tag
       className={cn(className, editableClasses, "whitespace-pre-wrap")}
-      onClick={() => {
-        if (showEditableUI) setIsEditing(true);
+      onClick={(e) => {
+        if (showEditableUI) {
+          e.preventDefault(); // no navegar si está dentro de un <Link>
+          setIsEditing(true);
+        }
       }}
       title={showEditableUI ? (isPending ? "Editado (sin guardar) — clic para editar" : "Clic para editar") : undefined}
     >
@@ -131,6 +149,21 @@ const EditableField = ({
               : "opacity-40 group-hover:opacity-100 text-gold",
           )}
         />
+      )}
+      {showEditableUI && isPending && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault(); // no navegar si está dentro de un <Link>
+            e.stopPropagation(); // no abrir el editor
+            discardChange(textKey);
+          }}
+          title="Deshacer este cambio"
+          aria-label="Deshacer este cambio"
+          className="inline-flex align-middle ml-1 text-amber-400/70 hover:text-amber-300 transition-colors"
+        >
+          <Undo2 size={13} />
+        </button>
       )}
     </Tag>
   );

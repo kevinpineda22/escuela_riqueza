@@ -3,6 +3,7 @@ import Lenis from "lenis";
 import { MotionConfig } from "motion/react";
 import { useIsDesktop, usePrefersReducedMotion } from "@/hooks/useMediaQuery";
 import { usePreferencesStore } from "@/stores/preferences.store";
+import { setLenis } from "@/lib/smoothScroll";
 
 interface MotionProviderProps {
   children: ReactNode;
@@ -27,6 +28,8 @@ const MotionProvider = ({ children }: MotionProviderProps) => {
       smoothWheel: true,
     });
 
+    setLenis(lenis);
+
     let rafId = 0;
     const raf = (time: number) => {
       lenis.raf(time);
@@ -37,6 +40,7 @@ const MotionProvider = ({ children }: MotionProviderProps) => {
     return () => {
       cancelAnimationFrame(rafId);
       lenis.destroy();
+      setLenis(null);
     };
   }, [isDesktop, reduce]);
 

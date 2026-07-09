@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
 import { useRef } from "react";
-import { motion, useScroll, useTransform } from "motion/react";
+import { motion, useTransform } from "motion/react";
 import { Brain, Dumbbell, Sparkles } from "lucide-react";
 import EditableField from "@/components/feature/EditableField";
+import { useParallax } from "@/hooks/useParallax";
 
 interface Milestone {
   id: number;
@@ -90,13 +91,18 @@ const MilestoneRow = ({ milestone, index }: MilestoneRowProps) => {
 export const PathAct = () => {
   const sectionRef = useRef<HTMLDivElement>(null);
 
-  const { scrollYProgress } = useScroll({
+  // Reveal de la línea: no es parallax decorativo sino un "fill" ligado al
+  // progreso. Por eso usamos `progress` (suavizado en móvil) y `reduce` para
+  // mostrarla completa de una si el usuario pidió menos movimiento.
+  const { progress, reduce } = useParallax({
     target: sectionRef,
     offset: ["start end", "end center"],
   });
 
-  const lineHeight = useTransform(scrollYProgress, [0.1, 0.95], ["0%", "100%"]);
-  const lineOpacity = useTransform(scrollYProgress, [0, 0.05], [0, 1]);
+  // scaleY en vez de height: height es propiedad de layout (no compone en GPU y
+  // tironea, sobre todo en móvil); scaleY va por el compositor.
+  const lineScale = useTransform(progress, [0.1, 0.95], [reduce ? 1 : 0, 1]);
+  const lineOpacity = useTransform(progress, [0, 0.05], [reduce ? 1 : 0, 1]);
 
   return (
     <section
@@ -137,8 +143,8 @@ export const PathAct = () => {
         />
         <motion.div
           aria-hidden
-          style={{ height: lineHeight, opacity: lineOpacity }}
-          className="absolute left-6 md:left-10 top-0 w-0.5 bg-gradient-to-b from-gold via-goldHover to-gold origin-top will-change-[height]"
+          style={{ scaleY: lineScale, opacity: lineOpacity }}
+          className="absolute left-6 md:left-10 top-0 bottom-0 w-0.5 bg-gradient-to-b from-gold via-goldHover to-gold origin-top will-change-transform"
         />
 
         <div className="flex flex-col gap-20 md:gap-28">
