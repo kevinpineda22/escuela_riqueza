@@ -95,6 +95,62 @@ const AnimatedStat = ({ textKey, defaultValue }: { textKey: string; defaultValue
 };
 
 /* ============================================================ */
+/* Frase viva (revelado palabra por palabra)                     */
+/* ============================================================ */
+
+/**
+ * Revela la frase palabra por palabra al entrar en viewport (materializa con
+ * blur → nítido). Sensación de que la web "habla", no de texto plano. Igual que
+ * los stats: en modo edición admin → EditableField; para el resto → animada.
+ * Respeta reduce-motion (muestra la frase entera de una).
+ */
+const AnimatedPhrase = ({
+  textKey,
+  defaultValue,
+  className,
+}: {
+  textKey: string;
+  defaultValue: string;
+  className?: string;
+}) => {
+  const isAdmin = useIsCurrentUserAdmin();
+  const isEditMode = useAdminStore((s) => s.isEditMode);
+  const ensureLoaded = useAdminStore((s) => s.ensureLoaded);
+  const value = useAdminStore((s) => s.pending[textKey] ?? s.values[textKey] ?? defaultValue);
+  const prefersReduced = usePrefersReducedMotion();
+  const animationsEnabled = usePreferencesStore((s) => s.animationsEnabled);
+  const reduce = prefersReduced || !animationsEnabled;
+
+  useEffect(() => {
+    ensureLoaded();
+  }, [ensureLoaded]);
+
+  if (isAdmin && isEditMode) {
+    return <EditableField textKey={textKey} defaultValue={defaultValue} as="span" className={className} />;
+  }
+
+  if (reduce) return <span className={className}>{value}</span>;
+
+  const words = value.split(" ");
+  return (
+    <span className={className}>
+      {words.map((word, i) => (
+        <motion.span
+          key={`${i}-${word}`}
+          className="inline-block mr-[0.25em] will-change-[transform,opacity,filter]"
+          initial={{ opacity: 0, y: "0.4em", filter: "blur(10px)" }}
+          whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+          viewport={{ once: true, margin: "-80px" }}
+          transition={{ duration: 0.6, delay: i * 0.09, ease: [0.2, 0.65, 0.3, 0.9] }}
+        >
+          {word}
+        </motion.span>
+      ))}
+    </span>
+  );
+};
+
+/* ============================================================ */
 /* Ambiente de fondo                                             */
 /* ============================================================ */
 
@@ -163,17 +219,14 @@ export const AwakeningAct = () => {
     <div aria-label="El despertar" className="relative overflow-hidden">
       <AwakeningAmbient />
 
-      {/* Frame 1 — La pregunta */}
+      {/* Frame 1 — La pregunta (se revela palabra por palabra) */}
       <section className="relative z-10 min-h-[58svh] md:min-h-[68svh] flex items-center justify-center px-5 sm:px-6 py-16 sm:py-20 overflow-hidden">
-        <motion.h2
-          initial={{ opacity: 0, y: 40 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-100px" }}
-          transition={{ duration: 0.9, ease: "easeOut" }}
-          className="text-3xl sm:text-5xl md:text-7xl lg:text-8xl font-bold text-white/55 leading-[1.15] tracking-tight max-w-5xl text-center text-balance"
-        >
-          <EditableField textKey="awakening_question" defaultValue="¿Cuántas oportunidades dejaste pasar?" as="span" />
-        </motion.h2>
+        <h2 className="text-3xl sm:text-5xl md:text-7xl lg:text-8xl font-bold text-white/55 leading-[1.15] tracking-tight max-w-5xl text-center text-balance">
+          <AnimatedPhrase
+            textKey="awakening_question"
+            defaultValue="¿Cuántas oportunidades dejaste pasar?"
+          />
+        </h2>
       </section>
 
       {/* Frame 2 — La respuesta */}
@@ -188,9 +241,19 @@ export const AwakeningAct = () => {
           <span className="text-transparent bg-clip-text bg-gradient-to-b from-white to-white/60">
             <EditableField textKey="awakening_answer" defaultValue="Es momento de" as="span" className="inline" />
           </span>{" "}
-          <span className="text-gold italic drop-shadow-[0_0_30px_rgba(204,164,59,0.5)] pr-3 sm:pr-5 box-decoration-clone">
+          <motion.span
+            className="text-gold italic pr-3 sm:pr-5 box-decoration-clone"
+            animate={{
+              textShadow: [
+                "0 0 20px rgba(204,164,59,0.35)",
+                "0 0 48px rgba(204,164,59,0.8)",
+                "0 0 20px rgba(204,164,59,0.35)",
+              ],
+            }}
+            transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+          >
             <EditableField textKey="awakening_accent" defaultValue="cambiar." as="span" className="inline" />
-          </span>
+          </motion.span>
         </motion.h2>
       </section>
 

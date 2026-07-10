@@ -81,7 +81,7 @@ const EditableField = ({
         className="relative inline-block w-full max-w-full min-w-[10ch] align-baseline not-italic"
         // Si el campo vive dentro de un <Link>, evita que interactuar con el
         // input dispare la navegación del anchor.
-        onClick={(e) => {
+        onClick={(e: React.MouseEvent) => {
           e.preventDefault();
           e.stopPropagation();
         }}
