@@ -574,31 +574,48 @@ const AdminLiveManager = () => {
                 <Clock size={14} /> ¿Cómo configurar OBS Studio?
               </summary>
               <div className="mt-4 p-4 bg-black/40 border border-white/10 rounded-xl space-y-3 text-sm text-white/80">
-                <p>1. Ve a <strong>Cloudflare Dashboard → Stream → Live Inputs</strong></p>
-                <p>2. Crea un nuevo "Live Input" y copia el <strong>Input ID</strong> de arriba</p>
-                <p>3. En OBS Studio ve a <strong>Configuración → Transmisión</strong>:</p>
+                <p className="flex items-start gap-2 text-amber-300/90">
+                  <span>⚠️</span>
+                  <span>Lo MÁS importante para que el vivo no se corte: transmití por <strong>cable de red (ethernet)</strong>, nunca por WiFi, y usá un bitrate que tu subida aguante. Un corte de conexión = el vivo se congela y la grabación se fragmenta en videos sueltos.</span>
+                </p>
+
+                <p>1. En OBS: <strong>Configuración → Transmisión</strong></p>
                 <div className="pl-4 space-y-1 text-textMuted">
-                  <p>• Servicio: <strong>Custom...</strong></p>
+                  <p>• Servicio: <strong>Personalizado (Custom)</strong></p>
                   <p>• Servidor: <span className="text-gold font-mono text-xs">rtmps://live.cloudflare.com:443/live/</span>
                     <button onClick={() => copyToClipboard("rtmps://live.cloudflare.com:443/live/", "Servidor RTMPS")}
                       className="inline ml-2 text-gold hover:text-goldHover"><Copy size={14} className="inline" /></button>
                   </p>
-                  <p>• Clave de transmisión: <span className="text-gold font-mono text-xs">[el Input ID de arriba]</span></p>
+                  <p>• Clave de transmisión: <strong>el Live Input ID de arriba</strong></p>
                 </div>
-                <p>4. En OBS, para <strong>menor latencia</strong> ve a Configuración → Avanzado:</p>
+
+                <p>2. <strong>Configuración → Salida</strong> → Modo de salida: <strong>Avanzado</strong></p>
                 <div className="pl-4 space-y-1 text-textMuted">
-                  <p>• Modo de reescalado: <strong>1920x1080</strong> o menor</p>
-                  <p>• Intervalo de keyframe: <strong>1 segundo</strong></p>
-                  <p>• Control de tasa: <strong>CBR</strong>, bitrate 4000-8000 Kbps</p>
-                  <p>• FPS: <strong>30</strong> (no 60)</p>
+                  <p>• Codificador: <strong>x264</strong> (o NVENC H.264 si tenés GPU Nvidia)</p>
+                  <p>• Control de tasa: <strong>CBR</strong></p>
+                  <p>• Intervalo de keyframe: <strong>2</strong> (obligatorio — en <strong>Auto</strong> la grabación falla al codificar)</p>
+                  <p>• Preajuste de uso de CPU: <strong>veryfast</strong> · Perfil: <strong>main</strong></p>
                 </div>
-                <p>5. En Cloudflare Dashboard → Stream → Live Input → editar el input y activar:</p>
+
+                <p>3. Bitrate según tu subida REAL (medila antes en <span className="text-gold">fast.com</span>):</p>
                 <div className="pl-4 space-y-1 text-textMuted">
-                  <p>✅ <strong>"Low-Latency HLS"</strong> (reduce latencia a ~3-5s)</p>
-                  <p>✅ <strong>"WebRTC"</strong> (reduce latencia a &lt;1s — ideal para interactuar en chat)</p>
+                  <p>• Subida &lt; 5 Mbps → <strong>2.500 Kbps</strong> a 720p30</p>
+                  <p>• Subida 5-10 Mbps → <strong>4.000 Kbps</strong> a 1080p30</p>
+                  <p>• Subida &gt; 10 Mbps estable → <strong>6.000 Kbps</strong> a 1080p30</p>
+                  <p className="text-amber-300/70">Regla de oro: el bitrate no debe pasar el <strong>50%</strong> de tu subida real. Ante la duda, bajalo: fluido y estable &gt; alta calidad que se corta.</p>
                 </div>
-                <p>6. Haz clic en <strong>"Iniciar transmisión"</strong> en OBS</p>
-                <p>7. Cuando estés listo, activa <strong>"Forzar EN VIVO"</strong> abajo</p>
+
+                <p>4. <strong>Configuración → Video</strong></p>
+                <div className="pl-4 space-y-1 text-textMuted">
+                  <p>• Resolución de salida: <strong>1920x1080</strong> (o 1280x720 si tu subida es baja)</p>
+                  <p>• FPS: <strong>30</strong> (nunca 60 para un vivo largo)</p>
+                </div>
+
+                <p>5. (Opcional) Menor latencia: en el Live Input de Cloudflare activá <strong>Low-Latency HLS</strong> (~3-5s). No actives WebRTC salvo que lo necesites — suma inestabilidad.</p>
+
+                <p>6. En OBS <strong>Iniciar transmisión</strong>, esperá a verte estable unos segundos, y recién ahí activá <strong>"Forzar EN VIVO"</strong> abajo.</p>
+
+                <p className="text-white/50 text-[11px] pt-1">Durante el vivo mirá el recuadro de estado de OBS (abajo a la derecha): <strong>verde</strong> = conexión sana. Si titila <strong>amarillo/rojo</strong> estás perdiendo frames → bajá el bitrate.</p>
               </div>
             </details>
           </div>

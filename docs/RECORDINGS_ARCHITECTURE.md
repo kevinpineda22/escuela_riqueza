@@ -91,6 +91,16 @@ Mover la grabación de **Cloudflare Stream** (caro, acumulativo) a **Cloudflare 
      → el player reproduce el MP4.
 ```
 
+### Archivado automático (Cron Trigger)
+
+El paso 3 ya **no requiere el botón manual**. El Worker tiene un **Cron Trigger** (`crons = ["*/10 * * * *"]` en `wrangler.toml` → handler `scheduled()` en `worker/src/index.ts`). Cada 10 min:
+
+1. Consulta `lives` donde `recording_stream_uid` está cargado y `archived_at` es null (grabado pero sin archivar).
+2. Corre `archiveOne()` sobre cada una — la misma lógica que el botón manual.
+3. Si el MP4 todavía se está generando, queda en `processing` y se reintenta en el próximo tick. Al archivar con éxito, `recording_stream_uid` pasa a null y la grabación deja de aparecer sola.
+
+El **botón "Archivar en R2" sigue existiendo** para forzar el archivado on-demand; el cron es la red de seguridad que lo hace solo. Ambos comparten `archiveOne()`, así que no hay lógica duplicada.
+
 ### Por qué un Worker y no una Vercel Function para la copia
 Un MP4 de 4 h pesa varios GB. Las Vercel Functions tienen límite de tiempo (10-60s) y memoria — no pueden hacer streaming de varios GB. El **Cloudflare Worker** hace la copia Stream→R2 **dentro de la red de Cloudflare**: sin egress y sin timeout de Vercel.
 
