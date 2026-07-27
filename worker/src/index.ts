@@ -12,6 +12,8 @@
  *
  * Es idempotente y de fase única: si el MP4 todavía no está listo, responde
  * `processing` y se reintenta (el admin a mano, o el cron en el próximo tick).
+ * Si Stream marcó el video como `error` (codificación fallida), responde `failed`
+ * y el cron lo descarta para no reintentar infinitamente y no tapar el batch.
  *
  * Body (fetch): { live_id: string, stream_video_uid: string }
  */
@@ -33,6 +35,7 @@ interface ArchiveBody {
 type ArchiveResult =
   | { status: 'archived'; key: string; bytes: number | null; durationSeconds: number | null }
   | { status: 'processing'; percent: number }
+  | { status: 'failed'; message: string; httpStatus: number }
   | { status: 'error'; message: string; detail?: string; httpStatus: number };
 
 function json(data: unknown, status = 200): Response {
@@ -46,6 +49,9 @@ function json(data: unknown, status = 200): Response {
  * Archiva una grabación: habilita/espera el MP4, lo copia a R2, registra en la
  * base y borra el video de Stream. Idempotente: si ya se archivó (o el MP4 no
  * está listo) no rompe, solo devuelve el estado correspondiente.
+ *
+ * Si el video está en estado `error` en Stream, devuelve `failed`: la codificación
+ * falló y no hay MP4 que generar, así que reintentar es inútil.
  */
 async function archiveOne(
   liveId: string,
@@ -54,6 +60,27 @@ async function archiveOne(
 ): Promise<ArchiveResult> {
   const cfBase = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/stream`;
   const cfHeaders = { Authorization: `Bearer ${env.CF_STREAM_API_TOKEN}` };
+
+  // 0. Estado del video en Stream. Si está en 'error', la codificación falló y es
+  //    PERMANENTE: no hay MP4 que generar. Cortamos como 'failed' para no reintentar
+  //    para siempre (y así no tapar el batch del cron). De paso leemos la duración.
+  let durationSeconds: number | null = null;
+  const infoRes = await fetch(`${cfBase}/${streamVideoUid}`, { headers: cfHeaders });
+  if (infoRes.ok) {
+    const info = (await infoRes.json()) as {
+      result?: { duration?: number; status?: { state?: string; errorReasonText?: string } };
+    };
+    if (info.result?.status?.state === 'error') {
+      return {
+        status: 'failed',
+        message: info.result.status.errorReasonText || 'La grabación falló al codificar en Stream',
+        httpStatus: 422,
+      };
+    }
+    if (typeof info.result?.duration === 'number') {
+      durationSeconds = Math.round(info.result.duration);
+    }
+  }
 
   // 1. Estado del MP4. Si nunca se pidió, lo habilitamos y salimos como 'processing'.
   const dlUrl = `${cfBase}/${streamVideoUid}/downloads`;
@@ -94,17 +121,7 @@ async function archiveOne(
   });
   const bytes = putObject?.size ?? Number(mp4Res.headers.get('content-length')) ?? null;
 
-  // 3. Duración desde el objeto de Stream.
-  let durationSeconds: number | null = null;
-  const infoRes = await fetch(`${cfBase}/${streamVideoUid}`, { headers: cfHeaders });
-  if (infoRes.ok) {
-    const info = (await infoRes.json()) as { result?: { duration?: number } };
-    if (typeof info.result?.duration === 'number') {
-      durationSeconds = Math.round(info.result.duration);
-    }
-  }
-
-  // 4. Actualizar Supabase (service role, bypass RLS) vía REST.
+  // 3. Actualizar Supabase (service role, bypass RLS) vía REST.
   const patchRes = await fetch(
     `${env.SUPABASE_URL}/rest/v1/lives?id=eq.${encodeURIComponent(liveId)}`,
     {
@@ -137,10 +154,28 @@ async function archiveOne(
     };
   }
 
-  // 5. Recién ahora borramos de Stream (la copia + el registro ya están OK).
+  // 4. Recién ahora borramos de Stream (la copia + el registro ya están OK).
   await fetch(`${cfBase}/${streamVideoUid}`, { method: 'DELETE', headers: cfHeaders });
 
   return { status: 'archived', key, bytes, durationSeconds };
+}
+
+/**
+ * Marca una grabación como no-archivable: limpia recording_stream_uid para que
+ * deje de aparecer en el barrido del cron. Se usa cuando Stream reporta el video
+ * en 'error' (codificación fallida): no hay MP4 posible, reintentar es inútil.
+ */
+async function markFailed(liveId: string, env: Env): Promise<void> {
+  await fetch(`${env.SUPABASE_URL}/rest/v1/lives?id=eq.${encodeURIComponent(liveId)}`, {
+    method: 'PATCH',
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=minimal',
+    },
+    body: JSON.stringify({ recording_stream_uid: null }),
+  });
 }
 
 /**
@@ -202,11 +237,16 @@ export default {
     if (result.status === 'error') {
       return json({ error: result.message, detail: result.detail }, result.httpStatus);
     }
+    if (result.status === 'failed') {
+      return json({ error: result.message }, result.httpStatus);
+    }
     return json(result);
   },
 
   // Disparador automático (Cron Trigger). Archiva todo lo pendiente; el MP4 que
   // aún no esté listo queda en 'processing' y se reintenta en el próximo tick.
+  // Los videos con codificación fallida ('failed') se descartan para que no
+  // reintenten para siempre ni tapen el batch.
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(
       (async () => {
@@ -217,7 +257,14 @@ export default {
         for (const live of pending) {
           try {
             const result = await archiveOne(live.id, live.recording_stream_uid, env);
-            console.log(`[cron] ${live.id}: ${result.status}`);
+            const label =
+              result.status === 'processing' ? `processing ${result.percent}%` : result.status;
+            console.log(`[cron] ${live.id}: ${label}`);
+
+            if (result.status === 'failed') {
+              console.warn(`[cron] ${live.id}: descartada (${result.message})`);
+              await markFailed(live.id, env);
+            }
           } catch (err) {
             console.error(`[cron] ${live.id} falló:`, err);
           }
