@@ -11,6 +11,12 @@ compatibility_date = "2024-11-01"
 binding = "RECORDINGS"
 bucket_name = "escuela-recordings"
 
+# Cron Trigger: cada 10 min barre las grabaciones pendientes (recording_stream_uid
+# cargado y sin archivar) y las copia a R2. El MP4 que aún no esté listo queda en
+# 'processing' y se reintenta en el próximo tick. Ver src/index.ts -> scheduled().
+[triggers]
+crons = ["*/10 * * * *"]
+
 # Secrets (NO van acá — se cargan con `wrangler secret put <NOMBRE>`):
 #   CF_ACCOUNT_ID              -> tu Account ID de Cloudflare
 #   CF_STREAM_API_TOKEN        -> token con permiso Stream:Edit (leer/borrar videos)
