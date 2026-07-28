@@ -117,16 +117,14 @@ escuela_riqueza/
 ├── test/                         # Setup vitest
 ├── docs/
 │   ├── ARCHITECTURE.md
-│   ├── CHANGELOG.md              # Historial cronológico
-│   ├── PROJECT_STATE.md          # Estado actual e inventario
-│   ├── PODCAST_ARCHITECTURE.md   # Arquitectura del modo podcast (crítico)
-│   ├── migrate-lives-schema.sql  # Migración lives + RLS
-│   ├── migrate-badge-image.sql   # Migración badge_image_url
-│   └── RESPONSIVE_AUDIT.md       # Auditoría responsive
-├── sync_admin_plan.sql           # RPC admin_update_user_plan, admin_delete_user
-├── sync_signup.sql               # Trigger handle_new_user (perfil + suscripción)
-├── sync_profiles.sql             # Trigger handle_user_update (email sync)
-├── sync_progress.sql             # Tabla user_lesson_progress + RLS + trigger
+│   ├── CHANGELOG.md               # Historial cronológico
+│   ├── PROJECT_STATE.md           # Estado actual e inventario
+│   ├── PODCAST_ARCHITECTURE.md    # Arquitectura del modo podcast (crítico)
+│   ├── RECORDINGS_ARCHITECTURE.md # Archivado de grabaciones a R2 (crítico)
+│   └── RESPONSIVE_AUDIT.md        # Auditoría responsive
+├── sql/                           # Esquema de BD (Supabase, manual). Ver sql/README.md
+├── scripts/                       # Scripts de mantenimiento (ej: configure-live-input.mjs)
+├── worker/                        # Cloudflare Worker: archivado de grabaciones a R2
 ├── CLAUDE.md
 └── README.md
 ```

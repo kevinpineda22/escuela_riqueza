@@ -138,15 +138,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     if (parsed.kind === 'live_connected') {
+      // Cubre DOS casos con un solo update:
+      //  - scheduled -> live  (arranque del vivo)
+      //  - live + pausado -> live  (OBS se cayó un instante y reconectó: auto-resume)
+      // Antes solo matcheaba 'scheduled', así que una reconexión a mitad de vivo
+      // dejaba is_paused=true para siempre y había que despausar a mano.
       const { data, error } = await supabase
         .from('lives')
         .update({ status: 'live', is_paused: false })
         .eq('stream_live_input_id', parsed.liveInputId)
         .eq('is_active', true)
-        .eq('status', 'scheduled')
+        .in('status', ['scheduled', 'live'])
         .select('id');
       if (error) throw error;
-      return res.status(200).json({ ok: true, action: 'set_live', affected: data?.length || 0 });
+      return res.status(200).json({ ok: true, action: 'connected', affected: data?.length || 0 });
     }
 
     if (parsed.kind === 'live_disconnected') {

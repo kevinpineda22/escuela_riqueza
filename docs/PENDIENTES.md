@@ -3,7 +3,7 @@
 > Lista viva de mejoras/verificaciones en curso. Actualizar estado a medida que se cierran.
 > Estados: 🔴 pendiente · 🟡 en progreso · 🟢 hecho · ⚪ bloqueado (falta info)
 
-_Última actualización: 2026-07-08_
+_Última actualización: 2026-07-28_
 
 ---
 
@@ -55,13 +55,13 @@ _Última actualización: 2026-07-08_
 
 ---
 
-## 6. Archivado de grabaciones en R2 (ahorro de costos) 🟡
+## 6. Archivado de grabaciones en R2 (ahorro de costos) 🟢
 
 **Objetivo:** mover las grabaciones de Cloudflare Stream (caro, acumulativo) a Cloudflare R2 (egress cero, storage barato) al finalizar el vivo, y borrar de Stream. Ver spec completa en **`docs/RECORDINGS_ARCHITECTURE.md`**.
 
 **Hecho (2026-07-08):**
 - 📄 `docs/RECORDINGS_ARCHITECTURE.md` — spec completa (problema, solución, flujo, costos, componentes).
-- 🗄️ `docs/migrate-recordings-r2.sql` — columnas nuevas en `lives` (`recording_r2_key`, `recording_storage`, `recording_bytes`, `recording_duration_seconds`, `archived_at`) + backfill. **✅ Corrida en Supabase 2026-07-08 (5 columnas confirmadas).**
+- 🗄️ `sql/migrate-recordings-r2.sql` — columnas nuevas en `lives` (`recording_r2_key`, `recording_storage`, `recording_bytes`, `recording_duration_seconds`, `archived_at`) + backfill. **✅ Corrida en Supabase 2026-07-08 (5 columnas confirmadas).**
 - 🧩 Tipo `LiveEvent` actualizado con los campos nuevos. `npm run typecheck` ✅.
 - 🔐 `api/stream/recording-url.ts` — URL firmada de R2 (15 min), gateada por plan. Usa `aws4fetch` (instalado).
 - 🌐 Bucket `escuela-recordings` creado + 4 env R2 en Vercel (cliente, 2026-07-08).
@@ -69,12 +69,17 @@ _Última actualización: 2026-07-08_
 - 🔗 `api/stream/archive-recording.ts` — dispara el Worker (admin).
 - 🖥️ Admin Finalizados: botón "Archivar en R2" + `RecordingPlayer` (video R2 firmado / iframe Stream legacy). `npm run typecheck` ✅ (frontend).
 
-**Falta (acción cliente + un paso mío):**
-- Deploy del Worker (`wrangler`) + env `ARCHIVE_WORKER_URL`/`ARCHIVE_SHARED_SECRET` en Vercel → ver sección 6b de `RECORDINGS_ARCHITECTURE.md`.
-- Player de replay del lado del alumno (VIPLiveRoom) preferir R2 — pendiente de revisar si muestra replays.
-- KPI de minutos/costo en admin (opcional, ya hay datos).
+**Completado (2026-07-28):**
+- ✅ Worker deployado + env `ARCHIVE_WORKER_URL`/`ARCHIVE_SHARED_SECRET` en Vercel. Archivado manual verificado end-to-end (copia a R2 + borrado de Stream + replay firmado).
+- ✅ **Archivado automático**: Cron Trigger cada 10 min (`worker/src/index.ts` → `scheduled()`). Ya no hace falta el botón manual.
+- ✅ **Robustez**: descarta grabaciones muertas (Stream `error` o 0% > 12h) para no reintentar ni tapar el cron (`limit=3`).
+- ✅ **Anti-fragmentación**: `timeoutSeconds=60` en el Live Input (`scripts/configure-live-input.mjs`) + guía OBS con keyframe 2.
 
-**Archivos:** `docs/RECORDINGS_ARCHITECTURE.md`, `docs/migrate-recordings-r2.sql`, `src/lib/api/stream/lives.ts`
+**Falta (opcional):**
+- Player de replay del alumno (VIPLiveRoom) preferir R2 — revisar si muestra replays.
+- KPI de minutos/costo en admin (los datos ya existen: `recording_bytes`, `recording_duration_seconds`).
+
+**Archivos:** `docs/RECORDINGS_ARCHITECTURE.md`, `sql/migrate-recordings-r2.sql`, `src/lib/api/stream/lives.ts`
 
 ---
 

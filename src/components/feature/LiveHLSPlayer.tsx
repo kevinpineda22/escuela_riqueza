@@ -128,6 +128,7 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
 
       let hls: Hls | null = null;
       let mediaErrorRetries = 0;
+      let didSeekToLiveEdge = false;
 
       if (Hls.isSupported()) {
         hls = new Hls({
@@ -207,6 +208,19 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           if (!hlsRef.current) return;
           const parsed = computeLevels(hlsRef.current);
           onLevelsChange?.(parsed, data.level);
+        });
+
+        // Arrancá SIEMPRE en el borde en vivo, no desde el inicio del DVR. Sin esto,
+        // tras una pausa (que remonta este player) la reproducción volvía al principio
+        // de la grabación en vez de retomar el vivo. `liveSyncPosition` respeta el
+        // perfil de latencia elegido (smooth ~8s / low ~2-3s del edge).
+        hls.on(Hls.Events.LEVEL_UPDATED, () => {
+          if (didSeekToLiveEdge || !hls) return;
+          const edge = hls.liveSyncPosition;
+          if (edge != null && Number.isFinite(edge)) {
+            try { video.currentTime = edge; } catch { /* seekable todavía no listo */ }
+            didSeekToLiveEdge = true;
+          }
         });
 
         hls.on(Hls.Events.ERROR, (_, data) => {
