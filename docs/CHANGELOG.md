@@ -5,6 +5,16 @@
 
 ---
 
+## 2026-07-27 → 07-28
+
+### Lives — grabaciones sanas, sin fragmentación y archivado automático a R2
+- **Fix codificación de grabaciones**: el keyframe interval de OBS en `Auto` hacía fallar la codificación del VOD ("failed to be encoded"). Corregido y documentado en la guía OBS del admin (keyframe = 2, modo Avanzado).
+- **Anti-fragmentación**: nuevo `scripts/configure-live-input.mjs` que setea `recording.timeoutSeconds=60` en el Live Input de Cloudflare. Antes, cada micro-corte de OBS creaba un video nuevo → decenas de clips sueltos.
+- **Guía OBS reescrita** (`AdminLiveManager.tsx`): estabilidad primero — ethernet, bitrate ≤ 50% del upload (tabla por velocidad), keyframe 2. Se quitó el push a WebRTC (sumaba inestabilidad) y el bitrate 4000-8000 riesgoso.
+- **Archivado automático a R2**: el `worker/` ganó un **Cron Trigger** (`scheduled()`, cada 10 min) que barre las grabaciones sin archivar, las copia a R2 y borra de Stream. El botón manual queda como forzado on-demand; ambos comparten `archiveOne()`.
+- **Robustez del archivado**: descarta grabaciones muertas — video en estado `error`, o pegado en 0% de generación de MP4 > 12h — para no reintentar infinito ni tapar el batch (`limit=3`).
+- **Repo**: los 18 scripts `.sql` se movieron a `sql/` con un `sql/README.md` que cataloga cada uno; se eliminó una imagen suelta; docs de estructura actualizadas.
+
 ## 2026-05-21
 
 ### Comunidad VIP — fix UX + diseño red social
