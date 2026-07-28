@@ -45,6 +45,12 @@ function json(data: unknown, status = 200): Response {
   });
 }
 
+// Si el MP4 no llegó a generarse pasadas estas horas desde que se creó el video,
+// lo damos por muerto aunque Stream no lo marque en 'error' (hay grabaciones que
+// quedan pegadas en 0% sin errorear). Margen amplio para no matar un VOD legítimo
+// de un vivo largo que todavía se está generando.
+const STALE_HOURS = 12;
+
 /**
  * Archiva una grabación: habilita/espera el MP4, lo copia a R2, registra en la
  * base y borra el video de Stream. Idempotente: si ya se archivó (o el MP4 no
@@ -65,10 +71,15 @@ async function archiveOne(
   //    PERMANENTE: no hay MP4 que generar. Cortamos como 'failed' para no reintentar
   //    para siempre (y así no tapar el batch del cron). De paso leemos la duración.
   let durationSeconds: number | null = null;
+  let isStale = false;
   const infoRes = await fetch(`${cfBase}/${streamVideoUid}`, { headers: cfHeaders });
   if (infoRes.ok) {
     const info = (await infoRes.json()) as {
-      result?: { duration?: number; status?: { state?: string; errorReasonText?: string } };
+      result?: {
+        duration?: number;
+        created?: string;
+        status?: { state?: string; errorReasonText?: string };
+      };
     };
     if (info.result?.status?.state === 'error') {
       return {
@@ -80,7 +91,18 @@ async function archiveOne(
     if (typeof info.result?.duration === 'number') {
       durationSeconds = Math.round(info.result.duration);
     }
+    if (info.result?.created) {
+      const ageMs = Date.now() - Date.parse(info.result.created);
+      isStale = Number.isFinite(ageMs) && ageMs > STALE_HOURS * 3600 * 1000;
+    }
   }
+
+  // Video viejo cuyo MP4 nunca se generó → muerto silencioso. Lo descartamos.
+  const staleResult: ArchiveResult = {
+    status: 'failed',
+    message: `El MP4 no se generó tras ${STALE_HOURS}h; se descarta`,
+    httpStatus: 422,
+  };
 
   // 1. Estado del MP4. Si nunca se pidió, lo habilitamos y salimos como 'processing'.
   const dlUrl = `${cfBase}/${streamVideoUid}/downloads`;
@@ -102,10 +124,12 @@ async function archiveOne(
       };
       def = enableData.result?.default;
     }
+    if (isStale) return staleResult;
     return { status: 'processing', percent: def?.percentComplete ?? 0 };
   }
 
   if (def.status !== 'ready' || !def.url) {
+    if (isStale) return staleResult;
     return { status: 'processing', percent: def.percentComplete ?? 0 };
   }
 
