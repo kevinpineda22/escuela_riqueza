@@ -61,7 +61,7 @@ _Última actualización: 2026-07-08_
 
 **Hecho (2026-07-08):**
 - 📄 `docs/RECORDINGS_ARCHITECTURE.md` — spec completa (problema, solución, flujo, costos, componentes).
-- 🗄️ `docs/migrate-recordings-r2.sql` — columnas nuevas en `lives` (`recording_r2_key`, `recording_storage`, `recording_bytes`, `recording_duration_seconds`, `archived_at`) + backfill. **✅ Corrida en Supabase 2026-07-08 (5 columnas confirmadas).**
+- 🗄️ `sql/migrate-recordings-r2.sql` — columnas nuevas en `lives` (`recording_r2_key`, `recording_storage`, `recording_bytes`, `recording_duration_seconds`, `archived_at`) + backfill. **✅ Corrida en Supabase 2026-07-08 (5 columnas confirmadas).**
 - 🧩 Tipo `LiveEvent` actualizado con los campos nuevos. `npm run typecheck` ✅.
 - 🔐 `api/stream/recording-url.ts` — URL firmada de R2 (15 min), gateada por plan. Usa `aws4fetch` (instalado).
 - 🌐 Bucket `escuela-recordings` creado + 4 env R2 en Vercel (cliente, 2026-07-08).
@@ -74,7 +74,7 @@ _Última actualización: 2026-07-08_
 - Player de replay del lado del alumno (VIPLiveRoom) preferir R2 — pendiente de revisar si muestra replays.
 - KPI de minutos/costo en admin (opcional, ya hay datos).
 
-**Archivos:** `docs/RECORDINGS_ARCHITECTURE.md`, `docs/migrate-recordings-r2.sql`, `src/lib/api/stream/lives.ts`
+**Archivos:** `docs/RECORDINGS_ARCHITECTURE.md`, `sql/migrate-recordings-r2.sql`, `src/lib/api/stream/lives.ts`
 
 ---
 

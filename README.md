@@ -44,6 +44,9 @@ Ver [`env.example`](./env.example) para la lista completa con descripción.
 ```
 api/         # Vercel Serverless Functions (firma de URLs, webhooks)
 src/         # Aplicación React
+sql/         # Esquema de base de datos (Supabase) — ver sql/README.md
+scripts/     # Scripts de mantenimiento (one-off)
+worker/      # Cloudflare Worker: archivado de grabaciones a R2
 docs/        # Documentación técnica
 public/      # Assets estáticos
 ```
