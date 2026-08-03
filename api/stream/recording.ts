@@ -7,6 +7,14 @@ const BodySchema = z.object({
   live_input_id: z.string().trim().min(8).max(128),
 });
 
+interface StreamVideo {
+  uid: string;
+  created?: string;
+  duration?: number;
+  status?: { state?: string };
+  meta?: { name?: string };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return;
 
@@ -39,8 +47,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    // Endpoint dedicado: lista las grabaciones (videos) de un Live Input.
+    // Un Live Input tiene un video por cada transmisión. Si hay una transmisión
+    // en curso, el primero viene con estado 'live-inprogress'; el resto son
+    // grabaciones VOD reproducibles on-demand. Filtramos por 'ready' para
+    // quedarnos solo con grabaciones ya procesadas.
     const response = await fetch(
-      `https://api.cloudflare.com/client/v4/accounts/${accountId}/stream?type=live&live_input=${encodeURIComponent(live_input_id)}&per_page=1`,
+      `https://api.cloudflare.com/client/v4/accounts/${accountId}/stream/live_inputs/${encodeURIComponent(live_input_id)}/videos`,
       {
         headers: {
           'Authorization': `Bearer ${apiToken}`,
@@ -56,12 +69,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const data = await response.json();
+    const videos: StreamVideo[] = Array.isArray(data.result) ? data.result : [];
 
-    if (!data.result || data.result.length === 0) {
-      return res.status(200).json({ recording_uid: null, message: 'No se encontró grabación para este Live Input. Cloudflare puede tardar unos minutos en procesarla.' });
+    // Grabación más reciente que ya esté lista (descarta la que sigue 'live-inprogress'
+    // y las que todavía están procesando).
+    const readyRecording = videos
+      .filter(v => (v?.status?.state || '').toLowerCase() === 'ready')
+      .sort((a, b) => new Date(b.created || 0).getTime() - new Date(a.created || 0).getTime())[0];
+
+    if (!readyRecording) {
+      return res.status(200).json({ recording_uid: null, message: 'No se encontró grabación lista para este Live Input. Cloudflare puede tardar unos minutos en procesarla.' });
     }
 
-    const video = data.result[0];
+    const video = readyRecording;
 
     // Enable MP4 downloads for this video via Cloudflare API
     let downloadEnabled = false;
