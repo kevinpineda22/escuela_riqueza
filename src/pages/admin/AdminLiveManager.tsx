@@ -38,6 +38,7 @@ const AdminLiveManager = () => {
   const [customInputId, setCustomInputId] = useState(false);
   const [obsConnected, setObsConnected] = useState(false);
   const [archivingId, setArchivingId] = useState<string | null>(null);
+  const [linkingId, setLinkingId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<Partial<LiveEvent>>({
     title: "",
@@ -225,6 +226,33 @@ const AdminLiveManager = () => {
       });
     } else {
       toast.error(result.message, { id: `arch-${live.id}` });
+    }
+  };
+
+  // Red de seguridad: vincula la grabación de un evento ya finalizado con un solo
+  // clic, sin tener que reactivar, forzar en vivo ni pegar el UID a mano. Usa el
+  // mismo endpoint corregido que busca la grabación 'ready' del Live Input.
+  const handleLinkRecording = async (live: LiveEvent) => {
+    if (!live.stream_live_input_id) {
+      toast.error("Este evento no tiene un Live Input configurado");
+      return;
+    }
+    setLinkingId(live.id);
+    toast.loading("Buscando grabación en Cloudflare...", { id: `link-${live.id}` });
+    try {
+      const result = await fetchRecording(live.stream_live_input_id);
+      if (!result.recording_uid) {
+        toast.error(result.message || "Cloudflare todavía no generó la grabación. Reintentá en unos minutos.", { id: `link-${live.id}` });
+        return;
+      }
+      const updated = await updateLive(live.id, { recording_stream_uid: result.recording_uid });
+      setEndedLives(prev => prev.map(l => l.id === updated.id ? updated : l));
+      toast.success("Grabación vinculada", { id: `link-${live.id}`, description: "Ya podés verla y descargarla acá." });
+    } catch (err) {
+      console.error(err);
+      toast.error("Error al vincular la grabación", { id: `link-${live.id}` });
+    } finally {
+      setLinkingId(null);
     }
   };
 
@@ -962,12 +990,26 @@ const AdminLiveManager = () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="aspect-video bg-black/40 rounded-xl flex items-center justify-center border border-dashed border-white/10">
+                  <div className="aspect-video bg-black/40 rounded-xl flex flex-col items-center justify-center gap-4 border border-dashed border-white/10">
                     <div className="text-center">
                       <Video size={32} className="mx-auto text-white/20 mb-2" />
                       <p className="text-sm text-textMuted">Sin grabación disponible</p>
-                      <p className="text-[10px] text-textMuted/50 mt-1">Agregá el UID de la grabación en el editor para verla aquí.</p>
+                      <p className="text-[10px] text-textMuted/50 mt-1">
+                        {live.stream_live_input_id
+                          ? "Cloudflare puede tardar unos minutos en procesarla tras finalizar."
+                          : "Este evento no tiene un Live Input configurado."}
+                      </p>
                     </div>
+                    {live.stream_live_input_id && (
+                      <button
+                        type="button"
+                        onClick={() => handleLinkRecording(live)}
+                        disabled={linkingId === live.id}
+                        className="bg-gold/10 hover:bg-gold/20 border border-gold/30 text-gold px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-bold transition-colors disabled:opacity-50"
+                      >
+                        <Video size={16} /> {linkingId === live.id ? "Buscando..." : "Vincular grabación"}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

@@ -167,14 +167,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (parsed.kind === 'recording_ready' && parsed.videoUid) {
-      const { data, error } = await supabase
+      // Como todos los eventos comparten el mismo Live Input, matchear solo por
+      // stream_live_input_id vincularía la grabación a CUALQUIER sala sin grabación
+      // de ese input — incluida una futura 'scheduled'. Apuntamos a la sala que
+      // realmente transmitió: la más reciente que ya arrancó ('ended' o 'live',
+      // este último cubre el caso 'live' + pausado), nunca una programada futura.
+      const { data: candidates, error: findErr } = await supabase
+        .from('lives')
+        .select('id')
+        .eq('stream_live_input_id', parsed.liveInputId)
+        .in('status', ['ended', 'live'])
+        .is('recording_stream_uid', null)
+        .order('starts_at', { ascending: false })
+        .limit(1);
+      if (findErr) throw findErr;
+
+      const target = candidates?.[0];
+      if (!target) {
+        return res.status(200).json({ ok: true, action: 'set_recording', affected: 0 });
+      }
+
+      const { error } = await supabase
         .from('lives')
         .update({ recording_stream_uid: parsed.videoUid })
-        .eq('stream_live_input_id', parsed.liveInputId)
-        .is('recording_stream_uid', null)
-        .select('id');
+        .eq('id', target.id);
       if (error) throw error;
-      return res.status(200).json({ ok: true, action: 'set_recording', affected: data?.length || 0 });
+      return res.status(200).json({ ok: true, action: 'set_recording', affected: 1 });
     }
 
     return res.status(200).json({ ok: true, action: 'noop' });

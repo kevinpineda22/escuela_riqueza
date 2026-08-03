@@ -5,6 +5,14 @@
 
 ---
 
+## 2026-08-03
+
+### Lives — la grabación al finalizar ahora se vincula sí o sí
+- **Fix raíz del "Sin grabación disponible"** (`api/stream/recording.ts`): el endpoint consultaba `GET /stream?type=live&live_input=<id>`, cuyo filtro `type=live` solo matchea el video mientras transmite, nunca el VOD ya finalizado y `ready`. Por eso la grabación existía en Cloudflare (Ready y reproducible) pero volvía `recording_uid: null`. Ahora usa el endpoint dedicado `GET /stream/live_inputs/<id>/videos` y toma la grabación `ready` más reciente.
+- **Webhook endurecido** (`api/stream/cloudflare-webhook.ts`): como todos los eventos comparten el mismo Live Input, el `video.ready` vinculaba la grabación a cualquier sala sin grabación de ese input — incluida una programada futura. Ahora apunta solo a la sala que realmente transmitió (última `ended`/`live` por `starts_at`), nunca a una futura.
+- **Red de seguridad en el panel** (`AdminLiveManager.tsx`): botón **"Vincular grabación"** de un clic en la pestaña Finalizados para cualquier evento sin grabación. Recupera la grabación sin tener que Reactivar, Forzar EN VIVO ni pegar el UID a mano.
+- **Flujo resultante**: el equipo de cámaras aprieta Finalizar y se olvida; Cloudflare dispara `video.ready` y el webhook vincula solo; si algo fallara, se recupera en un clic.
+
 ## 2026-07-27 → 07-28
 
 ### Lives — grabaciones sanas, sin fragmentación y archivado automático a R2
