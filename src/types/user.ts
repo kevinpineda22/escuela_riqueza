@@ -21,4 +21,8 @@ export interface User {
   role: UserRole;
   plan: Plan;
   createdAt: string;
+  /** true si el usuario ya confirmó su email. Opcional a propósito: sesiones
+   *  guardadas antes de este campo quedan `undefined` y el guard NO las bloquea
+   *  (solo bloquea cuando es explícitamente `false`). */
+  emailConfirmed?: boolean;
 }

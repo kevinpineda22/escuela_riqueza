@@ -20,6 +20,7 @@ const mapProfileToUser = (profileData: any, authUser: any, plan: string): User =
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   plan: (plan as any) || PLANS.FREE,
   createdAt: profileData.created_at,
+  emailConfirmed: Boolean(authUser?.email_confirmed_at),
 });
 
 export async function signIn(input: LoginInput): Promise<AuthResult> {
@@ -85,6 +86,9 @@ export async function signUp(input: SignupInput, plan: string = PLANS.FREE): Pro
     email: input.email,
     password: input.password,
     options: {
+      // Sin esto, el link de confirmación redirige a la Site URL (la home) y la
+      // página /cuenta-verificada nunca se ve. Igual patrón que requestPasswordReset.
+      emailRedirectTo: `${window.location.origin}/cuenta-verificada`,
       data: {
         full_name: input.fullName,
         plan: plan,
@@ -110,6 +114,7 @@ export async function signUp(input: SignupInput, plan: string = PLANS.FREE): Pro
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     plan: (plan as any),
     createdAt: new Date().toISOString(),
+    emailConfirmed: Boolean(authData.user.email_confirmed_at),
   };
 
   return {

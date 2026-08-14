@@ -241,7 +241,7 @@ interface SignUpFormProps {
   compact?: boolean;
 }
 
-type SignupStep = "form" | "plans" | "payment";
+type SignupStep = "form" | "plans" | "payment" | "check-email";
 
 const SignUpForm = ({ onSuccess, onSwitch, compact = false }: SignUpFormProps) => {
   const { signUp } = useAuth();
@@ -298,18 +298,44 @@ const SignUpForm = ({ onSuccess, onSwitch, compact = false }: SignUpFormProps) =
       setTimeout(onSuccess, 1200);
     } catch (err) {
       setIsProcessing(false);
-      setStep("form"); // Vuelve al form si falla
+      // check_email NO es un error: el registro salió bien y solo falta confirmar
+      // el correo. Vamos a una pantalla terminal, sin formulario activo que invite
+      // a reclickear "Continuar".
+      if (err instanceof ApiError && err.code === "check_email") {
+        setStep("check-email");
+        return;
+      }
+      setStep("form"); // Vuelve al form solo si falla de verdad
       if (err instanceof ApiError) {
-        if (err.message.includes("Revisa tu correo")) {
-          setSuccessMsg(err.message);
-        } else {
-          setSubmitError(err.message);
-        }
+        setSubmitError(err.message);
       } else {
         setSubmitError("No pudimos crear tu cuenta. Inténtalo de nuevo.");
       }
     }
   };
+
+  if (step === "check-email") {
+    return (
+      <div className="w-full flex flex-col items-center text-center gap-4 py-2 animate-in fade-in duration-300">
+        <CheckCircle2 className="text-gold" size={44} />
+        <h2 className="text-xl md:text-2xl font-extrabold text-white tracking-tight">
+          Revisa tu correo
+        </h2>
+        <p className="text-sm text-textMuted leading-relaxed max-w-[280px]">
+          Te enviamos un enlace de confirmación a{" "}
+          <span className="text-white font-semibold">{savedInput?.email}</span>. Haz clic
+          en él para activar tu cuenta y entrar. Revisa también la carpeta de spam.
+        </p>
+        <button
+          type="button"
+          onClick={onSwitch}
+          className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-gold hover:text-goldHover transition-colors"
+        >
+          <ArrowLeft size={14} /> Volver al inicio de sesión
+        </button>
+      </div>
+    );
+  }
 
   if (step === "payment") {
     return (
