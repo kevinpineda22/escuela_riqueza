@@ -25,6 +25,14 @@ const RequireAuth = ({ children, role, minPlan }: RequireAuthProps) => {
     return <Navigate to={`/login${search}`} replace />;
   }
 
+  // Baranda: sesión válida pero email sin confirmar → fuera. Solo bloquea si es
+  // explícitamente false; undefined (sesiones viejas sin el campo) pasa, para no
+  // desloguear a nadie en el deploy. Hoy está latente (con confirmación ON no hay
+  // sesión sin confirmar), pero blinda el caso si algún día se apaga en Supabase.
+  if (user.emailConfirmed === false) {
+    return <Navigate to="/login" replace />;
+  }
+
   if (role && user.role !== role) {
     return <Navigate to="/" replace />;
   }
