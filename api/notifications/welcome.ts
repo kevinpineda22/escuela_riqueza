@@ -3,7 +3,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
 import { z } from 'zod';
-import WelcomeEmail from '../../emails/WelcomeEmail';
+import { welcomeEmailHtml } from './_welcome-template.js';
 
 /**
  * Dispatcher del correo de bienvenida.
@@ -93,7 +93,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     from: EMAIL_FROM,
     to: email,
     subject: '¡Bienvenido a la Escuela de la Riqueza!',
-    react: WelcomeEmail({ firstName, ctaUrl: `${APP_URL}/dashboard` }),
+    html: welcomeEmailHtml({ firstName, ctaUrl: `${APP_URL}/dashboard` }),
   });
 
   // 3) Si falló el envío, liberar la reserva para permitir reintento.
