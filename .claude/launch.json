@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "email-preview",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "email:dev"],
+      "port": 3005
+    }
+  ]
+}

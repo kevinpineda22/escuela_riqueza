@@ -26,6 +26,10 @@ supabase/.temp
 # Vercel
 .vercel
 
+# React Email — export temporal para pruebas
+.emails-out
+.react-email
+
 # Agent Teams Lite — skill registry generado
 .atl/
 
