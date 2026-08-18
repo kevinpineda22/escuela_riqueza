@@ -16,7 +16,9 @@ import { liveReminderHtml } from './_live-reminder-template.js';
  *   3. Idempotencia por (user_id, 'live_reminder', live_id): reserva ANTES de
  *      enviar; solo manda a los recién reservados → nunca duplica, aunque el
  *      cron corra cada 5 min mientras el live sigue en la ventana.
- *   4. Envía en lotes (Resend batch, máx 100 por llamada).
+ *   4. Envía uno por uno (resend.emails.send, que funciona en sandbox; el
+ *      endpoint batch necesita dominio verificado). Si un envío falla, libera
+ *      esa reserva para que el próximo cron reintente.
  */
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
@@ -61,12 +63,6 @@ function formatStartsAt(iso: string): string {
   }).format(new Date(iso));
 }
 
-function chunk<T>(arr: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
-}
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
@@ -105,6 +101,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   let totalSent = 0;
+  const sendErrors: string[] = [];
 
   for (const live of lives) {
     const plans =
@@ -153,8 +150,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const startsAtLabel = formatStartsAt(live.starts_at);
     const ctaUrl = `${APP_URL}/vip-live`;
 
-    for (const batch of chunk(recipients, 100)) {
-      const payload = batch.map((p) => ({
+    for (const p of recipients) {
+      const { error: sendErr } = await resend.emails.send({
         from: EMAIL_FROM,
         to: p.email as string,
         subject: `Tu live "${live.title}" empieza pronto`,
@@ -164,24 +161,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           startsAtLabel,
           ctaUrl,
         }),
-      }));
-
-      const { error: sendErr } = await resend.batch.send(payload);
+      });
       if (sendErr) {
-        // Liberar las reservas de este lote para que el próximo cron reintente.
+        // Liberar la reserva de este usuario para que el próximo cron reintente.
         await supabase
           .from('notification_log')
           .delete()
           .eq('event_type', 'live_reminder')
           .eq('dedupe_key', live.id)
-          .in('user_id', batch.map((p) => p.id));
-        console.error('[live-reminders] batch send error', sendErr);
+          .eq('user_id', p.id);
+        const msg = (sendErr as { message?: string }).message ?? JSON.stringify(sendErr);
+        sendErrors.push(msg);
+        console.error('[live-reminders] send error', p.email, sendErr);
         continue;
       }
-      totalSent += batch.length;
+      totalSent += 1;
     }
   }
 
-  console.log(`[live-reminders] lives=${lives.length} sent=${totalSent}`);
-  return res.status(200).json({ ok: true, lives: lives.length, sent: totalSent });
+  console.log(`[live-reminders] lives=${lives.length} sent=${totalSent} errors=${sendErrors.length}`);
+  return res.status(200).json({
+    ok: true,
+    lives: lives.length,
+    sent: totalSent,
+    ...(sendErrors.length > 0 ? { errors: sendErrors.slice(0, 3) } : {}),
+  });
 }
