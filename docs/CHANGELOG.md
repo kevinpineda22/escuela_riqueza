@@ -5,6 +5,17 @@
 
 ---
 
+## 2026-08-14 → 08-18
+
+### Notificaciones por correo — bienvenida en producción y recordatorio de lives
+- **Sistema de correos propio** (Resend + Vercel Functions): dispatchers en `api/notifications/`, plantillas gemelas (`emails/*.tsx` para preview, `api/notifications/_*-template.ts` para envío, porque Vercel no empaqueta `emails/`).
+- **Bienvenida**: trigger Postgres sobre `auth.users` que detecta `email_confirmed_at` null → fecha y llama al dispatcher vía `pg_net` (`sql/notifications-welcome.sql`). Verificada en producción.
+- **Recordatorio de live VIP**: `pg_cron` cada 5 min → dispatcher que busca lives por empezar (ventana `LIVE_REMINDER_LEAD_MINUTES`, default 30), resuelve destinatarios por `allowed_plans` contra `subscriptions` activas y envía en lotes de 100 (`sql/notifications-live-reminders.sql`).
+- **Idempotencia**: tabla `notification_log` con única `(user_id, event_type, dedupe_key)`. El recordatorio **reserva antes de enviar** y libera la reserva si Resend falla, para que el próximo cron reintente sin duplicar.
+- **Seguridad**: los dispatchers exigen el secreto compartido `NOTIFICATIONS_WEBHOOK_SECRET` en el header, comparado con `timingSafeEqual`. `notification_log` tiene RLS habilitada **sin policies** — solo el service role la toca.
+- **UX del registro**: pantalla terminal "Revisá tu correo" tras registrarse, `emailRedirectTo` a `/cuenta-verificada`, y `RequireAuth` bloquea sesiones con email sin confirmar.
+- **Estado**: todo desplegado; falta verificar el primer disparo del cron de recordatorios y salir del sandbox de Resend (hoy solo entrega al correo de la cuenta). Ver `docs/CORREOS_HANDOFF.md`.
+
 ## 2026-08-03
 
 ### Lives — la grabación al finalizar ahora se vincula sí o sí
