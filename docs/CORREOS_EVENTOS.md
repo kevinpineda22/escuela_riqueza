@@ -13,7 +13,7 @@ Mapa vivo de **todos los correos** que manda la plataforma, su disparador y a qu
 | **Confirma tu email** | Al registrarse | El nuevo usuario | Supabase Auth | Activo (plantilla default, pendiente branding) |
 | **Restablecer contraseña** | Al pedir "olvidé mi contraseña" | El usuario | Supabase Auth | Activo (plantilla default) |
 | **Bienvenida** | Al **confirmar** el email (`email_confirmed_at`: null → fecha) | El usuario que confirma | Nuestro dispatcher + Resend | ✅ Funcionando (sandbox) |
-| **Recordatorio de live VIP** | ~30 min antes de que empiece un live activo | Usuarios con plan permitido por ese live (`allowed_plans`) | Nuestro dispatcher + Resend | ✅ Construido (sandbox) |
+| **Recordatorio de live VIP** | ~30 min antes de que empiece un live activo | Usuarios con plan permitido por ese live (`allowed_plans`) | Nuestro dispatcher + Resend | ✅ Verificado (sandbox) 2026-08-18 |
 
 ## Correos planeados (aún no construidos)
 
