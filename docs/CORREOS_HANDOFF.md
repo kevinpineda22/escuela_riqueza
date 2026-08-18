@@ -4,7 +4,7 @@ Documento de continuidad. Recoge **en qué estado quedó** el sistema de correos
 
 _Última actualización: 2026-08-18._
 
-**Estado en una frase:** la **bienvenida** funciona en producción (sandbox); el **recordatorio de live** está desplegado y su cron quedó agendado, pero **todavía no se lo vio responder ni una vez** — esa es la verificación abierta.
+**Estado en una frase:** la **bienvenida** y el **recordatorio de live** funcionan de punta a punta (sandbox, verificados 2026-08-18). Lo único que falta para usuarios reales es **verificar el dominio** en Resend.
 
 > Documentos hermanos: [CORREOS_EVENTOS.md](CORREOS_EVENTOS.md) (catálogo de qué se envía y cuándo) · [CORREO_PRODUCCION.md](CORREO_PRODUCCION.md) (dominio + SMTP para salir del sandbox).
 
@@ -12,7 +12,11 @@ _Última actualización: 2026-08-18._
 
 ## Próximos pasos (en orden)
 
-### 1. Verificar que el cron del recordatorio realmente pega — ⬅️ acá quedamos
+### 1. ✅ RESUELTO (2026-08-18) — el recordatorio anda
+
+Verificado end-to-end: dio `{"ok":true,"lives":1,"sent":1}` y el correo llegó. El bug era doble: (a) `resend.batch.send` no funciona con el dominio de prueba → se cambió a `emails.send` de a uno; (b) los primeros tests corrían contra el código viejo porque el deploy de Vercel no había terminado. Ahora el dispatcher además expone en la respuesta un campo `errors` con el detalle de cada envío fallido (visible en `net._http_response`, sin escarbar logs). La guía de diagnóstico de abajo queda como referencia.
+
+<details><summary>Diagnóstico original (referencia)</summary>
 
 El job **existe y está activo** (verificado 2026-08-18):
 
@@ -48,17 +52,28 @@ Cómo leer el resultado:
 | `404 DEPLOYMENT_NOT_FOUND` | La URL tiene hash de deploy. | Usar el dominio estable. |
 | No aparece fila nueva | Worker de pg_net trabado. | `select net.worker_restart();` y reintentar. |
 
-### 2. Probar el recordatorio end-to-end
+</details>
 
-Ver "Recetas de prueba". **El sospechoso número uno es `subscriptions`**: el dispatcher busca usuarios con `status='active'` y `plan` dentro de `allowed_plans` del live. Esa tabla la llena un trigger de signup, no Stripe. Si el usuario de prueba no tiene fila activa, el endpoint devuelve `sent: 0` sin ningún error visible.
+> **Nota:** los dos correos (bienvenida y recordatorio) ya están **verificados end-to-end en sandbox**. Lo de acá abajo es lo que falta, en orden de impacto.
 
-### 3. Salir del sandbox de Resend
+### 2. Verificar el dominio en Resend — el desbloqueo grande
 
-Verificar el dominio siguiendo [CORREO_PRODUCCION.md](CORREO_PRODUCCION.md). Hasta que esto pase, **los correos solo llegan a `escueladelariquezaweb@gmail.com`** — ningún usuario real recibe nada.
+Hasta que esto pase, **todo llega solo a `escueladelariquezaweb@gmail.com`**; ningún usuario real recibe nada (enviar a otros da el error `You can only send testing emails to your own email address`, que es esperado, no un bug). Runbook completo: [CORREO_PRODUCCION.md](CORREO_PRODUCCION.md). Al terminar: cambiar la env `EMAIL_FROM` en Vercel a la dirección del dominio y **redeployar**.
 
-### 4. Futuro
+### 3. Branding del correo de confirmación de Supabase (lo del "logo")
 
-Correos de Stripe (subida de plan, pago confirmado, pago fallido) cuando se termine esa integración.
+Hoy el "confirmá tu email" y el "reset de contraseña" salen con la plantilla **gris default de Supabase** — el usuario recibe la bienvenida linda y la confirmación fea, se ven de dos empresas distintas. Dos partes:
+
+- **Diseño (se puede hacer YA, no depende del dominio):** Supabase → Authentication → Email Templates → "Confirm signup" (y también "Reset password"). Pegar HTML propio con la paleta gold/dark, **respetando la variable `{{ .ConfirmationURL }}`** (es el link del botón — si la borrás, el correo no confirma nada). Lo más rápido: reusar el header/footer de `api/notifications/_welcome-template.ts` y cambiar el cuerpo por "Confirmá tu cuenta" + un botón a `{{ .ConfirmationURL }}`.
+- **Entrega (espera al dominio):** Supabase → Authentication → SMTP Settings → Custom SMTP apuntando a Resend (host `smtp.resend.com`, usuario `resend`, contraseña = una API key de Resend, remitente = la dirección del dominio). Sin esto, el correo sale del SMTP de prueba de Supabase, que es limitado (~3-4/hora) y cae en spam.
+
+### 4. (Producto) Revisar el filtro `is_active` del recordatorio
+
+El dispatcher solo avisa de lives con `status='scheduled'` **y** `is_active=true` — o sea, solo si el live está marcado como la "sala activa". Si Iván programa un live pero recién lo activa a último momento, el aviso de 30 min antes no sale. **Decidir con Iván:** ¿el recordatorio va para *cualquier* live programado, o solo para el activo? Si es lo primero, sacar el `.eq('is_active', true)` de `api/notifications/live-reminders.ts`.
+
+### 5. Futuro: correos de Stripe
+
+Subida de plan, pago confirmado, pago fallido — cuando se termine la integración de Stripe. El patrón ya está armado; seguir el checklist "al agregar un correo nuevo" de [CORREOS_EVENTOS.md](CORREOS_EVENTOS.md).
 
 ---
 
@@ -67,7 +82,7 @@ Correos de Stripe (subida de plan, pago confirmado, pago fallido) cuando se term
 | Pieza | Estado |
 |---|---|
 | **Bienvenida** (al confirmar email) | ✅ Funciona en producción (sandbox). Verificada con `200` el 2026-08-14. |
-| **Recordatorio de live VIP** | 🟡 Código desplegado + cron agendado. Falta ver una respuesta del dispatcher. |
+| **Recordatorio de live VIP** | ✅ Verificado end-to-end (sandbox) el 2026-08-18: `{"lives":1,"sent":1}`. Envía de a uno con `emails.send` (el `batch.send` NO anda en sandbox). |
 | **Cron `live-reminders`** | ✅ Agendado y activo (`jobid 1`, `*/5`). |
 | **Fixes de UX del registro** | ✅ En `main`. |
 | **Confirmar email / reset** (Supabase) | Activos, con plantilla default (branding pendiente, ver CORREO_PRODUCCION.md). |
