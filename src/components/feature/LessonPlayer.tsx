@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Play, Headphones, ShieldAlert, MonitorPlay, Check } from "lucide-react";
+import { Play, Headphones, ShieldAlert, MonitorPlay, Check, Volume2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player.store";
 import { podcastStreamRef } from "@/components/feature/PodcastEngine";
@@ -17,7 +17,14 @@ interface LessonPlayerProps {
   moduleTitle?: string;
 }
 
-const AD_DURATION = 41;
+// Duración asumida solo mientras el anuncio no reportó su metadata real.
+const AD_DURATION_FALLBACK = 41;
+// Segundo a partir del cual se habilita "Omitir" (se recorta si el anuncio es más corto).
+const AD_SKIP_SECONDS = 30;
+// Si el anuncio no empezó a avanzar en este tiempo, mostramos ayuda manual al usuario.
+const AD_STALL_MS = 6000;
+// Y si sigue sin arrancar acá, lo salteamos: nunca dejar al usuario encerrado en el anuncio.
+const AD_BAIL_MS = 14000;
 const AD_VIDEO_ID_FALLBACK = "e5d953d28c8b3d1c1ae8f0b0825191be";
 
 const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayerProps) => {
@@ -72,7 +79,20 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
   const [adCurrentTime, setAdCurrentTime] = useState(0);
   // Key incremental para forzar remount del <Stream> de anuncio entre anuncios del mismo bloque
   const [adInstanceKey, setAdInstanceKey] = useState(0);
-  
+  // Duración real reportada por el anuncio (0 hasta que llega su metadata)
+  const [adDuration, setAdDuration] = useState(0);
+  // El anuncio SIEMPRE se monta muteado: es la única forma de que el autoplay no lo
+  // bloqueen los navegadores móviles. Apenas empieza a correr intentamos activar el
+  // sonido; si el navegador lo rechaza queda el botón manual.
+  const [adMuted, setAdMuted] = useState(true);
+  const [adStarted, setAdStarted] = useState(false);
+  const [adStalled, setAdStalled] = useState(false);
+
+  // Espejos en ref para los timeouts del watchdog (evita closures con estado viejo)
+  const adStartedRef = useRef(false);
+  const adUnmuteTriedRef = useRef(false);
+
+
   const adTrackingRef = useRef({
     hasPrerollPlayed: false,
     lastAdTime: 0,
@@ -82,6 +102,13 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const adStreamRef = useRef<any>(null);
+
+  // Progreso y "Omitir" se calculan sobre la duración REAL del anuncio. Antes se asumía
+  // una duración fija, así que un anuncio corto nunca llegaba al umbral de omitir.
+  const adTotalDuration = adDuration > 0 ? adDuration : AD_DURATION_FALLBACK;
+  const adSkipAt = adDuration > 0
+    ? Math.min(AD_SKIP_SECONDS, Math.max(3, adDuration - 1))
+    : AD_SKIP_SECONDS;
 
   const endedRef = useRef(false);
 
@@ -108,6 +135,12 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
     };
     setAdCurrentTime(0);
     setAdInstanceKey(0);
+    setAdDuration(0);
+    setAdStarted(false);
+    setAdStalled(false);
+    setAdMuted(true);
+    adStartedRef.current = false;
+    adUnmuteTriedRef.current = false;
     initializedTimeRef.current = false;
     lastSavedTimeRef.current = 0;
     endedRef.current = false;
@@ -144,6 +177,15 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
    * Si el catálogo está vacío, deja `currentAd` en null y el player usa el video fallback.
    */
   const pickAndTrackAd = () => {
+    // Cada anuncio monta una instancia limpia del <Stream>: reseteamos su estado de
+    // reproducción para que el watchdog y el indicador de carga arranquen de cero.
+    setAdDuration(0);
+    setAdStarted(false);
+    setAdStalled(false);
+    setAdMuted(true);
+    adStartedRef.current = false;
+    adUnmuteTriedRef.current = false;
+
     const picked = adsCatalog.length > 0 ? pickWeightedAd(adsCatalog) : null;
     setCurrentAd(picked);
     if (picked) {
@@ -232,6 +274,77 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
         adTrackingRef.current.isTransitioning = false;
       }, 100);
     }
+  };
+
+  /**
+   * Watchdog del anuncio. En móvil el iframe puede quedarse sin arrancar (autoplay
+   * bloqueado, red lenta, error de Cloudflare) y antes eso dejaba al usuario mirando
+   * una pantalla negra sin salida. Acá: a los AD_STALL_MS ofrecemos ayuda manual y a
+   * los AD_BAIL_MS abandonamos el bloque y seguimos con la lección.
+   */
+  useEffect(() => {
+    if (!showAd) return;
+
+    const stallTimer = window.setTimeout(() => {
+      if (!adStartedRef.current) setAdStalled(true);
+    }, AD_STALL_MS);
+
+    const bailTimer = window.setTimeout(() => {
+      if (adStartedRef.current) return;
+      // Si este anuncio no arrancó, el siguiente del bloque tampoco va a arrancar:
+      // cerramos el bloque entero en vez de encadenar fallos.
+      adTrackingRef.current.remainingInBlock = 1;
+      adTrackingRef.current.isTransitioning = false;
+      handleAdEnd();
+    }, AD_BAIL_MS);
+
+    return () => {
+      window.clearTimeout(stallTimer);
+      window.clearTimeout(bailTimer);
+    };
+  }, [showAd, adInstanceKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Marca el anuncio como efectivamente reproduciéndose e intenta activar el sonido. */
+  const markAdStarted = () => {
+    if (adStartedRef.current) return;
+    adStartedRef.current = true;
+    setAdStarted(true);
+    setAdStalled(false);
+
+    // Se monta muteado para que el autoplay móvil no lo bloquee; una vez que ya está
+    // corriendo intentamos subir el audio. Si el navegador lo revierte, onVolumeChange
+    // vuelve a mostrar el botón "Activar sonido".
+    if (adUnmuteTriedRef.current) return;
+    adUnmuteTriedRef.current = true;
+    const el = adStreamRef.current;
+    if (!el) return;
+    try {
+      el.muted = false;
+      el.volume = 1;
+      setAdMuted(false);
+    } catch { /* el navegador mantiene el mute; queda el botón manual */ }
+  };
+
+  /** Tap del usuario sobre el anuncio: destraba reproducción y sonido dentro del gesto. */
+  const handleAdTap = () => {
+    const el = adStreamRef.current;
+    if (!el) return;
+    try {
+      el.muted = false;
+      el.volume = 1;
+      setAdMuted(false);
+    } catch { /* sin sonido, pero seguimos intentando reproducir */ }
+    try {
+      const played = el.play?.();
+      // Si el navegador rechaza el play con audio, reintentamos muteado (siempre permitido).
+      played?.catch?.(() => {
+        try {
+          el.muted = true;
+          setAdMuted(true);
+          el.play?.();
+        } catch { /* sin salida: el watchdog lo va a saltear */ }
+      });
+    } catch { /* sin salida: el watchdog lo va a saltear */ }
   };
 
   const handlePodcastToggle = () => {
@@ -432,21 +545,88 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
                 src={currentAdSrc}
                 controls={false}
                 autoplay
+                muted
                 preload="auto"
                 letterboxColor="transparent"
-                className="w-full h-full [&>iframe]:w-full [&>iframe]:h-full [&>iframe]:object-contain"
+                className="w-full h-full [&>iframe]:w-full [&>iframe]:h-full"
+                onLoadedMetaData={() => {
+                  const d = adStreamRef.current?.duration;
+                  if (typeof d === "number" && d > 0) setAdDuration(d);
+                }}
+                onDurationChange={() => {
+                  const d = adStreamRef.current?.duration;
+                  if (typeof d === "number" && d > 0) setAdDuration(d);
+                }}
+                onPlaying={markAdStarted}
+                onVolumeChange={() => {
+                  // El navegador puede revertir el unmute: reflejamos el estado real.
+                  if (adStreamRef.current) setAdMuted(Boolean(adStreamRef.current.muted));
+                }}
+                onError={() => {
+                  // Anuncio roto: cerramos el bloque y seguimos con la lección.
+                  adTrackingRef.current.remainingInBlock = 1;
+                  adTrackingRef.current.isTransitioning = false;
+                  handleAdEnd();
+                }}
                 onTimeUpdate={() => {
-                  if (adStreamRef.current) {
-                    setAdCurrentTime(adStreamRef.current.currentTime);
-                  }
+                  if (!adStreamRef.current) return;
+                  const t = adStreamRef.current.currentTime;
+                  setAdCurrentTime(t);
+                  if (t > 0) markAdStarted();
                 }}
                 onEnded={() => handleAdEnd()}
               />
             </div>
 
+            {/* Capa de tap: el iframe no recibe eventos, así que un toque en cualquier
+                parte del anuncio destraba reproducción y sonido dentro del gesto real. */}
+            <button
+              type="button"
+              onClick={handleAdTap}
+              aria-label={adStarted ? "Activar sonido del anuncio" : "Reproducir anuncio"}
+              className="absolute inset-0 z-[45] cursor-default"
+            />
+
+            {!adStarted && (
+              <div className="absolute inset-0 z-[46] flex flex-col items-center justify-center gap-4 bg-black px-6 text-center pointer-events-none">
+                <div className="w-10 h-10 rounded-full border-2 border-white/15 border-t-gold animate-spin" />
+                {adStalled ? (
+                  <>
+                    <p className="text-sm text-white/70">El anuncio está tardando en cargar.</p>
+                    <button
+                      type="button"
+                      onClick={handleAdTap}
+                      className="pointer-events-auto bg-gold hover:bg-goldHover text-darker font-bold px-6 py-2.5 rounded-lg transition-all"
+                    >
+                      Tocá para reproducir
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAdEnd}
+                      className="pointer-events-auto text-xs text-white/50 hover:text-white underline underline-offset-4"
+                    >
+                      Continuar con la lección
+                    </button>
+                  </>
+                ) : (
+                  <p className="text-xs text-white/50">Cargando anuncio...</p>
+                )}
+              </div>
+            )}
+
+            {adStarted && adMuted && (
+              <button
+                type="button"
+                onClick={handleAdTap}
+                className="absolute bottom-6 left-6 z-50 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 text-white text-xs sm:text-sm font-bold px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors"
+              >
+                <Volume2 size={16} /> Activar sonido
+              </button>
+            )}
+
             <div className="absolute bottom-6 right-6 z-50 flex flex-col items-end gap-2">
-              {adCurrentTime >= 30 ? (
-                <button 
+              {adCurrentTime >= adSkipAt ? (
+                <button
                   onClick={handleAdEnd}
                   className="bg-gold hover:bg-goldHover text-darker font-bold px-6 py-2 rounded-lg transition-all shadow-[0_0_15px_rgba(204,164,59,0.5)] animate-in fade-in zoom-in duration-300"
                 >
@@ -454,13 +634,13 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
                 </button>
               ) : (
                 <div className="bg-black/60 backdrop-blur-md px-4 py-2 border border-white/10 text-xs font-medium text-white rounded-lg">
-                  Podrás omitir en {Math.max(0, Math.ceil(30 - adCurrentTime))}s...
+                  Podrás omitir en {Math.max(0, Math.ceil(adSkipAt - adCurrentTime))}s...
                 </div>
               )}
-              <div className="w-48 h-1.5 bg-black/50 rounded-full overflow-hidden border border-white/5">
+              <div className="w-32 sm:w-48 h-1.5 bg-black/50 rounded-full overflow-hidden border border-white/5">
                 <div
                   className="h-full bg-white/40 transition-all duration-300"
-                  style={{ width: `${Math.min((adCurrentTime / AD_DURATION) * 100, 100)}%` }}
+                  style={{ width: `${Math.min((adCurrentTime / adTotalDuration) * 100, 100)}%` }}
                 ></div>
               </div>
             </div>

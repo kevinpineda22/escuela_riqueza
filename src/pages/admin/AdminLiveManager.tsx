@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Radio, Image as ImageIcon, Settings2, Save, Plus, Trash2, PlayCircle, StopCircle, Calendar, Clock, Monitor, Copy, Upload, Download, Video, Info, Archive } from "lucide-react";
+import { Radio, Image as ImageIcon, Settings2, Save, Plus, Trash2, PlayCircle, StopCircle, Calendar, Clock, Monitor, Copy, Upload, Download, Video, Info, Archive, Pencil, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fetchLives, fetchEndedLives, fetchRecording, createLive, updateLive, deleteLive, setActiveLive as apiSetActiveLive, deactivateAllLives, checkLiveInputStatus, archiveRecording, fetchRecordingUrl, type LiveEvent } from "@/lib/api/stream/lives";
 import { supabase } from "@/lib/supabase";
@@ -39,6 +39,9 @@ const AdminLiveManager = () => {
   const [obsConnected, setObsConnected] = useState(false);
   const [archivingId, setArchivingId] = useState<string | null>(null);
   const [linkingId, setLinkingId] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [savingRename, setSavingRename] = useState(false);
 
   const [formData, setFormData] = useState<Partial<LiveEvent>>({
     title: "",
@@ -253,6 +256,46 @@ const AdminLiveManager = () => {
       toast.error("Error al vincular la grabación", { id: `link-${live.id}` });
     } finally {
       setLinkingId(null);
+    }
+  };
+
+  // Renombrado inline de una grabación finalizada, sin tener que reactivar la sala
+  // ni pasar por el editor. Solo toca el campo `title`.
+  const startRename = (live: LiveEvent) => {
+    setRenamingId(live.id);
+    setRenameValue(live.title || "");
+  };
+
+  const cancelRename = () => {
+    setRenamingId(null);
+    setRenameValue("");
+  };
+
+  const handleRename = async (live: LiveEvent) => {
+    const title = renameValue.trim();
+    if (!title) {
+      toast.error("El nombre no puede quedar vacío");
+      return;
+    }
+    if (title === (live.title || "")) {
+      cancelRename();
+      return;
+    }
+    setSavingRename(true);
+    try {
+      const updated = await updateLive(live.id, { title });
+      setEndedLives(prev => prev.map(l => l.id === updated.id ? updated : l));
+      if (activeLive?.id === updated.id) {
+        setActiveLive(updated);
+        setFormData(prev => ({ ...prev, title: updated.title }));
+      }
+      cancelRename();
+      toast.success("Nombre actualizado");
+    } catch (err) {
+      console.error(err);
+      toast.error("Error al renombrar la grabación");
+    } finally {
+      setSavingRename(false);
     }
   };
 
@@ -919,7 +962,53 @@ const AdminLiveManager = () => {
                   <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0 flex-1">
                     <div className="w-3 h-3 rounded-full bg-gray-600 shrink-0 mt-2 sm:mt-0" />
                     <div className="min-w-0 flex-1">
-                      <h4 className="text-white font-bold text-base sm:text-lg truncate">{live.title || "Sin título"}</h4>
+                      {renamingId === live.id ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            autoFocus
+                            value={renameValue}
+                            onChange={e => setRenameValue(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === "Enter") { e.preventDefault(); handleRename(live); }
+                              if (e.key === "Escape") { e.preventDefault(); cancelRename(); }
+                            }}
+                            maxLength={200}
+                            aria-label="Nombre de la grabación"
+                            className="min-w-0 flex-1 bg-black/40 border border-gold/30 focus:border-gold outline-none rounded-lg px-3 py-1.5 text-white font-bold text-base sm:text-lg"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleRename(live)}
+                            disabled={savingRename}
+                            aria-label="Guardar nombre"
+                            className="p-2 rounded-lg bg-gold/10 hover:bg-gold/20 border border-gold/25 text-gold transition-colors disabled:opacity-50 shrink-0"
+                          >
+                            <Check size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={cancelRename}
+                            disabled={savingRename}
+                            aria-label="Cancelar"
+                            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white/60 transition-colors disabled:opacity-50 shrink-0"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 min-w-0">
+                          <h4 className="text-white font-bold text-base sm:text-lg truncate">{live.title || "Sin título"}</h4>
+                          <button
+                            type="button"
+                            onClick={e => { e.stopPropagation(); startRename(live); }}
+                            aria-label="Renombrar grabación"
+                            title="Renombrar grabación"
+                            className="p-1.5 rounded-lg text-white/40 hover:text-gold hover:bg-gold/10 transition-colors shrink-0"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                        </div>
+                      )}
                       <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-1 items-center text-xs text-textMuted">
                         {live.starts_at && (
                           <span className="flex items-center gap-1">
