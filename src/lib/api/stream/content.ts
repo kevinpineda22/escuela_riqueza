@@ -128,6 +128,18 @@ export async function updateModuleOrder(orderedIds: string[]): Promise<void> {
   if (err) throw err.error;
 }
 
+// --- REORDENAR LECCIONES ---
+
+export async function updateLessonOrder(orderedIds: string[]): Promise<void> {
+  const results = await Promise.all(
+    orderedIds.map((id, index) =>
+      supabase.from("lessons").update({ order_index: index }).eq("id", id)
+    )
+  );
+  const err = results.find(r => r.error);
+  if (err) throw err.error;
+}
+
 // --- CLOUDFLARE ---
 
 export async function getDirectUploadUrl(size: number, name?: string): Promise<{ uploadURL: string; uid: string }> {

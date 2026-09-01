@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { BookOpen, LayoutGrid, PlayCircle, CheckCircle2 } from "lucide-react";
 import { toast } from "@/components/ui/toaster";
 import {
   fetchModules, fetchLessons, createModule, createLesson,
   updateModule, deleteModule, updateLesson, deleteLesson,
-  updateModuleOrder,
+  updateModuleOrder, updateLessonOrder,
   type Module, type Lesson
 } from "@/lib/api/stream/content";
 import { ModulesSidebar } from "@/components/feature/admin-content/ModulesSidebar";
@@ -29,12 +29,23 @@ const AdminContentManager = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [reordering, setReordering] = useState(false);
+  const [lessonOrderStatus, setLessonOrderStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [moduleSheet, setModuleSheet] = useState<ModuleSheetState>({ open: false });
   const [lessonSheet, setLessonSheet] = useState<LessonSheetState>({ open: false });
 
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingOrder = useRef<{ moduleId: string; ids: string[] } | null>(null);
+
   useEffect(() => {
     loadData();
+    return () => { if (savedTimer.current) clearTimeout(savedTimer.current); };
   }, []);
+
+  // Al cambiar de módulo, limpiar el indicador de orden.
+  useEffect(() => {
+    if (savedTimer.current) clearTimeout(savedTimer.current);
+    setLessonOrderStatus("idle");
+  }, [selectedId]);
 
   const loadData = async () => {
     try {
@@ -135,6 +146,34 @@ const AdminContentManager = () => {
       await loadData();
     } finally {
       setReordering(false);
+    }
+  };
+
+  // Reordenamiento optimista: la UI muestra el orden nuevo mientras se arrastra
+  // y recién al soltar se persiste lo que quedó guardado en `pendingOrder`.
+  const handleReorderLessons = (moduleId: string, ordered: Lesson[]) => {
+    pendingOrder.current = { moduleId, ids: ordered.map((l) => l.id) };
+    setLessonsMap((prev) => ({
+      ...prev,
+      [moduleId]: ordered.map((l, i) => ({ ...l, order_index: i })),
+    }));
+  };
+
+  const handleCommitLessonOrder = async () => {
+    const pending = pendingOrder.current;
+    if (!pending) return;
+    pendingOrder.current = null;
+
+    if (savedTimer.current) clearTimeout(savedTimer.current);
+    setLessonOrderStatus("saving");
+    try {
+      await updateLessonOrder(pending.ids);
+      setLessonOrderStatus("saved");
+      savedTimer.current = setTimeout(() => setLessonOrderStatus("idle"), 2200);
+    } catch (err) {
+      setLessonOrderStatus("idle");
+      toast.error("No se pudo guardar el orden", { description: (err as Error).message });
+      await loadData();
     }
   };
 
@@ -250,6 +289,9 @@ const AdminContentManager = () => {
             onEditLesson={(lesson) => setLessonSheet({ open: true, mode: "edit", moduleId: selectedModule.id, lesson })}
             onTogglePublishLesson={handleTogglePublishLesson}
             onDeleteLesson={handleDeleteLesson}
+            onReorderLessons={(ordered) => handleReorderLessons(selectedModule.id, ordered)}
+            onCommitLessonOrder={handleCommitLessonOrder}
+            orderStatus={lessonOrderStatus}
           />
         ) : (
           <EmptyDetail onCreate={() => setModuleSheet({ open: true, mode: "create" })} />

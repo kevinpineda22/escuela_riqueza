@@ -1,6 +1,8 @@
+import { useState } from "react";
+import { Reorder, useDragControls } from "motion/react";
 import {
   Edit2, Trash2, Eye, EyeOff, Plus, PlayCircle, AlertCircle,
-  MoreVertical, Film
+  MoreVertical, Film, GripVertical, Loader2, Check
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -20,6 +22,11 @@ interface ModuleDetailProps {
   onEditLesson: (lesson: Lesson) => void;
   onTogglePublishLesson: (lesson: Lesson) => void;
   onDeleteLesson: (lesson: Lesson) => void;
+  /** Se dispara en cada swap del arrastre — solo actualiza el orden en memoria. */
+  onReorderLessons: (ordered: Lesson[]) => void;
+  /** Se dispara al soltar (o tras mover con teclado) — persiste el orden. */
+  onCommitLessonOrder: () => void;
+  orderStatus: "idle" | "saving" | "saved";
 }
 
 export const ModuleDetail = ({
@@ -32,9 +39,23 @@ export const ModuleDetail = ({
   onEditLesson,
   onTogglePublishLesson,
   onDeleteLesson,
+  onReorderLessons,
+  onCommitLessonOrder,
+  orderStatus,
 }: ModuleDetailProps) => {
   const publishedCount = lessons.filter((l) => l.is_published).length;
   const withVideoCount = lessons.filter((l) => l.stream_uid).length;
+
+  const moveByKeyboard = (index: number, direction: "up" | "down") => {
+    const target = direction === "up" ? index - 1 : index + 1;
+    if (target < 0 || target >= lessons.length) return;
+    const next = [...lessons];
+    [next[index], next[target]] = [next[target], next[index]];
+    onReorderLessons(next);
+    onCommitLessonOrder();
+  };
+
+  const canReorder = lessons.length > 1;
 
   return (
     <div className="flex-1 flex flex-col bg-darker/40 border border-white/5 rounded-2xl overflow-hidden min-w-0">
@@ -104,7 +125,7 @@ export const ModuleDetail = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-5 text-xs text-textMuted">
+        <div className="flex items-center gap-5 text-xs text-textMuted flex-wrap">
           <span className="flex items-center gap-1.5">
             <Film size={13} className="text-white/40" />
             <strong className="text-white font-semibold">{lessons.length}</strong> lecciones
@@ -117,6 +138,27 @@ export const ModuleDetail = ({
             <PlayCircle size={13} className="text-white/40" />
             <strong className="text-white font-semibold">{withVideoCount}</strong> con video
           </span>
+
+          {canReorder && (
+            <span className="sm:ml-auto flex items-center gap-1.5" aria-live="polite">
+              {orderStatus === "saving" ? (
+                <>
+                  <Loader2 size={12} className="text-gold animate-spin" />
+                  <span className="text-gold font-semibold">Guardando orden…</span>
+                </>
+              ) : orderStatus === "saved" ? (
+                <>
+                  <Check size={12} className="text-green-400" />
+                  <span className="text-green-300 font-semibold">Orden guardado</span>
+                </>
+              ) : (
+                <>
+                  <GripVertical size={12} className="text-white/30" />
+                  <span>Arrastrá para reordenar</span>
+                </>
+              )}
+            </span>
+          )}
         </div>
       </header>
 
@@ -135,16 +177,28 @@ export const ModuleDetail = ({
           </div>
         ) : (
           <>
-            {lessons.map((lesson, idx) => (
-              <LessonRow
-                key={lesson.id}
-                lesson={lesson}
-                index={idx}
-                onEdit={() => onEditLesson(lesson)}
-                onTogglePublish={() => onTogglePublishLesson(lesson)}
-                onDelete={() => onDeleteLesson(lesson)}
-              />
-            ))}
+            <Reorder.Group
+              axis="y"
+              values={lessons}
+              onReorder={onReorderLessons}
+              className="list-none space-y-2 m-0 p-0"
+            >
+              {lessons.map((lesson, idx) => (
+                <LessonRow
+                  key={lesson.id}
+                  lesson={lesson}
+                  index={idx}
+                  canReorder={canReorder}
+                  isFirst={idx === 0}
+                  isLast={idx === lessons.length - 1}
+                  onDropped={onCommitLessonOrder}
+                  onMoveKeyboard={(dir) => moveByKeyboard(idx, dir)}
+                  onEdit={() => onEditLesson(lesson)}
+                  onTogglePublish={() => onTogglePublishLesson(lesson)}
+                  onDelete={() => onDeleteLesson(lesson)}
+                />
+              ))}
+            </Reorder.Group>
             <button
               onClick={onCreateLesson}
               className="mt-3 w-full flex items-center justify-center gap-2 py-3 border border-dashed border-white/10 rounded-xl text-white/50 hover:text-gold hover:border-gold/30 hover:bg-gold/[0.03] transition-all text-sm font-semibold"
@@ -161,21 +215,78 @@ export const ModuleDetail = ({
 interface LessonRowProps {
   lesson: Lesson;
   index: number;
+  canReorder: boolean;
+  isFirst: boolean;
+  isLast: boolean;
+  onDropped: () => void;
+  onMoveKeyboard: (direction: "up" | "down") => void;
   onEdit: () => void;
   onTogglePublish: () => void;
   onDelete: () => void;
 }
 
-const LessonRow = ({ lesson, index, onEdit, onTogglePublish, onDelete }: LessonRowProps) => {
+const LessonRow = ({
+  lesson,
+  index,
+  canReorder,
+  isFirst,
+  isLast,
+  onDropped,
+  onMoveKeyboard,
+  onEdit,
+  onTogglePublish,
+  onDelete,
+}: LessonRowProps) => {
+  const dragControls = useDragControls();
+  const [dragging, setDragging] = useState(false);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!canReorder) return;
+    if (e.key === "ArrowUp" && !isFirst) {
+      e.preventDefault();
+      onMoveKeyboard("up");
+    } else if (e.key === "ArrowDown" && !isLast) {
+      e.preventDefault();
+      onMoveKeyboard("down");
+    }
+  };
+
   return (
-    <div
+    <Reorder.Item
+      value={lesson}
+      dragListener={false}
+      dragControls={dragControls}
+      onDragStart={() => setDragging(true)}
+      onDragEnd={() => { setDragging(false); onDropped(); }}
+      whileDrag={{ scale: 1.015 }}
+      style={{ position: "relative" }}
       className={cn(
-        "group flex items-center gap-3 p-3 rounded-xl border transition-colors",
-        lesson.is_published
-          ? "bg-white/[0.02] border-white/5 hover:bg-white/[0.04] hover:border-white/10"
-          : "bg-transparent border-dashed border-white/10 opacity-70 hover:opacity-100"
+        "group flex items-center gap-2 sm:gap-3 p-3 rounded-xl border transition-colors select-none",
+        dragging
+          ? "z-30 bg-gold/[0.07] border-gold/40 shadow-2xl shadow-black/60 cursor-grabbing"
+          : lesson.is_published
+            ? "bg-white/[0.02] border-white/5 hover:bg-white/[0.04] hover:border-white/10"
+            : "bg-transparent border-dashed border-white/10 opacity-70 hover:opacity-100"
       )}
     >
+      <button
+        type="button"
+        disabled={!canReorder}
+        // Sin preventDefault: el handle debe recibir foco para que funcionen ↑ / ↓.
+        onPointerDown={(e) => { e.currentTarget.focus(); dragControls.start(e); }}
+        onKeyDown={handleKeyDown}
+        title="Arrastrá para reordenar (o usá ↑ ↓)"
+        aria-label={`Reordenar "${lesson.title}". Posición ${index + 1}. Usá las flechas arriba y abajo para moverla.`}
+        className={cn(
+          "shrink-0 -ml-1 p-1 rounded-md touch-none transition-colors",
+          "text-white/25 hover:text-gold hover:bg-white/5 cursor-grab active:cursor-grabbing",
+          "focus:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 focus-visible:text-gold",
+          "disabled:opacity-0 disabled:cursor-default disabled:pointer-events-none"
+        )}
+      >
+        <GripVertical size={16} />
+      </button>
+
       <span
         className={cn(
           "shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold font-mono",
@@ -246,6 +357,6 @@ const LessonRow = ({ lesson, index, onEdit, onTogglePublish, onDelete }: LessonR
           <Trash2 size={15} />
         </button>
       </div>
-    </div>
+    </Reorder.Item>
   );
 };
