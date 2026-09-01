@@ -5,6 +5,17 @@
 
 ---
 
+## 2026-08-31
+
+### Gestor de contenido — reordenar lecciones dentro de un módulo
+- **Drag & drop en la lista de lecciones** (`ModuleDetail.tsx`): cada fila es un `Reorder.Item` de `motion/react` (sin dependencias nuevas). Se arrastra únicamente desde un handle `GripVertical` a la izquierda (`dragListener={false}` + `useDragControls`), para que no se dispare un arrastre al apuntar a Editar / Publicar / Eliminar.
+- **Alternativa por teclado**: el handle es un `<button>` enfocable; con `↑` / `↓` mueve la lección una posición. Cubre accesibilidad y el caso de un mouse impreciso. Se desactiva solo si el módulo tiene una sola lección.
+- **Estado local durante el arrastre**: `ModuleDetail` mantiene el orden en su propio `useState` + `useRef`, así el padre no re-renderiza en cada frame. Recién al soltar (`onDragEnd`) avisa al padre.
+- **Guardado optimista** (`AdminContentManager.tsx`): la UI muestra el orden nuevo al instante y `updateLessonOrder()` persiste los `order_index` detrás. Si Supabase falla, revierte al orden previo y muestra toast de error.
+- **Feedback visible para el admin**: el header del módulo alterna entre "Arrastrá para reordenar" → "Guardando orden…" (spinner) → "Orden guardado" (check, se apaga a los ~2s), con `aria-live="polite"`.
+- **API**: nueva `updateLessonOrder(orderedIds)` en `src/lib/api/stream/content.ts`, espejo de la que ya existía para módulos.
+- **Tests**: `ModuleDetail.test.tsx` cubre presencia de handles, movimiento por teclado, límites en los extremos, handle deshabilitado con una sola lección e indicador de guardado.
+
 ## 2026-08-14 → 08-18
 
 ### Notificaciones por correo — bienvenida en producción y recordatorio de lives
