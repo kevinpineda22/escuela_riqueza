@@ -15,7 +15,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Stream } from "@cloudflare/stream-react";
 import { usePlayerStore } from "@/stores/player.store";
-import { saveUserProgress } from "@/lib/api/stream/progress";
+import { saveUserProgress, flushLessonProgress } from "@/lib/api/stream/progress";
 
 // Ref global para que LessonPlayer y GlobalPodcastPlayer puedan
 // leer currentTime / duration sin necesitar su propio iframe.
@@ -203,6 +203,29 @@ const PodcastEngine = () => {
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
+
+  // Persistir el minuto exacto cuando el usuario deja la página (cambia de pestaña,
+  // manda el navegador a segundo plano, bloquea el teléfono o cierra la app).
+  // Sin esto, el guardado periódico deja hasta 10s de escucha sin registrar.
+  // `visibilitychange:hidden` es el evento confiable en móvil; `pagehide` cubre el
+  // cierre en escritorio. Es best-effort: el navegador puede cortar la petición.
+  useEffect(() => {
+    const persistNow = () => {
+      const el = internalRef.current;
+      const currentTrack = trackRef.current;
+      if (!el || !currentTrack?.id) return;
+      flushLessonProgress(currentTrack.id, el.currentTime, el.duration, endedRef.current).catch(() => {});
+    };
+    const handleHidden = () => {
+      if (document.visibilityState === "hidden") persistNow();
+    };
+    document.addEventListener("visibilitychange", handleHidden);
+    window.addEventListener("pagehide", persistNow);
+    return () => {
+      document.removeEventListener("visibilitychange", handleHidden);
+      window.removeEventListener("pagehide", persistNow);
+    };
   }, []);
 
   // Unlock audio en móvil: la primera interacción del usuario con la página

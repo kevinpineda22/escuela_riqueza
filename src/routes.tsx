@@ -27,11 +27,19 @@ import { USER_ROLES } from "@/types/user";
 import { usePlatformSettings } from "@/hooks/usePlatformSettings";
 import { useAuthStore } from "@/stores/auth.store";
 
+/**
+ * Transición entre páginas.
+ *
+ * Anima SOLO `opacity` a propósito. `filter` y `transform` convierten a este div en
+ * containing block mientras están activos, y eso hace que cualquier `position: fixed`
+ * de la app se ancle acá en lugar de al viewport (rompía, por ejemplo, la pantalla
+ * completa del anuncio en el reproductor). No agregar blur ni desplazamientos acá.
+ */
 const PageTransition = ({ children }: { children: React.ReactNode }) => (
   <motion.div
-    initial={{ opacity: 0, filter: "blur(4px)" }}
-    animate={{ opacity: 1, filter: "blur(0px)" }}
-    exit={{ opacity: 0, filter: "blur(4px)" }}
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    exit={{ opacity: 0 }}
     transition={{ duration: 0.3, ease: "easeInOut" }}
     className="w-full min-h-[100dvh]"
   >

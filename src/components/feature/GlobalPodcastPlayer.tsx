@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { usePlayerStore } from "@/stores/player.store";
 import { podcastStreamRef } from "@/components/feature/PodcastEngine";
+import { flushLessonProgress } from "@/lib/api/stream/progress";
 import { cn } from "@/lib/utils";
 
 const SKIP_SECONDS = 10;
@@ -125,7 +126,12 @@ const GlobalPodcastPlayer = () => {
 
   const handleClose = () => {
     const el = podcastStreamRef.current;
-    if (el && track) setPlaybackProgress(track.videoId, el.currentTime);
+    if (el && track) {
+      setPlaybackProgress(track.videoId, el.currentTime);
+      // Además del store local, persistimos el minuto exacto: al cerrar el podcast
+      // el engine deja de correr y su guardado periódico ya no vuelve a dispararse.
+      flushLessonProgress(track.id, el.currentTime, el.duration).catch(() => {});
+    }
     closePlayer();
   };
 
