@@ -399,7 +399,7 @@ const StudentDashboard = () => {
 
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-10 grid grid-cols-1 lg:grid-cols-4 gap-8 relative">
         {/* Desktop Sidebar */}
-        <aside className="col-span-1 border-r border-white/10 pr-6 lg:flex flex-col hidden h-full sticky top-24 self-start max-h-[calc(100dvh-120px)] overflow-y-auto custom-scrollbar">
+        <aside data-lenis-prevent className="col-span-1 border-r border-white/10 pr-6 lg:flex flex-col hidden h-full sticky top-24 self-start max-h-[calc(100dvh-120px)] overflow-y-auto overscroll-contain custom-scrollbar">
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4 }}>
             <div className="mb-10 text-center">
               <div className="w-24 h-24 rounded-full bg-gold/10 flex items-center justify-center border-2 border-gold/30 mb-4 mx-auto text-3xl font-bold text-gold shadow-[0_0_15px_rgba(204,164,59,0.3)] overflow-hidden relative group">
@@ -595,7 +595,9 @@ const StudentDashboard = () => {
                     {dbLessonsMap[selectedModule]?.length > 0 && activeLesson ? (
                       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 xl:gap-8">
                         {/* Zona de Video y Notas (Ocupa 2 de las 3 columnas en desktop) */}
-                        <div className="xl:col-span-2 flex flex-col gap-6">
+                        {/* `min-w-0`: sin esto el grid item no baja de su contenido y un
+                            título largo empujaba la columna por encima de la playlist. */}
+                        <div className="xl:col-span-2 min-w-0 flex flex-col gap-6">
                           <div>
                             <div className="flex flex-wrap items-center gap-2 mb-2">
                               <span className="text-gold text-xs font-bold tracking-wider uppercase bg-gold/10 px-2 py-0.5 rounded border border-gold/20">
@@ -606,7 +608,12 @@ const StudentDashboard = () => {
                                 Clase {dbLessonsMap[selectedModule].findIndex(l => l.id === activeLesson.id) + 1} de {dbLessonsMap[selectedModule].length}
                               </span>
                             </div>
-                            <h2 className="text-2xl sm:text-3xl font-extrabold text-white leading-tight">{activeLesson.title}</h2>
+                            {/* Los títulos vienen con guiones bajos y sin espacios, así que
+                                el navegador los trata como UNA palabra y no los corta:
+                                `overflow-wrap: anywhere` permite el salto en cualquier punto. */}
+                            <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-white leading-tight [overflow-wrap:anywhere]">
+                              {activeLesson.title}
+                            </h2>
                           </div>
 
                           <div className="rounded-2xl overflow-hidden shadow-2xl shadow-black/50 border border-white/10 bg-black">
@@ -655,7 +662,10 @@ const StudentDashboard = () => {
 
                         {/* Zona de Lista de Lecciones */}
                         <div className="xl:col-span-1 flex flex-col gap-6">
-                          <div className="bg-black/40 border border-white/10 rounded-2xl overflow-hidden flex flex-col xl:max-h-[600px] shadow-lg">
+                          {/* El tope de altura existía solo en `xl`, así que por debajo de
+                              1280px el panel crecía con las 35 clases y no tenía scroll
+                              propio: la rueda movía la página entera. */}
+                          <div className="bg-black/40 border border-white/10 rounded-2xl overflow-hidden flex flex-col max-h-[70dvh] xl:max-h-[600px] shadow-lg">
                             <div className="p-4 border-b border-white/10 bg-white/5 backdrop-blur-md sticky top-0 z-10">
                               <h3 className="font-bold text-white text-sm flex items-center justify-between">
                                 Playlist del Módulo
@@ -665,7 +675,15 @@ const StudentDashboard = () => {
                               </h3>
                             </div>
                             
-                              <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+                              {/* `data-lenis-prevent` es lo que realmente hace scrollear esta
+                                  lista: Lenis (smooth scroll de desktop) captura la rueda a
+                                  nivel de window y mueve la página, ignorando los contenedores
+                                  anidados salvo que se marquen así. `overscroll-contain` evita
+                                  además que el scroll se encadene al llegar al borde. */}
+                              <div
+                                data-lenis-prevent
+                                className="flex-1 overflow-y-auto overscroll-contain p-2 space-y-1 custom-scrollbar"
+                              >
                                 {dbLessonsMap[selectedModule].map((lesson, index) => {
                                   const isActive = activeLesson.id === lesson.id;
                                   const isCompleted = userProgress.some(p => p.lesson_id === lesson.id && p.is_completed);
@@ -701,10 +719,15 @@ const StudentDashboard = () => {
                                     </div>
                                     
                                     <div className="flex-1 min-w-0 relative z-10 flex flex-col justify-center">
-                                      <h4 className={cn(
-                                        "text-sm font-medium leading-snug mb-1 transition-colors",
-                                        isActive ? "text-gold font-bold" : "text-white/80 group-hover:text-white"
-                                      )}>
+                                      <h4
+                                        title={lesson.title}
+                                        className={cn(
+                                          // Sin esto los títulos largos se cortaban a mitad
+                                          // de palabra y sin puntos suspensivos.
+                                          "text-sm font-medium leading-snug mb-1 transition-colors [overflow-wrap:anywhere] line-clamp-2",
+                                          isActive ? "text-gold font-bold" : "text-white/80 group-hover:text-white"
+                                        )}
+                                      >
                                         {lesson.title}
                                       </h4>
                                       <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-wider">

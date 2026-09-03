@@ -42,7 +42,9 @@ function mockStore(overrides: Record<string, unknown> = {}) {
     volume: 1,
     lastKnownTime: 0,
     lastVideoId: null,
+    hasEnded: false,
     setIsPlaying: vi.fn(),
+    setHasEnded: vi.fn(),
     setPlaybackProgress: vi.fn(),
     ...overrides,
   });
@@ -107,5 +109,113 @@ describe('PodcastEngine progress', () => {
     act(() => { window.dispatchEvent(new Event('pagehide')); });
 
     expect(flushLessonProgress).toHaveBeenCalledWith('lesson-1', 99, 600, false);
+  });
+});
+
+describe('PodcastEngine end of lesson', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    streamHandlers = {};
+    engineEl.currentTime = 0;
+    engineEl.duration = 600;
+    engineEl.paused = false;
+    engineEl.play.mockClear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('flags the track as ended and stops playback', () => {
+    const setIsPlaying = vi.fn();
+    const setHasEnded = vi.fn();
+    mockStore({ setIsPlaying, setHasEnded });
+    render(<PodcastEngine />);
+
+    engineEl.currentTime = 600;
+    act(() => { streamHandlers.onEnded?.(); });
+
+    expect(setIsPlaying).toHaveBeenCalledWith(false);
+    expect(setHasEnded).toHaveBeenCalledWith(true);
+  });
+
+  // Regresión: el watchdog revivía la pista terminada, y play() sobre una pista
+  // que llegó al final arranca de cero — la lección se repetía sola.
+  it('does not let the watchdog restart the lesson after it ended', () => {
+    mockStore();
+    render(<PodcastEngine />);
+
+    act(() => { streamHandlers.onEnded?.(); });
+    engineEl.play.mockClear();
+    engineEl.paused = true;
+
+    act(() => { vi.advanceTimersByTime(5000); });
+
+    expect(engineEl.play).not.toHaveBeenCalled();
+  });
+
+  // Regresión del orden REAL de eventos: el navegador dispara `pause` ANTES que
+  // `ended`. handlePause programa un play() a 200ms cuando endedRef todavía es false;
+  // si no se revalida dentro del timeout, la lección se reinicia sola al completarse.
+  it('does not resume when pause arrives before ended', () => {
+    mockStore();
+    render(<PodcastEngine />);
+
+    engineEl.currentTime = engineEl.duration; // llegó al final
+    act(() => { streamHandlers.onPause?.() });   // pause primero…
+    act(() => { streamHandlers.onEnded?.() });   // …y ended después
+    engineEl.play.mockClear();
+
+    act(() => { vi.advanceTimersByTime(1000); }); // el timeout de handlePause vence acá
+
+    expect(engineEl.play).not.toHaveBeenCalled();
+  });
+
+  it('does not resume from a pause fired after ended either', () => {
+    mockStore();
+    render(<PodcastEngine />);
+
+    act(() => { streamHandlers.onEnded?.(); });
+    engineEl.play.mockClear();
+
+    act(() => { streamHandlers.onPause?.(); });
+    act(() => { vi.advanceTimersByTime(1000); });
+
+    expect(engineEl.play).not.toHaveBeenCalled();
+  });
+
+  // Una pausa normal a mitad de lección SÍ debe reanudarse (el iframe suspendido).
+  it('still resumes a mid-lesson pause', () => {
+    mockStore();
+    render(<PodcastEngine />);
+
+    engineEl.currentTime = 120; // lejos del final
+    engineEl.play.mockClear();
+
+    act(() => { streamHandlers.onPause?.(); });
+    act(() => { vi.advanceTimersByTime(1000); });
+
+    expect(engineEl.play).toHaveBeenCalled();
+  });
+
+  it('plays again once the user explicitly resumes', () => {
+    mockStore({ isPlaying: true });
+    const { rerender } = render(<PodcastEngine />);
+
+    act(() => { streamHandlers.onEnded?.(); });
+
+    // handleEnded llama setIsPlaying(false); reflejamos ese estado en el store
+    mockStore({ isPlaying: false });
+    rerender(<PodcastEngine />);
+    engineEl.play.mockClear();
+    engineEl.paused = true;
+
+    // El usuario pulsa reproducir
+    mockStore({ isPlaying: true });
+    rerender(<PodcastEngine />);
+    act(() => { vi.advanceTimersByTime(2000); });
+
+    expect(engineEl.play).toHaveBeenCalled();
   });
 });

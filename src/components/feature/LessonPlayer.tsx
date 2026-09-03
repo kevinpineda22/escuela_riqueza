@@ -67,6 +67,8 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
   // Progreso guardado en base de datos
   const [showResumeModal, setShowResumeModal] = useState(false);
   const [savedProgressSeconds, setSavedProgressSeconds] = useState(0);
+  // A qué modo vuelve el usuario tras elegir en el modal de retomar.
+  const [resumeTarget, setResumeTarget] = useState<"video" | "podcast">("video");
   const lastSavedTimeRef = useRef(0);
   const lastSaveCallTimeRef = useRef(0);
 
@@ -154,7 +156,10 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
     const loadProgress = async () => {
       if (!lesson || !videoSrc) return;
       const progress = await fetchUserProgress(String(lesson.id));
-      if (progress && progress.progress_seconds > 5 && !progress.is_completed) {
+      // También se ofrece retomar en lecciones ya completadas: al repasarlas, el alumno
+      // no tiene por qué volver a buscar el punto a mano. Cuando la vio entera,
+      // `progress_seconds` vale 0 y acá no se ofrece nada.
+      if (progress && progress.progress_seconds > 5) {
         setSavedProgressSeconds(progress.progress_seconds);
       } else {
         setSavedProgressSeconds(0);
@@ -169,10 +174,11 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
     }
     
     if (savedProgressSeconds > 0) {
+      setResumeTarget("video");
       setShowResumeModal(true);
       return;
     }
-    
+
     adTrackingRef.current.lastAdTime = 0;
     startPlayback();
   };
@@ -218,19 +224,71 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
     }
   };
 
+  /**
+   * Arranca la lección en modo podcast desde `startSeconds`.
+   *
+   * Todo lo que desbloquea el audio en móvil (AudioContext + play() sobre el engine)
+   * tiene que ejecutarse dentro del mismo gesto del usuario que llamó a esta función;
+   * por eso no hay await ni timeouts antes de `playTrack`.
+   */
+  const startPodcast = (startSeconds: number) => {
+    if (!videoSrc || !lesson || !moduleTitle) return;
+    setPlayRequested(false);
+
+    try {
+      const ACtx = (window.AudioContext || (window as any).webkitAudioContext);
+      if (ACtx) {
+        const ctx = new ACtx();
+        if (ctx.state === "suspended") ctx.resume();
+        const osc = ctx.createOscillator();
+        osc.connect(ctx.destination);
+        osc.start(0);
+        osc.stop(0.001);
+        setTimeout(() => ctx.close(), 200);
+      }
+    } catch { /* fallback silencioso */ }
+
+    // Intento forzado de desbloquear el autoplay del iframe enviando play en el call stack
+    if (podcastStreamRef.current) {
+      podcastStreamRef.current.play().catch(() => {});
+    }
+
+    playTrack({
+      id: lesson.id,
+      title: lesson.titulo,
+      moduleTitle: moduleTitle,
+      videoId: videoSrc,
+    }, startSeconds);
+
+    // Se dispara al final para no interponer nada entre el gesto del usuario y
+    // el desbloqueo de autoplay. No usa await: no difiere el resto del handler.
+    flushLessonProgress(lesson.id, startSeconds, streamRef.current?.duration).catch(() => {});
+  };
+
   const handleResume = () => {
     setShowResumeModal(false);
-    pendingSeekRef.current = savedProgressSeconds;
-    adTrackingRef.current.lastAdTime = savedProgressSeconds;
+    const seconds = savedProgressSeconds;
     setSavedProgressSeconds(0);
+
+    if (resumeTarget === "podcast") {
+      startPodcast(seconds);
+      return;
+    }
+    pendingSeekRef.current = seconds;
+    adTrackingRef.current.lastAdTime = seconds;
     startPlayback();
   };
 
   const handleStartOver = () => {
     setShowResumeModal(false);
+    setSavedProgressSeconds(0);
+
+    if (resumeTarget === "podcast") {
+      startPodcast(0);
+      return;
+    }
     pendingSeekRef.current = 0;
     adTrackingRef.current.lastAdTime = 0;
-    setSavedProgressSeconds(0);
     startPlayback();
   };
 
@@ -408,40 +466,15 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
       // y la base se quedaría con el último guardado periódico (hasta 10s atrás).
       flushLessonProgress(lessonRef.current?.id, latestTime, engineDuration).catch(() => {});
     } else if (videoSrc && lesson && moduleTitle) {
-      setPlayRequested(false);
-      const currentTimeToPass = streamRef.current?.currentTime ?? lastKnownTime;
-      const videoDuration = streamRef.current?.duration;
-
-      // En móvil: desbloquear audio creando un AudioContext dentro del gesto del usuario.
-      // Esto permite que PodcastEngine pueda hacer play() sin ser bloqueado por el navegador.
-      try {
-        const ACtx = (window.AudioContext || (window as any).webkitAudioContext);
-        if (ACtx) {
-          const ctx = new ACtx();
-          if (ctx.state === "suspended") ctx.resume();
-          const osc = ctx.createOscillator();
-          osc.connect(ctx.destination);
-          osc.start(0);
-          osc.stop(0.001);
-          setTimeout(() => ctx.close(), 200);
-        }
-      } catch { /* fallback silencioso */ }
-
-      // Intento forzado de desbloquear el autoplay del iframe enviando play en el call stack
-      if (podcastStreamRef.current) {
-        podcastStreamRef.current.play().catch(() => {});
+      // Si la lección quedó a medias y todavía no se reprodujo nada, preguntamos igual
+      // que en modo video. Antes se saltaba el modal y el podcast arrancaba desde 0,
+      // perdiendo el avance del alumno.
+      if (savedProgressSeconds > 0 && !playRequested) {
+        setResumeTarget("podcast");
+        setShowResumeModal(true);
+        return;
       }
-
-      playTrack({
-        id: lesson.id,
-        title: lesson.titulo,
-        moduleTitle: moduleTitle,
-        videoId: videoSrc,
-      }, currentTimeToPass);
-
-      // Se dispara al final para no interponer nada entre el gesto del usuario y
-      // el desbloqueo de autoplay. No usa await: no difiere el resto del handler.
-      flushLessonProgress(lesson.id, currentTimeToPass, videoDuration).catch(() => {});
+      startPodcast(streamRef.current?.currentTime ?? lastKnownTime);
     }
   };
 
@@ -509,7 +542,8 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
     const currentLesson = lessonRef.current;
     const el = streamRef.current;
     if (currentLesson && el?.duration) {
-      saveUserProgress(String(currentLesson.id), el.duration, true).catch(() => {});
+      // 0 = "no hay dónde retomar": la vio entera. Sigue contando como completada.
+      saveUserProgress(String(currentLesson.id), 0, true).catch(() => {});
     }
   };
 
@@ -833,7 +867,9 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
               Iniciar de nuevo
             </Button>
             <Button onClick={handleResume} className="bg-gold text-darker hover:bg-goldHover">
-              <Play className="w-4 h-4 mr-2" /> Continuar viendo
+              {resumeTarget === "podcast"
+                ? <><Headphones className="w-4 h-4 mr-2" /> Continuar escuchando</>
+                : <><Play className="w-4 h-4 mr-2" /> Continuar viendo</>}
             </Button>
           </DialogFooter>
         </DialogContent>

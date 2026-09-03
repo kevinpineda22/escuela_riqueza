@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import LessonPlayer from './LessonPlayer';
 import { usePlayerStore } from '@/stores/player.store';
 import { fetchPlatformSettings } from '@/lib/api/admin/settings';
-import { flushLessonProgress } from '@/lib/api/stream/progress';
+import { flushLessonProgress, fetchUserProgress } from '@/lib/api/stream/progress';
 import { podcastStreamRef } from '@/components/feature/PodcastEngine';
 
 // Tiempo que reporta el <Stream> local simulado; los tests lo ajustan.
@@ -125,6 +125,7 @@ describe('LessonPlayer podcast progress persistence', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     podcastStreamRef.current = null;
+    (fetchUserProgress as any).mockResolvedValue(null);
     localStreamState.currentTime = 0;
     localStreamState.duration = 100;
     (fetchPlatformSettings as any).mockResolvedValue({
@@ -189,6 +190,124 @@ describe('LessonPlayer podcast progress persistence', () => {
     expect(closePlayer).toHaveBeenCalled();
     // Toma el tiempo del engine, no del <Stream> local (que está desmontado)
     expect(flushLessonProgress).toHaveBeenCalledWith('lesson-1', 77, 100);
+  });
+
+  // Regresión: ir directo a podcast en una lección a medias saltaba el modal y
+  // arrancaba el audio desde 0, perdiendo el avance del alumno.
+  it('offers to resume before starting the podcast on a half-watched lesson', async () => {
+    const playTrack = vi.fn();
+    (fetchUserProgress as any).mockResolvedValue({ progress_seconds: 137, is_completed: false });
+    (usePlayerStore as any).mockReturnValue({
+      playTrack,
+      isPodcastMode: false,
+      closePlayer: vi.fn(),
+      track: null,
+      lastKnownTime: 0,
+      setPlaybackProgress: vi.fn(),
+    });
+
+    renderPlayer();
+    await waitFor(() => expect(fetchPlatformSettings).toHaveBeenCalled());
+    await waitFor(() => expect(fetchUserProgress).toHaveBeenCalled());
+
+    // Ir directo al modo podcast, sin haber reproducido el video
+    fireEvent.click(screen.getByTestId('podcast-toggle'));
+
+    // No arranca todavía: primero pregunta
+    expect(playTrack).not.toHaveBeenCalled();
+    expect(screen.getByText(/Retomar Lección/i)).toBeTruthy();
+    expect(screen.getByText(/Continuar escuchando/i)).toBeTruthy();
+
+    fireEvent.click(screen.getByText(/Continuar escuchando/i));
+
+    // Y arranca en el minuto guardado, no en cero
+    expect(playTrack).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'lesson-1' }),
+      137
+    );
+  });
+
+  it('starts the podcast from zero when the user chooses to start over', async () => {
+    const playTrack = vi.fn();
+    (fetchUserProgress as any).mockResolvedValue({ progress_seconds: 137, is_completed: false });
+    (usePlayerStore as any).mockReturnValue({
+      playTrack,
+      isPodcastMode: false,
+      closePlayer: vi.fn(),
+      track: null,
+      lastKnownTime: 0,
+      setPlaybackProgress: vi.fn(),
+    });
+
+    renderPlayer();
+    await waitFor(() => expect(fetchUserProgress).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByTestId('podcast-toggle'));
+    fireEvent.click(screen.getByText(/Iniciar de nuevo/i));
+
+    expect(playTrack).toHaveBeenCalledWith(expect.objectContaining({ id: 'lesson-1' }), 0);
+  });
+
+  // Opción elegida por el cliente: repasar una lección terminada también ofrece retomar.
+  it('offers to resume a lesson that is already completed', async () => {
+    (fetchUserProgress as any).mockResolvedValue({ progress_seconds: 250, is_completed: true });
+    (usePlayerStore as any).mockReturnValue({
+      playTrack: vi.fn(),
+      isPodcastMode: false,
+      closePlayer: vi.fn(),
+      track: null,
+      lastKnownTime: 0,
+      setPlaybackProgress: vi.fn(),
+    });
+
+    renderPlayer();
+    await waitFor(() => expect(fetchUserProgress).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByTestId('main-play-button'));
+
+    expect(screen.getByText(/Retomar Lección/i)).toBeTruthy();
+    expect(screen.getByText(/minuto 4:10/i)).toBeTruthy();
+  });
+
+  // Verla entera guarda 0 como punto de retomo, así que no molesta al volver a entrar.
+  it('does not offer to resume a lesson watched to the end', async () => {
+    (fetchUserProgress as any).mockResolvedValue({ progress_seconds: 0, is_completed: true });
+    (usePlayerStore as any).mockReturnValue({
+      playTrack: vi.fn(),
+      isPodcastMode: false,
+      closePlayer: vi.fn(),
+      track: null,
+      lastKnownTime: 0,
+      setPlaybackProgress: vi.fn(),
+    });
+
+    renderPlayer();
+    await waitFor(() => expect(fetchUserProgress).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByTestId('main-play-button'));
+
+    expect(screen.queryByText(/Retomar Lección/i)).toBeNull();
+  });
+
+  it('goes straight to podcast when there is no saved progress', async () => {
+    const playTrack = vi.fn();
+    (fetchUserProgress as any).mockResolvedValue(null);
+    (usePlayerStore as any).mockReturnValue({
+      playTrack,
+      isPodcastMode: false,
+      closePlayer: vi.fn(),
+      track: null,
+      lastKnownTime: 0,
+      setPlaybackProgress: vi.fn(),
+    });
+
+    renderPlayer();
+    await waitFor(() => expect(fetchUserProgress).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByTestId('podcast-toggle'));
+
+    expect(screen.queryByText(/Retomar Lección/i)).toBeNull();
+    expect(playTrack).toHaveBeenCalled();
   });
 
   it('saves progress from the podcast engine when leaving the lesson while listening', async () => {

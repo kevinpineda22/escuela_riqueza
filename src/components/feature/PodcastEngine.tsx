@@ -71,6 +71,18 @@ function createSilentWavObjectURL(durationSec = 60): string {
   return URL.createObjectURL(blob);
 }
 
+/**
+ * ¿La pista está en el final? Red de seguridad independiente del evento `ended`:
+ * reanudar acá reiniciaría la lección desde cero.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function isAtEnd(el: any): boolean {
+  const duration = Number(el?.duration);
+  const current = Number(el?.currentTime);
+  if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(current)) return false;
+  return current >= duration - 0.5;
+}
+
 const CONTAINER_STYLE: React.CSSProperties = {
   position: "fixed",
   // 320×180 — dimensiones reales para que el browser NO clasifique
@@ -121,6 +133,7 @@ const PodcastEngine = () => {
     lastKnownTime,
     lastVideoId,
     setIsPlaying,
+    setHasEnded,
     setPlaybackProgress,
   } = usePlayerStore();
 
@@ -163,6 +176,8 @@ const PodcastEngine = () => {
   useEffect(() => {
     if (!internalRef.current || !isPodcastMode || !track) return;
     if (isPlaying) {
+      // El usuario volvió a darle play tras terminar: reactivamos el watchdog.
+      endedRef.current = false;
       internalRef.current?.play().catch(() => {});
     } else {
       internalRef.current?.pause();
@@ -183,7 +198,11 @@ const PodcastEngine = () => {
   useEffect(() => {
     const id = setInterval(() => {
       const el = internalRef.current;
-      if (!el || !isPlayingRef.current || !isPodcastModeRef.current) return;
+      // `endedRef` primero: al terminar la lección el elemento queda pausado a
+      // propósito. Sin este guard el watchdog lo "revive" y, como play() sobre una
+      // pista terminada arranca de cero, la lección se reproducía sola de nuevo.
+      if (!el || endedRef.current || isAtEnd(el)) return;
+      if (!isPlayingRef.current || !isPodcastModeRef.current) return;
       if (el.paused) {
         el.play().catch(() => {});
       }
@@ -196,6 +215,7 @@ const PodcastEngine = () => {
     const handleVisibility = () => {
       if (document.visibilityState === "visible" && isPlayingRef.current && isPodcastModeRef.current) {
         setTimeout(() => {
+          if (endedRef.current || isAtEnd(internalRef.current)) return;
           internalRef.current?.play().catch(() => {});
           hijackerRef.current?.play().catch(() => {});
         }, 200);
@@ -338,6 +358,7 @@ const PodcastEngine = () => {
       }
       initializedRef.current = true;
     }
+    if (endedRef.current) return;
     if (isPlayingRef.current && isPodcastModeRef.current) {
       internalRef.current?.play().catch(() => {});
     }
@@ -394,8 +415,16 @@ const PodcastEngine = () => {
   };
 
   const handlePause = () => {
+    if (endedRef.current || isAtEnd(internalRef.current)) return;
     if (isPlayingRef.current && isPodcastModeRef.current) {
       setTimeout(() => {
+        // Revalidar SIEMPRE acá dentro: al terminar la lección el navegador dispara
+        // `pause` ANTES que `ended`, así que en la primera comprobación `endedRef`
+        // todavía era false. Para cuando corre este timeout ya llegó `ended`, y
+        // reanudar una pista terminada la reinicia desde cero — era la causa de que
+        // la lección volviera a sonar sola al completarse.
+        if (endedRef.current || isAtEnd(internalRef.current)) return;
+        if (!isPlayingRef.current || !isPodcastModeRef.current) return;
         internalRef.current?.play().catch(() => {});
       }, 200);
     }
@@ -404,9 +433,11 @@ const PodcastEngine = () => {
   const handleEnded = () => {
     endedRef.current = true;
     setIsPlaying(false);
+    setHasEnded(true);
     const currentTrack = trackRef.current;
     if (currentTrack?.id && internalRef.current?.duration) {
-      saveUserProgress(String(currentTrack.id), internalRef.current.duration, true).catch(() => {});
+      // 0 = "no hay dónde retomar": la escuchó entera. Sigue contando como completada.
+      saveUserProgress(String(currentTrack.id), 0, true).catch(() => {});
     }
   };
 

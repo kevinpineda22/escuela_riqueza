@@ -24,23 +24,30 @@ const track = {
   moduleTitle: 'Módulo 1',
 };
 
-describe('GlobalPodcastPlayer close', () => {
-  const setPlaybackProgress = vi.fn();
-  const closePlayer = vi.fn();
+const setPlaybackProgress = vi.fn();
+const closePlayer = vi.fn();
+const setIsPlaying = vi.fn();
 
+function mockStore(overrides: Record<string, unknown> = {}) {
+  (usePlayerStore as any).mockReturnValue({
+    track,
+    isPlaying: true,
+    isPodcastMode: true,
+    hasEnded: false,
+    volume: 1,
+    setIsPlaying,
+    setVolume: vi.fn(),
+    setPlaybackProgress,
+    closePlayer,
+    ...overrides,
+  });
+}
+
+describe('GlobalPodcastPlayer close', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     podcastStreamRef.current = null;
-    (usePlayerStore as any).mockReturnValue({
-      track,
-      isPlaying: true,
-      isPodcastMode: true,
-      volume: 1,
-      setIsPlaying: vi.fn(),
-      setVolume: vi.fn(),
-      setPlaybackProgress,
-      closePlayer,
-    });
+    mockStore();
   });
 
   it('persists the exact minute before closing the player', () => {
@@ -60,5 +67,47 @@ describe('GlobalPodcastPlayer close', () => {
 
     expect(flushLessonProgress).not.toHaveBeenCalled();
     expect(closePlayer).toHaveBeenCalled();
+  });
+});
+
+describe('GlobalPodcastPlayer completed state', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    podcastStreamRef.current = { currentTime: 600, duration: 600, play: vi.fn().mockResolvedValue(undefined), pause: vi.fn() };
+  });
+
+  it('announces the lesson as completed instead of the module name', () => {
+    mockStore({ hasEnded: true, isPlaying: false });
+    render(<GlobalPodcastPlayer />);
+
+    expect(screen.getByText('Lección completada')).toBeTruthy();
+    expect(screen.queryByText('Módulo 1')).toBeNull();
+  });
+
+  it('offers to listen again once completed', () => {
+    mockStore({ hasEnded: true, isPlaying: false });
+    render(<GlobalPodcastPlayer />);
+
+    expect(screen.getByLabelText('Escuchar de nuevo')).toBeTruthy();
+    expect(screen.queryByLabelText('Reproducir')).toBeNull();
+  });
+
+  it('restarts from the beginning when listening again', () => {
+    mockStore({ hasEnded: true, isPlaying: false });
+    render(<GlobalPodcastPlayer />);
+
+    fireEvent.click(screen.getByLabelText('Escuchar de nuevo'));
+
+    expect(podcastStreamRef.current.currentTime).toBe(0);
+    expect(podcastStreamRef.current.play).toHaveBeenCalled();
+    expect(setIsPlaying).toHaveBeenCalledWith(true);
+  });
+
+  it('keeps the normal controls while the lesson is still playing', () => {
+    mockStore({ hasEnded: false, isPlaying: true });
+    render(<GlobalPodcastPlayer />);
+
+    expect(screen.queryByText('Lección completada')).toBeNull();
+    expect(screen.getByLabelText('Pausar')).toBeTruthy();
   });
 });

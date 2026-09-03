@@ -6,9 +6,10 @@
  * al navegar entre rutas.
  */
 import { useEffect, useRef, useState } from "react";
+import { motion } from "motion/react";
 import {
   Play, Pause, X, Volume2, VolumeX,
-  RotateCcw, RotateCw, Headphones,
+  RotateCcw, RotateCw, Headphones, Check,
 } from "lucide-react";
 import { usePlayerStore } from "@/stores/player.store";
 import { podcastStreamRef } from "@/components/feature/PodcastEngine";
@@ -59,6 +60,7 @@ const GlobalPodcastPlayer = () => {
     track,
     isPlaying,
     isPodcastMode,
+    hasEnded,
     volume,
     setIsPlaying,
     setVolume,
@@ -100,6 +102,9 @@ const GlobalPodcastPlayer = () => {
       el.pause();
       setIsPlaying(false);
     } else {
+      // Tras completar la lección volvemos al inicio explícitamente: es la única
+      // forma de reproducir de nuevo, y así el usuario lo elige en vez de sufrirlo.
+      if (hasEnded) el.currentTime = 0;
       el.play().catch(() => {});
       setIsPlaying(true);
     }
@@ -143,12 +148,26 @@ const GlobalPodcastPlayer = () => {
   };
 
   return (
-    <div className="fixed bottom-0 left-0 w-full z-[100] bg-darker/95 backdrop-blur-xl border-t border-white/10 shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
+    <motion.div
+      initial={{ y: "100%" }}
+      animate={{ y: 0 }}
+      transition={{ type: "spring", stiffness: 260, damping: 30 }}
+      className={cn(
+        "fixed bottom-0 left-0 w-full z-[100] bg-darker/95 backdrop-blur-xl border-t shadow-[0_-10px_30px_rgba(0,0,0,0.5)]",
+        // Respetar el home indicator del iPhone: sin esto los controles quedan
+        // debajo de la barra del sistema.
+        "pb-[env(safe-area-inset-bottom)]",
+        hasEnded ? "border-green-500/30" : "border-white/10"
+      )}
+    >
       {/* Progress bar — top edge (mobile primary scrubber) */}
       <div className="absolute top-0 left-0 w-full h-1 bg-white/5 cursor-pointer">
         <div
-          className="h-full bg-gold transition-all duration-100 relative"
-          style={{ width: `${progress}%` }}
+          className={cn(
+            "h-full transition-all duration-100 relative",
+            hasEnded ? "bg-green-500" : "bg-gold"
+          )}
+          style={{ width: `${hasEnded ? 100 : progress}%` }}
         />
         <input
           type="range" min="0" max="100" step="0.1"
@@ -162,23 +181,46 @@ const GlobalPodcastPlayer = () => {
       <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2 md:py-3 flex flex-col md:grid md:grid-cols-3 md:items-center gap-2 md:gap-4">
         {/* LEFT — info card */}
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-11 h-11 md:w-14 md:h-14 bg-gold/10 rounded-xl border border-gold/30 flex items-center justify-center shrink-0 shadow-lg relative overflow-hidden">
-            <Headphones className="text-gold w-5 h-5 md:w-7 md:h-7" />
-            {isPlaying && (
-              <div className="absolute bottom-1.5 flex gap-0.5 items-end h-3">
-                <div className="w-0.5 bg-gold h-full animate-[pulse_1s_ease-in-out_infinite]" />
-                <div className="w-0.5 bg-gold h-2/3 animate-[pulse_1s_ease-in-out_infinite_0.2s]" />
-                <div className="w-0.5 bg-gold h-4/5 animate-[pulse_1s_ease-in-out_infinite_0.4s]" />
-              </div>
+          <div className={cn(
+            "w-11 h-11 md:w-14 md:h-14 rounded-xl border flex items-center justify-center shrink-0 shadow-lg relative overflow-hidden transition-colors",
+            hasEnded ? "bg-green-500/10 border-green-500/40" : "bg-gold/10 border-gold/30"
+          )}>
+            {hasEnded ? (
+              <Check className="text-green-500 w-5 h-5 md:w-7 md:h-7" />
+            ) : (
+              <>
+                <Headphones className="text-gold w-5 h-5 md:w-7 md:h-7" />
+                {isPlaying && (
+                  // Ecualizador real: barras que cambian de alto. Antes usaban `pulse`,
+                  // que solo hace fade y no se leía como audio sonando.
+                  <div className="absolute bottom-1.5 flex gap-0.5 items-end h-3">
+                    {[0, 0.15, 0.3].map((delay, i) => (
+                      <motion.span
+                        key={i}
+                        className="w-0.5 bg-gold rounded-full"
+                        animate={{ height: ["30%", "100%", "45%", "80%", "30%"] }}
+                        transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut", delay }}
+                        style={{ height: "30%" }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </div>
           <div className="min-w-0 flex-1">
             <h4 className="text-white font-bold text-sm md:text-base truncate leading-tight">
               {track.title}
             </h4>
-            <p className="text-textMuted text-[11px] md:text-xs truncate uppercase tracking-wider mt-0.5">
-              {track.moduleTitle}
-            </p>
+            {hasEnded ? (
+              <p className="text-green-400 text-[11px] md:text-xs truncate font-semibold mt-0.5 flex items-center gap-1">
+                <Check size={12} className="shrink-0" /> Lección completada
+              </p>
+            ) : (
+              <p className="text-textMuted text-[11px] md:text-xs truncate uppercase tracking-wider mt-0.5">
+                {track.moduleTitle}
+              </p>
+            )}
           </div>
 
           {/* Mobile-only close */}
@@ -207,17 +249,22 @@ const GlobalPodcastPlayer = () => {
 
             <button
               onClick={togglePlay}
-              aria-label={isPlaying ? "Pausar" : "Reproducir"}
+              aria-label={hasEnded ? "Escuchar de nuevo" : isPlaying ? "Pausar" : "Reproducir"}
+              title={hasEnded ? "Escuchar de nuevo" : undefined}
               className={cn(
                 "w-12 h-12 rounded-full flex items-center justify-center shrink-0",
-                "bg-white text-darker hover:scale-105 active:scale-95",
-                "transition-transform shadow-[0_0_18px_rgba(255,255,255,0.18)]",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/60",
+                "hover:scale-105 active:scale-95",
+                "transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/60",
+                hasEnded
+                  ? "bg-green-500 text-darker shadow-[0_0_18px_rgba(34,197,94,0.35)]"
+                  : "bg-white text-darker shadow-[0_0_18px_rgba(255,255,255,0.18)]"
               )}
             >
-              {isPlaying
-                ? <Pause size={20} className="fill-current" />
-                : <Play size={20} className="fill-current ml-0.5" />
+              {hasEnded
+                ? <RotateCcw size={20} />
+                : isPlaying
+                  ? <Pause size={20} className="fill-current" />
+                  : <Play size={20} className="fill-current ml-0.5" />
               }
             </button>
 
@@ -283,7 +330,7 @@ const GlobalPodcastPlayer = () => {
           <span>{formatTime(duration)}</span>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 
