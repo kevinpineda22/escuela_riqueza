@@ -137,21 +137,26 @@ const ModulePreview = () => {
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="flex flex-wrap items-center gap-3 mb-10 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-gold/10 to-darker border border-gold/20"
+                  // Apilado en móvil y en fila desde `md`. NO usar `flex-wrap` acá: junto
+                  // con `min-w-0` el texto puede encogerse hasta 0, así que nunca se
+                  // dispara el salto de línea y el párrafo colapsa a una palabra por fila.
+                  className="flex flex-col md:flex-row md:items-center gap-4 mb-10 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-gold/10 to-darker border border-gold/20"
                 >
-                  <div className="w-10 h-10 rounded-full bg-gold/20 flex items-center justify-center shrink-0">
-                    <UserPlus size={18} className="text-gold" />
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    <div className="w-10 h-10 rounded-full bg-gold/20 flex items-center justify-center shrink-0">
+                      <UserPlus size={18} className="text-gold" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-white font-semibold text-sm sm:text-base">¿Quieres más contenido?</p>
+                      <p className="text-textMuted text-xs sm:text-sm text-pretty">Regístrate gratis y desbloquea más lecciones. Los planes de pago te dan acceso total sin anuncios.</p>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white font-semibold text-sm sm:text-base">¿Quieres más contenido?</p>
-                    <p className="text-textMuted text-xs sm:text-sm">Regístrate gratis y desbloquea más lecciones. Los planes de pago te dan acceso total sin anuncios.</p>
-                  </div>
-                  <div className="flex gap-2 shrink-0">
-                    <Link to="/login" className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-white/20 text-white text-sm font-medium hover:bg-white/5 transition-colors">
-                      <LogIn size={14} /> Entrar
+                  <div className="flex flex-wrap gap-2 w-full md:w-auto md:shrink-0">
+                    <Link to="/login" className="flex-1 md:flex-none basis-32 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg border border-white/20 text-white text-sm font-medium hover:bg-white/5 transition-colors whitespace-nowrap">
+                      <LogIn size={14} className="shrink-0" /> Entrar
                     </Link>
-                    <Link to="/registro" className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gold text-darker text-sm font-bold hover:bg-goldHover transition-colors">
-                      <UserPlus size={14} /> Crear cuenta gratis
+                    <Link to="/registro" className="flex-1 md:flex-none basis-40 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-gold text-darker text-sm font-bold hover:bg-goldHover transition-colors whitespace-nowrap">
+                      <UserPlus size={14} className="shrink-0" /> Crear cuenta gratis
                     </Link>
                   </div>
                 </motion.div>
