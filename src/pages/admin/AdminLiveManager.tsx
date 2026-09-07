@@ -273,9 +273,23 @@ const AdminLiveManager = () => {
     }
   };
 
-  /** Guarda el UID elegido en la sala y refresca la lista de finalizados. */
+  /**
+   * Guarda el UID elegido en la sala y refresca la lista de finalizados.
+   *
+   * Si la sala ya estaba archivada, hay que limpiar los campos de R2: el player
+   * prioriza R2 sobre Stream (`RecordingPlayer`: si hay `recording_r2_key` nunca mira
+   * `recording_stream_uid`), así que sin esto se seguiría viendo la grabación anterior.
+   * La sala vuelve a apuntar a Stream y queda lista para archivarse de nuevo.
+   */
   const applyRecording = async (live: LiveEvent, recordingUid: string) => {
-    const updated = await updateLive(live.id, { recording_stream_uid: recordingUid });
+    const updated = await updateLive(live.id, {
+      recording_stream_uid: recordingUid,
+      recording_r2_key: null,
+      recording_storage: "stream",
+      recording_bytes: null,
+      recording_duration_seconds: null,
+      archived_at: null,
+    });
     setEndedLives(prev => prev.map(l => l.id === updated.id ? updated : l));
     return updated;
   };
