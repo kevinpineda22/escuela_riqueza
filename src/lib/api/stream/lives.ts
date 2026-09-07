@@ -172,11 +172,32 @@ export async function checkLiveInputStatus(liveInputId: string): Promise<{ conne
   }
 }
 
-export async function fetchRecording(liveInputId: string): Promise<{ recording_uid: string | null; message?: string }> {
+/** Una de las transmisiones grabadas de un Live Input. */
+export interface StreamRecording {
+  uid: string;
+  created: string | null;
+  duration: number;
+  name: string | null;
+}
+
+export interface RecordingLookup {
+  recording_uid: string | null;
+  /** Todas las grabaciones listas, de la más larga a la más corta. */
+  recordings?: StreamRecording[];
+  duration?: number;
+  message?: string;
+}
+
+/**
+ * Busca la grabación de un Live Input. Sin `videoUid` sugiere la más larga (el vivo
+ * real); con `videoUid` confirma la que el admin eligió de la lista y le habilita la
+ * descarga MP4.
+ */
+export async function fetchRecording(liveInputId: string, videoUid?: string): Promise<RecordingLookup> {
   try {
     const res = await authedFetch("/api/stream/recording", {
       method: "POST",
-      body: JSON.stringify({ live_input_id: liveInputId }),
+      body: JSON.stringify({ live_input_id: liveInputId, ...(videoUid ? { video_uid: videoUid } : {}) }),
     });
     if (!res.ok) throw new Error("Error al consultar grabación");
     return await res.json();
