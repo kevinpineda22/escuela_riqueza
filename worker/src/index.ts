@@ -71,7 +71,10 @@ async function archiveOne(
   //    PERMANENTE: no hay MP4 que generar. Cortamos como 'failed' para no reintentar
   //    para siempre (y así no tapar el batch del cron). De paso leemos la duración.
   let durationSeconds: number | null = null;
-  let isStale = false;
+  // Antigüedad del VIDEO. Por sí sola NO significa que el MP4 esté muerto: una
+  // grabación de la semana pasada puede archivarse hoy sin problema. Solo se usa
+  // combinada con "el MP4 ya estaba pedido y no avanzó ni un 1%".
+  let isOldVideo = false;
   const infoRes = await fetch(`${cfBase}/${streamVideoUid}`, { headers: cfHeaders });
   if (infoRes.ok) {
     const info = (await infoRes.json()) as {
@@ -93,14 +96,15 @@ async function archiveOne(
     }
     if (info.result?.created) {
       const ageMs = Date.now() - Date.parse(info.result.created);
-      isStale = Number.isFinite(ageMs) && ageMs > STALE_HOURS * 3600 * 1000;
+      isOldVideo = Number.isFinite(ageMs) && ageMs > STALE_HOURS * 3600 * 1000;
     }
   }
 
-  // Video viejo cuyo MP4 nunca se generó → muerto silencioso. Lo descartamos.
+  // MP4 pedido hace rato que nunca arrancó → muerto silencioso. Lo descartamos para
+  // que el cron no lo reintente para siempre y tape el batch.
   const staleResult: ArchiveResult = {
     status: 'failed',
-    message: `El MP4 no se generó tras ${STALE_HOURS}h; se descarta`,
+    message: `El MP4 quedó sin generarse tras ${STALE_HOURS}h; se descarta`,
     httpStatus: 422,
   };
 
@@ -124,13 +128,18 @@ async function archiveOne(
       };
       def = enableData.result?.default;
     }
-    if (isStale) return staleResult;
+    // El MP4 se acaba de pedir EN ESTA MISMA PASADA: siempre hay que darle tiempo.
+    // Descartarlo acá por la edad del video hacía imposible archivar cualquier
+    // grabación de más de STALE_HOURS (incidente del 2026-09-07).
     return { status: 'processing', percent: def?.percentComplete ?? 0 };
   }
 
   if (def.status !== 'ready' || !def.url) {
-    if (isStale) return staleResult;
-    return { status: 'processing', percent: def.percentComplete ?? 0 };
+    // El pedido ya existía de una pasada anterior. Solo lo damos por muerto si el
+    // video es viejo Y la codificación nunca avanzó: mientras haya progreso, espera.
+    const percent = def.percentComplete ?? 0;
+    if (isOldVideo && percent <= 0) return staleResult;
+    return { status: 'processing', percent };
   }
 
   // 2. Descargar el MP4 de Stream y subirlo a R2 (streaming, sin bufferear en memoria).
