@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { Radio, Image as ImageIcon, Settings2, Save, Plus, Trash2, PlayCircle, StopCircle, Calendar, Clock, Monitor, Copy, Upload, Download, Video, Info, Archive, Pencil, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { fetchLives, fetchEndedLives, fetchRecording, createLive, updateLive, deleteLive, setActiveLive as apiSetActiveLive, deactivateAllLives, checkLiveInputStatus, archiveRecording, fetchRecordingUrl, type LiveEvent } from "@/lib/api/stream/lives";
+import { fetchLives, fetchEndedLives, fetchRecording, createLive, updateLive, deleteLive, setActiveLive as apiSetActiveLive, deactivateAllLives, checkLiveInputStatus, archiveRecording, fetchRecordingUrl, type LiveEvent, type StreamRecording } from "@/lib/api/stream/lives";
 import { supabase } from "@/lib/supabase";
 import { authedFetch } from "@/lib/api/client";
 import { toast } from "@/components/ui/toaster";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import RecordingPlayer from "@/components/feature/RecordingPlayer";
 
 const CF_SUBDOMAIN = import.meta.env.VITE_CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN || "";
@@ -39,6 +40,9 @@ const AdminLiveManager = () => {
   const [obsConnected, setObsConnected] = useState(false);
   const [archivingId, setArchivingId] = useState<string | null>(null);
   const [linkingId, setLinkingId] = useState<string | null>(null);
+  // Selector de grabación: se abre cuando el Live Input tiene más de una transmisión.
+  const [recordingPicker, setRecordingPicker] = useState<{ live: LiveEvent; recordings: StreamRecording[] } | null>(null);
+  const [pickingUid, setPickingUid] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [savingRename, setSavingRename] = useState(false);
@@ -233,29 +237,69 @@ const AdminLiveManager = () => {
   };
 
   // Red de seguridad: vincula la grabación de un evento ya finalizado con un solo
-  // clic, sin tener que reactivar, forzar en vivo ni pegar el UID a mano. Usa el
-  // mismo endpoint corregido que busca la grabación 'ready' del Live Input.
+  // clic, sin tener que reactivar, forzar en vivo ni pegar el UID a mano.
+  //
+  // Un Live Input guarda un video por CADA transmisión, así que una reconexión de OBS
+  // deja varias grabaciones. Cuando hay más de una, no se adivina: se abre el selector
+  // con la más larga sugerida arriba.
   const handleLinkRecording = async (live: LiveEvent) => {
     if (!live.stream_live_input_id) {
       toast.error("Este evento no tiene un Live Input configurado");
       return;
     }
     setLinkingId(live.id);
-    toast.loading("Buscando grabación en Cloudflare...", { id: `link-${live.id}` });
+    toast.loading("Buscando grabaciones en Cloudflare...", { id: `link-${live.id}` });
     try {
       const result = await fetchRecording(live.stream_live_input_id);
       if (!result.recording_uid) {
         toast.error(result.message || "Cloudflare todavía no generó la grabación. Reintentá en unos minutos.", { id: `link-${live.id}` });
         return;
       }
-      const updated = await updateLive(live.id, { recording_stream_uid: result.recording_uid });
-      setEndedLives(prev => prev.map(l => l.id === updated.id ? updated : l));
+
+      const options = result.recordings ?? [];
+      if (options.length > 1) {
+        toast.dismiss(`link-${live.id}`);
+        setRecordingPicker({ live, recordings: options });
+        return;
+      }
+
+      await applyRecording(live, result.recording_uid);
       toast.success("Grabación vinculada", { id: `link-${live.id}`, description: "Ya podés verla y descargarla acá." });
     } catch (err) {
       console.error(err);
       toast.error("Error al vincular la grabación", { id: `link-${live.id}` });
     } finally {
       setLinkingId(null);
+    }
+  };
+
+  /** Guarda el UID elegido en la sala y refresca la lista de finalizados. */
+  const applyRecording = async (live: LiveEvent, recordingUid: string) => {
+    const updated = await updateLive(live.id, { recording_stream_uid: recordingUid });
+    setEndedLives(prev => prev.map(l => l.id === updated.id ? updated : l));
+    return updated;
+  };
+
+  /** El admin eligió una grabación puntual del selector. */
+  const handlePickRecording = async (recording: StreamRecording) => {
+    const picker = recordingPicker;
+    if (!picker) return;
+    setPickingUid(recording.uid);
+    toast.loading("Vinculando grabación...", { id: `pick-${picker.live.id}` });
+    try {
+      // Segunda llamada con el uid elegido: habilita la descarga MP4 de ESE video.
+      await fetchRecording(picker.live.stream_live_input_id!, recording.uid);
+      await applyRecording(picker.live, recording.uid);
+      setRecordingPicker(null);
+      toast.success("Grabación vinculada", {
+        id: `pick-${picker.live.id}`,
+        description: "Archivala en R2 para dejar de pagar storage en Stream.",
+      });
+    } catch (err) {
+      console.error(err);
+      toast.error("Error al vincular la grabación", { id: `pick-${picker.live.id}` });
+    } finally {
+      setPickingUid(null);
     }
   };
 
@@ -1076,6 +1120,18 @@ const AdminLiveManager = () => {
                       {live.recording_duration_seconds != null && (
                         <span>· {Math.round(live.recording_duration_seconds / 60)} min</span>
                       )}
+                      {/* Si quedó vinculada la grabación equivocada (p. ej. una reconexión
+                          corta de OBS), esto permite corregirla sin reactivar la sala. */}
+                      {live.stream_live_input_id && (
+                        <button
+                          type="button"
+                          onClick={() => handleLinkRecording(live)}
+                          disabled={linkingId === live.id}
+                          className="ml-auto shrink-0 text-[10px] text-white/40 hover:text-gold underline underline-offset-2 transition-colors disabled:opacity-50"
+                        >
+                          {linkingId === live.id ? "Buscando..." : "Cambiar grabación"}
+                        </button>
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -1106,6 +1162,71 @@ const AdminLiveManager = () => {
           )}
         </div>
       )}
+
+      {/* Selector de grabación — aparece cuando el Live Input tiene más de una
+          transmisión. La primera es la más larga: casi siempre es el vivo real. */}
+      <Dialog open={!!recordingPicker} onOpenChange={open => { if (!open) setRecordingPicker(null); }}>
+        <DialogContent className="bg-darker border-white/10 sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-white">Elegí la grabación</DialogTitle>
+            <DialogDescription className="text-textMuted">
+              Este Live Input tiene {recordingPicker?.recordings.length} transmisiones grabadas.
+              Cada corte y reconexión de OBS genera una. La más larga suele ser el vivo real.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2 mt-2 max-h-[50dvh] overflow-y-auto overscroll-contain" data-lenis-prevent>
+            {recordingPicker?.recordings.map((rec, i) => {
+              const minutes = Math.floor(rec.duration / 60);
+              const seconds = Math.round(rec.duration % 60);
+              const isCurrent = recordingPicker.live.recording_stream_uid === rec.uid;
+              return (
+                <button
+                  key={rec.uid}
+                  type="button"
+                  onClick={() => handlePickRecording(rec)}
+                  disabled={pickingUid !== null}
+                  className={cn(
+                    "w-full text-left p-3 rounded-xl border transition-colors disabled:opacity-50",
+                    i === 0
+                      ? "border-gold/40 bg-gold/5 hover:bg-gold/10"
+                      : "border-white/10 bg-white/[0.02] hover:bg-white/5"
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-white font-bold text-sm tabular-nums">
+                      {minutes}:{seconds.toString().padStart(2, "0")} min
+                    </span>
+                    <span className="flex items-center gap-2 shrink-0">
+                      {i === 0 && (
+                        <span className="text-[9px] uppercase tracking-wider text-gold bg-gold/10 border border-gold/20 px-2 py-0.5 rounded-full">
+                          Sugerida
+                        </span>
+                      )}
+                      {isCurrent && (
+                        <span className="text-[9px] uppercase tracking-wider text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                          Vinculada
+                        </span>
+                      )}
+                      {pickingUid === rec.uid && (
+                        <span className="text-[10px] text-textMuted">Vinculando...</span>
+                      )}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-textMuted mt-1">
+                    {rec.created
+                      ? new Date(rec.created).toLocaleString("es-CO", {
+                          day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
+                        })
+                      : "Sin fecha"}
+                  </p>
+                  <p className="text-[10px] text-textMuted/50 font-mono truncate mt-0.5">{rec.uid}</p>
+                </button>
+              );
+            })}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
