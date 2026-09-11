@@ -131,8 +131,17 @@ const SignInForm = ({ onSuccess, onSwitch, onForgot, compact = false }: SignInFo
       const user = await signIn(input);
       onSuccess(user.role === USER_ROLES.ADMIN);
     } catch (err) {
-      if (err instanceof ApiError) setSubmitError(err.message);
-      else setSubmitError("No pudimos iniciar sesión. Inténtalo de nuevo.");
+      // El mensaje genérico tapaba la causa real (una caída de red se veía igual que
+      // una contraseña mala). Dejamos rastro en consola y distinguimos el caso de red,
+      // que es el más común en móvil.
+      console.error("[login]", err);
+      if (err instanceof ApiError) {
+        setSubmitError(err.message);
+      } else if (err instanceof TypeError) {
+        setSubmitError("Se perdió la conexión. Revisá tu internet e intentá de nuevo.");
+      } else {
+        setSubmitError("No pudimos iniciar sesión. Inténtalo de nuevo.");
+      }
     }
   };
 
@@ -784,8 +793,15 @@ const AuthPage = ({ initialMode = "signin" }: AuthPageProps) => {
   const resolveReturnTarget = (toAdmin: boolean): string => {
     const returnToRaw = searchParams.get("returnTo");
     if (returnToRaw) {
-      const decoded = decodeURIComponent(returnToRaw);
-      if (isSafeReturnPath(decoded)) return decoded;
+      try {
+        // Un `%` mal formado en la URL hace tirar a decodeURIComponent. Sin este
+        // guard el URIError escapaba como error de login y dejaba al usuario en la
+        // pantalla de acceso pese a estar ya autenticado.
+        const decoded = decodeURIComponent(returnToRaw);
+        if (isSafeReturnPath(decoded)) return decoded;
+      } catch {
+        /* returnTo inválido: caemos al destino por defecto */
+      }
     }
     return toAdmin ? "/admin/content" : "/dashboard";
   };

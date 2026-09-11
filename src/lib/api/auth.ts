@@ -40,15 +40,24 @@ export async function signIn(input: LoginInput): Promise<AuthResult> {
     throw new ApiError("unknown", "No se pudo iniciar sesión", 500);
   }
 
-  // Traer datos del perfil
-  const { data: profileData, error: profileError } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", authData.user.id)
-    .single();
+  // A partir de acá la sesión YA EXISTE en Supabase. El perfil y el plan son datos de
+  // enriquecimiento: si la red se cae al pedirlos (típico en móvil con señal débil), no
+  // podemos tirar la sesión abajo y decirle al usuario "no pudimos iniciar sesión"
+  // cuando en realidad quedó autenticado. Se entra con valores mínimos y al recargar
+  // se completan. Los privilegios reales los sigue validando RLS del lado del servidor.
 
-  if (profileError) {
-    console.error("Error fetching profile:", profileError);
+  // Traer datos del perfil
+  let profileData: Record<string, any> | null = null;
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", authData.user.id)
+      .single();
+    if (error) console.error("Error fetching profile:", error);
+    profileData = data;
+  } catch (err) {
+    console.error("Error de red al traer el perfil:", err);
   }
 
   // Validar si está suspendido
@@ -58,16 +67,22 @@ export async function signIn(input: LoginInput): Promise<AuthResult> {
   }
 
   // Traer plan de suscripción activo
-  const { data: subData } = await supabase
-    .from("subscriptions")
-    .select("plan")
-    .eq("user_id", authData.user.id)
-    .eq("status", "active")
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .single();
+  let subPlan: string | null = null;
+  try {
+    const { data: subData } = await supabase
+      .from("subscriptions")
+      .select("plan")
+      .eq("user_id", authData.user.id)
+      .eq("status", "active")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .single();
+    subPlan = subData?.plan ?? null;
+  } catch (err) {
+    console.error("Error de red al traer la suscripción:", err);
+  }
 
-  const plan = subData?.plan || profileData?.plan || PLANS.FREE;
+  const plan = subPlan || profileData?.plan || PLANS.FREE;
 
   const user = mapProfileToUser(
     profileData || { id: authData.user.id, role: USER_ROLES.STUDENT, full_name: "Usuario nuevo" },
