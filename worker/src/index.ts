@@ -38,6 +38,18 @@ type ArchiveResult =
   | { status: 'failed'; message: string; httpStatus: number }
   | { status: 'error'; message: string; detail?: string; httpStatus: number };
 
+/** Saca el mensaje legible de una respuesta de error de la API de Cloudflare. */
+function extractCfError(body: string): string | null {
+  try {
+    const parsed = JSON.parse(body) as { errors?: { code?: number; message?: string }[] };
+    const first = parsed.errors?.[0];
+    if (!first?.message) return null;
+    return first.code ? `${first.message} (código ${first.code})` : first.message;
+  } catch {
+    return body.slice(0, 200) || null;
+  }
+}
+
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
@@ -122,17 +134,32 @@ async function archiveOne(
   if (!def) {
     // Habilitar generación del MP4.
     const enableRes = await fetch(dlUrl, { method: 'POST', headers: cfHeaders });
-    if (enableRes.ok) {
-      const enableData = (await enableRes.json()) as {
-        result?: { default?: { status?: string; percentComplete?: number; url?: string } };
+    if (!enableRes.ok) {
+      // Antes este error se tragaba en silencio y se respondía "processing 0%" para
+      // siempre: cada pasada volvía a pedir el MP4, volvía a fallar, y el guard de
+      // staleness nunca se evaluaba (incidente del 2026-09-11, vivo de 4h10m con 0%
+      // durante 4 días). Cloudflare explica el motivo en el body: hay que mostrarlo.
+      const detail = await enableRes.text();
+      const reason = extractCfError(detail) || `HTTP ${enableRes.status}`;
+      console.error(`[archive] Stream rechazó habilitar el MP4 de ${streamVideoUid}: ${reason}`);
+      return {
+        status: 'failed',
+        message: `Stream no puede generar el MP4: ${reason}`,
+        httpStatus: 422,
       };
-      def = enableData.result?.default;
     }
+    const enableData = (await enableRes.json()) as {
+      result?: { default?: { status?: string; percentComplete?: number; url?: string } };
+    };
+    def = enableData.result?.default;
+    console.log(`[archive] MP4 habilitado para ${streamVideoUid}: ${def?.status ?? 'sin estado'} ${def?.percentComplete ?? 0}%`);
     // El MP4 se acaba de pedir EN ESTA MISMA PASADA: siempre hay que darle tiempo.
     // Descartarlo acá por la edad del video hacía imposible archivar cualquier
     // grabación de más de STALE_HOURS (incidente del 2026-09-07).
     return { status: 'processing', percent: def?.percentComplete ?? 0 };
   }
+
+  console.log(`[archive] MP4 de ${streamVideoUid}: ${def.status ?? 'sin estado'} ${def.percentComplete ?? 0}%`);
 
   if (def.status !== 'ready' || !def.url) {
     // El pedido ya existía de una pasada anterior. Solo lo damos por muerto si el
