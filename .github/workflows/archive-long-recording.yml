@@ -69,6 +69,14 @@ jobs:
           echo "hls=$(echo "$RES" | jq -r '.result.playback.hls')" >> "$GITHUB_OUTPUT"
           echo "Duración: $(echo "$RES" | jq -r '.result.duration') s"
 
+      - name: Install ffmpeg
+        # ubuntu-24.04 (ubuntu-latest) ya NO trae ffmpeg preinstalado; las imágenes
+        # anteriores sí. Tarda ~30 s, despreciable frente al remux.
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg > /dev/null
+          ffmpeg -version | head -1
+
       - name: Pick the highest-resolution video stream
         id: pick
         run: |
@@ -78,7 +86,6 @@ jobs:
           # Según la versión de ffprobe, un HLS con varias calidades sale como `.streams[]`
           # plano, agrupado en `.programs[].streams[]`, o ambos. Se leen las dos fuentes y
           # se deduplica por índice para no depender de la versión del runner.
-          ffprobe -version | head -1
           PROBE=$(ffprobe -v error -show_streams -show_programs -show_entries stream=index,codec_type,height -of json "${{ steps.meta.outputs.hls }}")
           ALL='[.streams[]?, (.programs[]?.streams[]?)] | unique_by(.index)'
           VIDEO_IDX=$(echo "$PROBE" | jq -r "$ALL"' | map(select(.codec_type=="video" and .height != null)) | max_by(.height) | .index // empty')
