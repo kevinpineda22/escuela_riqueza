@@ -74,11 +74,21 @@ jobs:
         run: |
           # El manifest trae varias calidades y ffmpeg, sin -map, toma la primera (360p).
           # Elegimos el stream de video con mayor altura y el primer stream de audio.
-          PROBE=$(ffprobe -v error -show_entries stream=index,codec_type,height -of json "${{ steps.meta.outputs.hls }}")
-          VIDEO_IDX=$(echo "$PROBE" | jq -r '[.streams[] | select(.codec_type=="video")] | max_by(.height) | .index')
-          AUDIO_IDX=$(echo "$PROBE" | jq -r '[.streams[] | select(.codec_type=="audio")][0].index')
-          HEIGHT=$(echo "$PROBE" | jq -r '[.streams[] | select(.codec_type=="video")] | max_by(.height) | .height')
-          [[ -n "$VIDEO_IDX" && -n "$AUDIO_IDX" ]] || { echo "::error::No se encontraron streams de video/audio"; exit 1; }
+          #
+          # Según la versión de ffprobe, un HLS con varias calidades sale como `.streams[]`
+          # plano, agrupado en `.programs[].streams[]`, o ambos. Se leen las dos fuentes y
+          # se deduplica por índice para no depender de la versión del runner.
+          ffprobe -version | head -1
+          PROBE=$(ffprobe -v error -show_streams -show_programs -show_entries stream=index,codec_type,height -of json "${{ steps.meta.outputs.hls }}")
+          ALL='[.streams[]?, (.programs[]?.streams[]?)] | unique_by(.index)'
+          VIDEO_IDX=$(echo "$PROBE" | jq -r "$ALL"' | map(select(.codec_type=="video" and .height != null)) | max_by(.height) | .index // empty')
+          HEIGHT=$(echo "$PROBE"    | jq -r "$ALL"' | map(select(.codec_type=="video" and .height != null)) | max_by(.height) | .height // empty')
+          AUDIO_IDX=$(echo "$PROBE" | jq -r "$ALL"' | map(select(.codec_type=="audio")) | .[0].index // empty')
+          if [[ -z "$VIDEO_IDX" || -z "$AUDIO_IDX" ]]; then
+            echo "::error::No se encontraron streams de video/audio. Salida de ffprobe:"
+            echo "$PROBE" | jq -c "$ALL"
+            exit 1
+          fi
           echo "video=$VIDEO_IDX" >> "$GITHUB_OUTPUT"
           echo "audio=$AUDIO_IDX" >> "$GITHUB_OUTPUT"
           echo "Video stream #$VIDEO_IDX (${HEIGHT}p), audio stream #$AUDIO_IDX"
