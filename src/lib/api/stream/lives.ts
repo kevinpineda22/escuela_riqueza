@@ -215,6 +215,8 @@ export async function deleteLive(id: string): Promise<void> {
 export type ArchiveResult =
   | { status: "archived"; key: string; bytes: number | null; durationSeconds: number | null }
   | { status: "processing"; percent: number }
+  /** El video se reproduce, pero Stream no puede convertirlo a MP4 (supera la duración máxima). */
+  | { status: "unarchivable"; message: string }
   | { status: "error"; message: string };
 
 /**

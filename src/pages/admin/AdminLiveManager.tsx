@@ -23,6 +23,15 @@ function isoToLocalDatetime(iso: string | null | undefined): string {
   return new Date(iso).toLocaleString("sv-SE").replace(" ", "T").slice(0, 16);
 }
 
+/**
+ * La grabación ya pasó por el archivador y Stream no pudo convertirla a MP4 (supera
+ * la duración máxima). Queda en Stream, reproducible, y no tiene sentido reintentar.
+ * Es la marca que deja el Worker: `archived_at` cargado con `recording_storage` en 'stream'.
+ */
+function isKeptInStream(live: LiveEvent): boolean {
+  return live.recording_storage === "stream" && !!live.archived_at && !!live.recording_stream_uid;
+}
+
 function highestPlan(plans: string[]): "free" | "individual" | "vip" {
   if (plans.includes("vip")) return "vip";
   if (plans.includes("individual")) return "individual";
@@ -231,6 +240,14 @@ const AdminLiveManager = () => {
         description: "Reintentá en unos minutos.",
         duration: 6000,
       });
+    } else if (result.status === "unarchivable") {
+      toast.warning("Este vivo supera las 4 h", {
+        id: `arch-${live.id}`,
+        description: result.message,
+        duration: 10000,
+      });
+      const ended = await fetchEndedLives();
+      setEndedLives(ended);
     } else {
       toast.error(result.message, { id: `arch-${live.id}` });
     }
@@ -1089,11 +1106,15 @@ const AdminLiveManager = () => {
                           className="flex-1 sm:flex-none bg-gold/10 hover:bg-gold/20 border border-gold/20 text-gold px-3 sm:px-4 py-2 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-bold transition-colors whitespace-nowrap">
                           <Download size={16} /> <span className="hidden sm:inline">Descargar grabación</span><span className="sm:hidden">Descargar</span>
                         </button>
-                        <button type="button" onClick={() => handleArchive(live)} disabled={archivingId === live.id}
-                          title="Copia la grabación a R2 y la borra de Stream para dejar de pagar storage"
-                          className="flex-1 sm:flex-none bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 text-emerald-400 px-3 sm:px-4 py-2 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-bold transition-colors whitespace-nowrap disabled:opacity-50">
-                          <Archive size={16} /> <span className="hidden sm:inline">{archivingId === live.id ? "Archivando..." : "Archivar en R2"}</span><span className="sm:hidden">Archivar</span>
-                        </button>
+                        {/* `archived_at` cargado con storage 'stream' = ya se intentó y Stream no
+                            puede convertirla a MP4 (supera la duración máxima). No insistir. */}
+                        {!isKeptInStream(live) && (
+                          <button type="button" onClick={() => handleArchive(live)} disabled={archivingId === live.id}
+                            title="Copia la grabación a R2 y la borra de Stream para dejar de pagar storage"
+                            className="flex-1 sm:flex-none bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 text-emerald-400 px-3 sm:px-4 py-2 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-bold transition-colors whitespace-nowrap disabled:opacity-50">
+                            <Archive size={16} /> <span className="hidden sm:inline">{archivingId === live.id ? "Archivando..." : "Archivar en R2"}</span><span className="sm:hidden">Archivar</span>
+                          </button>
+                        )}
                       </>
                     ) : null}
                     <button onClick={async e => {
@@ -1125,6 +1146,10 @@ const AdminLiveManager = () => {
                       {live.recording_storage === "r2" ? (
                         <span className="inline-flex items-center gap-1 text-emerald-400/80">
                           <Archive size={11} /> Archivada en R2 (sin costo recurrente)
+                        </span>
+                      ) : isKeptInStream(live) ? (
+                        <span className="inline-flex items-center gap-1 text-amber-400/70">
+                          <Info size={11} /> Supera las 4 h — se archiva por el carril largo en segundo plano; si en unas horas sigue acá, revisá la Action en GitHub
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-amber-400/70">

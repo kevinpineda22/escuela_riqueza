@@ -1,0 +1,144 @@
+# Archivado de grabaciones de más de 4 horas.
+#
+# Cloudflare Stream no genera MP4 de grabaciones de live que superen 4 h (error 10047),
+# así que el Worker de archivado no puede copiarlas a R2 por el camino normal. Para esas,
+# el Worker dispara este workflow: ffmpeg descarga el HLS público de la grabación y lo
+# reempaqueta a MP4 SIN re-encodear (-c copy), se sube a R2 en multipart, se registra en
+# Supabase con los mismos campos que escribe el Worker, y recién entonces se borra de Stream.
+#
+# Grabaciones de menos de 4 h siguen el camino normal (Worker). Ver docs/RECORDINGS_ARCHITECTURE.md.
+#
+# Disparo automático: repository_dispatch desde worker/src/index.ts.
+# Disparo manual (pruebas / reintentos): pestaña Actions → "Run workflow" con live_id y video_uid.
+
+name: Archive long recording
+
+on:
+  repository_dispatch:
+    types: [archive-long-recording]
+  workflow_dispatch:
+    inputs:
+      live_id:
+        description: "UUID de la sala en la tabla lives"
+        required: true
+      video_uid:
+        description: "UID del video en Cloudflare Stream"
+        required: true
+
+concurrency:
+  # Un solo archivado por sala a la vez; un reintento no se pisa con el anterior.
+  group: archive-${{ github.event.client_payload.live_id || inputs.live_id }}
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    # Un vivo de 4-5 h a 1080p son ~5-6 GB; el remux va a velocidad de descarga.
+    timeout-minutes: 300
+
+    env:
+      LIVE_ID: ${{ github.event.client_payload.live_id || inputs.live_id }}
+      VIDEO_UID: ${{ github.event.client_payload.video_uid || inputs.video_uid }}
+      # Mismos nombres que el .env del proyecto (no los del Worker, que usa CF_*).
+      CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CF_STREAM_API_TOKEN: ${{ secrets.CLOUDFLARE_STREAM_API_TOKEN }}
+      SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+      R2_BUCKET: escuela-recordings
+
+    steps:
+      - name: Validate inputs
+        run: |
+          if [[ -z "$LIVE_ID" || -z "$VIDEO_UID" ]]; then
+            echo "::error::Faltan live_id o video_uid"; exit 1
+          fi
+          echo "Sala: $LIVE_ID — Video: $VIDEO_UID"
+
+      - name: Fetch video metadata from Stream
+        id: meta
+        run: |
+          RES=$(curl -sS "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/stream/$VIDEO_UID" \
+            -H "Authorization: Bearer $CF_STREAM_API_TOKEN")
+          echo "$RES" | jq -e '.success == true' > /dev/null || { echo "::error::Stream no devolvió el video"; echo "$RES" | jq '.errors'; exit 1; }
+          STATE=$(echo "$RES" | jq -r '.result.status.state')
+          [[ "$STATE" == "ready" ]] || { echo "::error::El video no está listo (estado: $STATE)"; exit 1; }
+          echo "duration=$(echo "$RES" | jq -r '.result.duration')" >> "$GITHUB_OUTPUT"
+          echo "hls=$(echo "$RES" | jq -r '.result.playback.hls')" >> "$GITHUB_OUTPUT"
+          echo "Duración: $(echo "$RES" | jq -r '.result.duration') s"
+
+      - name: Pick the highest-resolution video stream
+        id: pick
+        run: |
+          # El manifest trae varias calidades y ffmpeg, sin -map, toma la primera (360p).
+          # Elegimos el stream de video con mayor altura y el primer stream de audio.
+          PROBE=$(ffprobe -v error -show_entries stream=index,codec_type,height -of json "${{ steps.meta.outputs.hls }}")
+          VIDEO_IDX=$(echo "$PROBE" | jq -r '[.streams[] | select(.codec_type=="video")] | max_by(.height) | .index')
+          AUDIO_IDX=$(echo "$PROBE" | jq -r '[.streams[] | select(.codec_type=="audio")][0].index')
+          HEIGHT=$(echo "$PROBE" | jq -r '[.streams[] | select(.codec_type=="video")] | max_by(.height) | .height')
+          [[ -n "$VIDEO_IDX" && -n "$AUDIO_IDX" ]] || { echo "::error::No se encontraron streams de video/audio"; exit 1; }
+          echo "video=$VIDEO_IDX" >> "$GITHUB_OUTPUT"
+          echo "audio=$AUDIO_IDX" >> "$GITHUB_OUTPUT"
+          echo "Video stream #$VIDEO_IDX (${HEIGHT}p), audio stream #$AUDIO_IDX"
+
+      - name: Remux HLS to MP4 (no re-encoding)
+        run: |
+          ffmpeg -hide_banner -loglevel warning -stats \
+            -i "${{ steps.meta.outputs.hls }}" \
+            -map 0:${{ steps.pick.outputs.video }} -map 0:${{ steps.pick.outputs.audio }} \
+            -c copy -movflags +faststart \
+            "$LIVE_ID.mp4"
+          ls -lh "$LIVE_ID.mp4"
+
+      - name: Verify the MP4
+        id: verify
+        run: |
+          OUT=$(ffprobe -v error -show_entries format=duration,size -of json "$LIVE_ID.mp4")
+          GOT=$(echo "$OUT" | jq -r '.format.duration | tonumber | floor')
+          WANT=$(echo "${{ steps.meta.outputs.duration }}" | jq -r 'tonumber | floor')
+          SIZE=$(echo "$OUT" | jq -r '.format.size')
+          echo "Duración esperada: ${WANT}s — obtenida: ${GOT}s — tamaño: $SIZE bytes"
+          # Toleramos ±5 s por los bordes de los segmentos HLS.
+          DIFF=$(( GOT > WANT ? GOT - WANT : WANT - GOT ))
+          [[ "$DIFF" -le 5 ]] || { echo "::error::El MP4 quedó incompleto (faltan $DIFF s)"; exit 1; }
+          echo "bytes=$SIZE" >> "$GITHUB_OUTPUT"
+          echo "seconds=$GOT" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to R2
+        run: |
+          # aws-cli hace multipart solo para archivos grandes; R2 es S3-compatible.
+          aws s3 cp "$LIVE_ID.mp4" "s3://$R2_BUCKET/recordings/$LIVE_ID.mp4" \
+            --endpoint-url "https://$CF_ACCOUNT_ID.r2.cloudflarestorage.com" \
+            --content-type video/mp4 \
+            --only-show-errors
+          echo "Subido a recordings/$LIVE_ID.mp4"
+
+      - name: Register in Supabase
+        run: |
+          # Mismos campos que escribe el Worker al archivar por el camino normal.
+          BODY=$(jq -n \
+            --arg key "recordings/$LIVE_ID.mp4" \
+            --argjson bytes "${{ steps.verify.outputs.bytes }}" \
+            --argjson secs "${{ steps.verify.outputs.seconds }}" \
+            --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{recording_r2_key:$key, recording_storage:"r2", recording_bytes:$bytes,
+              recording_duration_seconds:$secs, recording_stream_uid:null, archived_at:$now}')
+          CODE=$(curl -sS -o /tmp/patch.txt -w "%{http_code}" -X PATCH \
+            "$SUPABASE_URL/rest/v1/lives?id=eq.$LIVE_ID" \
+            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Content-Type: application/json" -H "Prefer: return=minimal" \
+            -d "$BODY")
+          [[ "$CODE" =~ ^2 ]] || { echo "::error::Supabase respondió $CODE"; cat /tmp/patch.txt; exit 1; }
+          echo "Sala $LIVE_ID registrada como archivada en R2"
+
+      - name: Delete from Stream
+        # Recién ahora: la copia en R2 y el registro en la base ya están confirmados.
+        run: |
+          CODE=$(curl -sS -o /dev/null -w "%{http_code}" -X DELETE \
+            "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/stream/$VIDEO_UID" \
+            -H "Authorization: Bearer $CF_STREAM_API_TOKEN")
+          [[ "$CODE" =~ ^2 ]] || echo "::warning::No se pudo borrar de Stream (HTTP $CODE). La copia en R2 está bien; borralo a mano."
+          echo "Listo."

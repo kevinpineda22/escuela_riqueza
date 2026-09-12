@@ -25,7 +25,14 @@ export interface Env {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
   ARCHIVE_SHARED_SECRET: string;
+  // Token fine-grained con `contents: write` sobre el repo, para disparar el workflow
+  // de archivado largo (grabaciones > 4 h). Opcional: sin él, esas quedan en Stream.
+  GITHUB_TOKEN?: string;
 }
+
+// Repo donde vive .github/workflows/archive-long-recording.yml
+const GITHUB_REPO = 'kevinpineda22/escuela_riqueza';
+const LONG_ARCHIVE_EVENT = 'archive-long-recording';
 
 interface ArchiveBody {
   live_id: string;
@@ -35,18 +42,57 @@ interface ArchiveBody {
 type ArchiveResult =
   | { status: 'archived'; key: string; bytes: number | null; durationSeconds: number | null }
   | { status: 'processing'; percent: number }
+  // El video está sano y se reproduce, pero Stream no puede generar su MP4 (p. ej.
+  // supera la duración máxima). Se queda en Stream: NO se desvincula.
+  | { status: 'unarchivable'; message: string }
   | { status: 'failed'; message: string; httpStatus: number }
   | { status: 'error'; message: string; detail?: string; httpStatus: number };
 
-/** Saca el mensaje legible de una respuesta de error de la API de Cloudflare. */
-function extractCfError(body: string): string | null {
+// Código de la API de Stream: "Video Duration Too Long" al pedir el MP4.
+const CF_DURATION_TOO_LONG = 10047;
+
+/**
+ * Dispara el workflow de GitHub Actions que archiva grabaciones de más de 4 h
+ * (ffmpeg remuxa el HLS a MP4 y lo sube a R2). Devuelve true si GitHub aceptó el
+ * evento; false si no hay token o GitHub rechazó.
+ */
+async function dispatchLongArchive(liveId: string, videoUid: string, env: Env): Promise<boolean> {
+  if (!env.GITHUB_TOKEN) {
+    console.warn('[archive] GITHUB_TOKEN no configurado: la grabación larga queda en Stream');
+    return false;
+  }
+  const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/dispatches`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.GITHUB_TOKEN}`,
+      Accept: 'application/vnd.github+json',
+      'Content-Type': 'application/json',
+      'User-Agent': 'escuela-archive-recording',
+    },
+    body: JSON.stringify({
+      event_type: LONG_ARCHIVE_EVENT,
+      client_payload: { live_id: liveId, video_uid: videoUid },
+    }),
+  });
+  // GitHub responde 204 sin body cuando acepta el dispatch.
+  if (res.status !== 204) {
+    console.error(`[archive] GitHub rechazó el dispatch (${res.status}): ${await res.text()}`);
+    return false;
+  }
+  console.log(`[archive] workflow de archivado largo disparado para ${liveId}`);
+  return true;
+}
+
+/** Primer error de una respuesta de la API de Cloudflare, con su código. */
+function extractCfError(body: string): { code: number | null; message: string } | null {
   try {
     const parsed = JSON.parse(body) as { errors?: { code?: number; message?: string }[] };
     const first = parsed.errors?.[0];
     if (!first?.message) return null;
-    return first.code ? `${first.message} (código ${first.code})` : first.message;
+    return { code: first.code ?? null, message: first.message };
   } catch {
-    return body.slice(0, 200) || null;
+    const text = body.slice(0, 200);
+    return text ? { code: null, message: text } : null;
   }
 }
 
@@ -140,8 +186,25 @@ async function archiveOne(
       // staleness nunca se evaluaba (incidente del 2026-09-11, vivo de 4h10m con 0%
       // durante 4 días). Cloudflare explica el motivo en el body: hay que mostrarlo.
       const detail = await enableRes.text();
-      const reason = extractCfError(detail) || `HTTP ${enableRes.status}`;
+      const cfError = extractCfError(detail);
+      const reason = cfError
+        ? `${cfError.message}${cfError.code ? ` (código ${cfError.code})` : ''}`
+        : `HTTP ${enableRes.status}`;
       console.error(`[archive] Stream rechazó habilitar el MP4 de ${streamVideoUid}: ${reason}`);
+
+      // Vivo más largo de lo que Stream convierte a MP4 (~4 h). El video está sano y
+      // se reproduce por iframe; para moverlo a R2 hace falta el carril largo: un
+      // workflow de GitHub Actions con ffmpeg. Acá solo se dispara; el workflow es el
+      // que escribe en R2 y en la base. En cualquier caso NO se desvincula.
+      if (cfError?.code === CF_DURATION_TOO_LONG) {
+        const dispatched = await dispatchLongArchive(liveId, streamVideoUid, env);
+        return {
+          status: 'unarchivable',
+          message: dispatched
+            ? 'Este vivo supera las 4 h. Se está archivando en segundo plano por el carril largo; puede tardar un rato.'
+            : 'Este vivo supera la duración máxima que Cloudflare convierte a MP4. Se queda en Stream.',
+        };
+      }
       return {
         status: 'failed',
         message: `Stream no puede generar el MP4: ${reason}`,
@@ -225,6 +288,27 @@ async function archiveOne(
  * deje de aparecer en el barrido del cron. Se usa cuando Stream reporta el video
  * en 'error' (codificación fallida): no hay MP4 posible, reintentar es inútil.
  */
+/**
+ * Marca una grabación como "se queda en Stream": el video es válido y reproducible
+ * pero no se puede convertir a MP4 (supera la duración máxima de Stream). Se pone
+ * `archived_at` para que el cron deje de reintentarla, con `recording_storage` en
+ * 'stream' y `recording_stream_uid` intacto para que el replay siga funcionando.
+ * Esa combinación (`archived_at` cargado + storage 'stream') es la que la UI lee
+ * como "procesada, se queda en Stream".
+ */
+async function markKeptInStream(liveId: string, env: Env): Promise<void> {
+  await fetch(`${env.SUPABASE_URL}/rest/v1/lives?id=eq.${encodeURIComponent(liveId)}`, {
+    method: 'PATCH',
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=minimal',
+    },
+    body: JSON.stringify({ recording_storage: 'stream', archived_at: new Date().toISOString() }),
+  });
+}
+
 async function markFailed(liveId: string, env: Env): Promise<void> {
   await fetch(`${env.SUPABASE_URL}/rest/v1/lives?id=eq.${encodeURIComponent(liveId)}`, {
     method: 'PATCH',
@@ -300,6 +384,10 @@ export default {
     if (result.status === 'failed') {
       return json({ error: result.message }, result.httpStatus);
     }
+    if (result.status === 'unarchivable') {
+      // También desde el botón manual: dejar constancia para que el cron no insista.
+      await markKeptInStream(live_id, env);
+    }
     return json(result);
   },
 
@@ -324,6 +412,9 @@ export default {
             if (result.status === 'failed') {
               console.warn(`[cron] ${live.id}: descartada (${result.message})`);
               await markFailed(live.id, env);
+            } else if (result.status === 'unarchivable') {
+              console.warn(`[cron] ${live.id}: se queda en Stream (${result.message})`);
+              await markKeptInStream(live.id, env);
             }
           } catch (err) {
             console.error(`[cron] ${live.id} falló:`, err);
