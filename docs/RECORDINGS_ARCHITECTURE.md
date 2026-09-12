@@ -3,7 +3,7 @@
 > Cómo se almacenan las grabaciones de los lives para que el costo sea sostenible.
 > **Crítico:** leer antes de tocar `AdminLiveManager`, `VIPLiveRoom`, `api/stream/*` de grabaciones o el Worker de archivado.
 
-_Creado: 2026-07-08 · Actualizado: 2026-07-28 · Estado: 🟢 EN PRODUCCIÓN (automático)_
+_Creado: 2026-07-08 · Actualizado: 2026-09-11 · Estado: 🟢 EN PRODUCCIÓN (automático) · carril largo >4 h pendiente de secrets_
 
 ---
 
@@ -103,9 +103,27 @@ El **botón "Archivar en R2" sigue existiendo** para forzar el archivado on-dema
 
 **Descarte de grabaciones muertas (give-up):** una grabación que falló al codificar nunca genera MP4, así que reintentar es inútil y taparía el batch del cron. `archiveOne()` detecta dos casos y los descarta (limpia `recording_stream_uid` para que salgan del barrido):
 1. El video está en estado `error` en Stream (codificación fallida).
-2. El video sigue en 0% de generación de MP4 pasadas **12 h** desde su creación (zombi silencioso).
+2. El MP4 **ya había sido pedido en una pasada anterior**, el video tiene más de **12 h** y la generación sigue en 0% (zombi silencioso). Ojo: un MP4 recién pedido en la misma pasada **siempre** espera, sin importar la edad del video — evaluar la antigüedad ahí hacía imposible archivar cualquier grabación vieja (incidente 2026-09-07).
 
 El batch del cron está acotado (`limit=3`) para no reventar los límites de duración del Worker con grabaciones de ~3 h (varios GB); el backlog se limpia en ticks sucesivos.
+
+### Carril largo: grabaciones de más de 4 h (GitHub Actions + ffmpeg)
+
+**Cloudflare Stream no genera MP4 de grabaciones de live que superen 4 horas** (error `10047 Video Duration Too Long`; no dan excepciones). Los clips tampoco sirven: la API de clip rechaza grabaciones de live, y el "instant clipping" tiene un máximo de 60 s. Descubierto el 2026-09-11 con un vivo de 4h10m.
+
+Lo que sí está disponible es el **HLS público** de la grabación (`playback.hls` en la API, sin token). ffmpeg lo reempaqueta a MP4 **sin re-encodear** (`-c copy`) — sin pérdida de calidad, a velocidad de descarga. Un Worker no puede correr ffmpeg, así que ese trabajo vive en **GitHub Actions** (`.github/workflows/archive-long-recording.yml`): ffmpeg viene preinstalado en `ubuntu-latest`, el job tiene hasta 6 h, y no agrega infraestructura nueva.
+
+Flujo:
+1. `archiveOne()` pide el MP4 y recibe el 10047.
+2. Dispara `repository_dispatch` (`archive-long-recording`) con `live_id` y `video_uid`, y marca la sala con `archived_at` + `recording_storage = 'stream'` para que el cron **no la vuelva a intentar** ni dispare la Action 20 veces. El video sigue vinculado y reproducible por iframe mientras tanto.
+3. La Action: elige la variante de mayor resolución del manifest (sin `-map`, ffmpeg toma la primera, que es 360p) → remux → verifica que la duración del MP4 coincida (±5 s) → sube a R2 en multipart vía la API S3 → escribe en `lives` **los mismos campos que el Worker** → recién entonces borra de Stream.
+4. Al terminar, la sala queda idéntica a una archivada por el carril normal. El `RecordingPlayer` no distingue.
+
+La UI lee `archived_at` cargado + `recording_storage = 'stream'` como "supera 4 h, archivándose en segundo plano" y oculta el botón "Archivar en R2". Si la Action falla, la sala se queda así; se reintenta desde la pestaña Actions ("Run workflow" con `live_id` y `video_uid`) o con "Cambiar grabación", que limpia `archived_at`.
+
+Medido con el vivo de prueba (4h10m, 1080p): **~5.1 GB**. Un vivo por semana son ~30 min de Actions al mes.
+
+**Secrets que necesita** (GitHub → Settings → Secrets → Actions), con los mismos nombres que el `.env` del proyecto: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_STREAM_API_TOKEN`, `VITE_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, y `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` (R2 → *Manage R2 API Tokens*, escritura sobre `escuela-recordings`). Y en el Worker, `wrangler secret put GITHUB_TOKEN` con un token fine-grained de `contents: write` sobre este repo. Sin `GITHUB_TOKEN`, las grabaciones largas simplemente quedan en Stream con el aviso en la UI.
 
 ### Por qué un Worker y no una Vercel Function para la copia
 Un MP4 de 4 h pesa varios GB. Las Vercel Functions tienen límite de tiempo (10-60s) y memoria — no pueden hacer streaming de varios GB. El **Cloudflare Worker** hace la copia Stream→R2 **dentro de la red de Cloudflare**: sin egress y sin timeout de Vercel.
