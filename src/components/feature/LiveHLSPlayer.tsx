@@ -56,6 +56,8 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
   ) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const hlsRef = useRef<Hls | null>(null);
+    // Lock para que la recuperación por evento y el watchdog no recarguen a la vez.
+    const reloadingRef = useRef(false);
     const [levels, setLevels] = useState<QualityLevel[]>([]);
 
     useImperativeHandle(ref, () => ({
@@ -129,6 +131,7 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       let hls: Hls | null = null;
       let mediaErrorRetries = 0;
       let didSeekToLiveEdge = false;
+      let stallTimer: number | null = null;
 
       if (Hls.isSupported()) {
         hls = new Hls({
@@ -223,11 +226,38 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           }
         });
 
+        // Recuperación REAL ante un fallo de red persistente. `startLoad()` solo
+        // reanuda con el manifest que hls.js ya tiene en memoria — si las URLs
+        // firmadas de los segmentos vencieron o Cloudflare las rechaza (se vio un
+        // 413 sostenido en un vivo), vuelve a fallar con los mismos datos y el
+        // player queda "cargando" hasta que el usuario da F5. Esto es ese F5, pero
+        // interno: manifest fresco, tokens frescos, y de vuelta al borde en vivo.
+        const reloadFromScratch = (reason: string) => {
+          if (!hls || reloadingRef.current) return;
+          reloadingRef.current = true;
+          console.warn(`[LiveHLSPlayer] recargando el manifest (${reason})`);
+          didSeekToLiveEdge = false;
+          try {
+            hls.stopLoad();
+            hls.loadSource(manifestUrl);
+            hls.startLoad(-1);
+          } finally {
+            // Ventana corta para que un error en cascada no dispare recargas en loop.
+            window.setTimeout(() => { reloadingRef.current = false; }, 4000);
+          }
+        };
+
         hls.on(Hls.Events.ERROR, (_, data) => {
-          if (!data.fatal) return;
+          // Los no-fatales también dejan rastro: sin esto el 413 de los segmentos
+          // era invisible hasta que el player ya estaba clavado.
+          if (!data.fatal) {
+            if (data.details === Hls.ErrorDetails.FRAG_LOAD_ERROR || data.details === Hls.ErrorDetails.LEVEL_LOAD_ERROR) {
+              console.warn("[LiveHLSPlayer] carga fallida (reintentando)", data.details, data.response?.code ?? "");
+            }
+            return;
+          }
           if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-            console.warn("[LiveHLSPlayer] network error, recovering...", data.details);
-            hls!.startLoad();
+            reloadFromScratch(`network: ${data.details}`);
           } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
             mediaErrorRetries++;
             if (mediaErrorRetries > 2) {
@@ -242,6 +272,26 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
             onError?.(`Error: ${data.details}`);
           }
         });
+        // Watchdog de estancamiento. Cubre el caso que hls.js NO reporta como fatal:
+        // el video quiere reproducir (no está pausado por el usuario) pero currentTime
+        // no avanza. Si pasa STALL_SECONDS así, recargamos el manifest. Es la red de
+        // seguridad detrás de la recuperación por evento — el "F5 automático".
+        const STALL_SECONDS = 12;
+        let lastTime = video.currentTime;
+        let stalledFor = 0;
+        stallTimer = window.setInterval(() => {
+          if (!hls || video.paused || video.ended) { stalledFor = 0; lastTime = video.currentTime; return; }
+          if (video.currentTime > lastTime + 0.2) {
+            stalledFor = 0;
+            lastTime = video.currentTime;
+            return;
+          }
+          stalledFor += 1;
+          if (stalledFor >= STALL_SECONDS) {
+            stalledFor = 0;
+            reloadFromScratch(`sin avance durante ${STALL_SECONDS}s`);
+          }
+        }, 1000);
       } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
         // iOS Safari y desktop Safari: HLS nativo (no necesita hls.js)
         video.src = manifestUrl;
@@ -259,6 +309,8 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       }
 
       return () => {
+        if (stallTimer !== null) window.clearInterval(stallTimer);
+        reloadingRef.current = false;
         if (hls) {
           hls.destroy();
           hlsRef.current = null;
