@@ -7,6 +7,9 @@ const BodySchema = z.object({
   live_input_id: z.string().trim().min(8).max(128),
   // Opcional: el admin eligió una grabación puntual de la lista en vez de la sugerida.
   video_uid: z.string().trim().min(8).max(128).optional(),
+  // Fecha programada del vivo (ISO). Acota la búsqueda a las grabaciones de ESE día;
+  // sin esto se mezclan las de todos los sábados que el Live Input acumula.
+  starts_at: z.string().datetime({ offset: true }).optional(),
 });
 
 export interface StreamVideo {
@@ -17,19 +20,41 @@ export interface StreamVideo {
   meta?: { name?: string };
 }
 
+// Ventana alrededor de `starts_at` dentro de la cual una grabación "pertenece" al vivo.
+// Amplia a propósito: el vivo puede arrancar antes de lo programado (pruebas de OBS)
+// o extenderse mucho más de lo previsto.
+const WINDOW_BEFORE_MS = 3 * 3600 * 1000;
+const WINDOW_AFTER_MS = 12 * 3600 * 1000;
+
 /**
- * Ordena las grabaciones listas de un Live Input, de la más larga a la más corta.
+ * Ordena las grabaciones listas de un Live Input, sugiriendo primero la correcta.
  *
- * Un Live Input acumula UN VIDEO POR CADA TRANSMISIÓN. Si OBS se corta y reconecta
- * —o si se hace una prueba después del vivo— quedan varias grabaciones. Elegir "la
- * más reciente" vinculaba la reconexión de 15 min en vez del vivo de 3 horas
- * (incidente del 2026-09-05). La duración es la señal correcta: el vivo real siempre
- * es el más largo, y una reconexión nunca compite con la transmisión principal.
+ * Un Live Input acumula UN VIDEO POR CADA TRANSMISIÓN, de todos los días. Dos
+ * incidentes definieron el criterio:
+ * - 2026-09-05: elegir "la más reciente" vinculaba una reconexión de OBS de 15 min
+ *   en vez del vivo de 3 h. → Dentro del día, la duración es la señal correcta.
+ * - 2026-09-12: elegir "la más larga" a secas vinculó al vivo de ese día la
+ *   grabación de dos semanas antes (4 h 10 m, todavía sin archivar). → Primero hay
+ *   que acotar por fecha.
+ *
+ * Con `startsAt`: las grabaciones del día del vivo van primero (más larga a más
+ * corta), y las de otros días después, también por duración. Sin `startsAt`, solo
+ * por duración.
  */
-export function sortReadyRecordings(videos: StreamVideo[]): StreamVideo[] {
-  return videos
-    .filter(v => (v?.status?.state || '').toLowerCase() === 'ready')
-    .sort((a, b) => (Number(b.duration) || 0) - (Number(a.duration) || 0));
+export function sortReadyRecordings(videos: StreamVideo[], startsAt?: string | null): StreamVideo[] {
+  const ready = videos.filter(v => (v?.status?.state || '').toLowerCase() === 'ready');
+  const byDuration = (a: StreamVideo, b: StreamVideo) => (Number(b.duration) || 0) - (Number(a.duration) || 0);
+
+  const start = startsAt ? Date.parse(startsAt) : NaN;
+  if (!Number.isFinite(start)) return ready.sort(byDuration);
+
+  const inWindow = (v: StreamVideo) => {
+    const created = v.created ? Date.parse(v.created) : NaN;
+    return Number.isFinite(created) && created >= start - WINDOW_BEFORE_MS && created <= start + WINDOW_AFTER_MS;
+  };
+  const sameDay = ready.filter(inWindow).sort(byDuration);
+  const others = ready.filter(v => !inWindow(v)).sort(byDuration);
+  return [...sameDay, ...others];
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -53,7 +78,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!parsed.success) {
     return res.status(400).json({ error: 'Falta live_input_id válido' });
   }
-  const { live_input_id, video_uid } = parsed.data;
+  const { live_input_id, video_uid, starts_at } = parsed.data;
 
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
   const apiToken = process.env.CLOUDFLARE_STREAM_API_TOKEN || process.env.CLOUDFLARE_API_TOKEN || process.env.CLOUDFLARE_STREAM_TOKEN;
@@ -88,7 +113,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const data = await response.json();
     const videos: StreamVideo[] = Array.isArray(data.result) ? data.result : [];
 
-    const readyRecordings = sortReadyRecordings(videos);
+    const readyRecordings = sortReadyRecordings(videos, starts_at);
 
     if (readyRecordings.length === 0) {
       return res.status(200).json({

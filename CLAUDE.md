@@ -7,6 +7,7 @@
 > - Estado actual del proyecto, paneles, sistemas transversales y fases: `@docs/PROJECT_STATE.md`
 > - Arquitectura del Modo Podcast (crítico — leer antes de tocar `PodcastEngine`, `LessonPlayer` o `player.store`): `@docs/PODCAST_ARCHITECTURE.md`
 > - Historial cronológico de cambios: `@docs/CHANGELOG.md`
+> - Plan de estabilización de lives (hallazgos verificados + paquetes de trabajo pendientes): `@docs/LIVE_STABILITY_PLAN.md`
 
 ---
 
