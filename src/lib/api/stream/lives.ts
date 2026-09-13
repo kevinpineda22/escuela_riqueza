@@ -189,15 +189,23 @@ export interface RecordingLookup {
 }
 
 /**
- * Busca la grabación de un Live Input. Sin `videoUid` sugiere la más larga (el vivo
- * real); con `videoUid` confirma la que el admin eligió de la lista y le habilita la
- * descarga MP4.
+ * Busca la grabación de un Live Input. Con `startsAt` (fecha del vivo) sugiere la más
+ * larga DE ESE DÍA — sin eso se mezclan las grabaciones de todos los sábados y puede
+ * sugerir un vivo viejo. Con `videoUid` confirma la que el admin eligió de la lista
+ * y le habilita la descarga MP4.
  */
-export async function fetchRecording(liveInputId: string, videoUid?: string): Promise<RecordingLookup> {
+export async function fetchRecording(
+  liveInputId: string,
+  opts: { videoUid?: string; startsAt?: string | null } = {}
+): Promise<RecordingLookup> {
   try {
     const res = await authedFetch("/api/stream/recording", {
       method: "POST",
-      body: JSON.stringify({ live_input_id: liveInputId, ...(videoUid ? { video_uid: videoUid } : {}) }),
+      body: JSON.stringify({
+        live_input_id: liveInputId,
+        ...(opts.videoUid ? { video_uid: opts.videoUid } : {}),
+        ...(opts.startsAt ? { starts_at: opts.startsAt } : {}),
+      }),
     });
     if (!res.ok) throw new Error("Error al consultar grabación");
     return await res.json();

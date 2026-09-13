@@ -267,7 +267,7 @@ const AdminLiveManager = () => {
     setLinkingId(live.id);
     toast.loading("Buscando grabaciones en Cloudflare...", { id: `link-${live.id}` });
     try {
-      const result = await fetchRecording(live.stream_live_input_id);
+      const result = await fetchRecording(live.stream_live_input_id, { startsAt: live.starts_at });
       if (!result.recording_uid) {
         toast.error(result.message || "Cloudflare todavía no generó la grabación. Reintentá en unos minutos.", { id: `link-${live.id}` });
         return;
@@ -319,7 +319,7 @@ const AdminLiveManager = () => {
     toast.loading("Vinculando grabación...", { id: `pick-${picker.live.id}` });
     try {
       // Segunda llamada con el uid elegido: habilita la descarga MP4 de ESE video.
-      await fetchRecording(picker.live.stream_live_input_id!, recording.uid);
+      await fetchRecording(picker.live.stream_live_input_id!, { videoUid: recording.uid, startsAt: picker.live.starts_at });
       await applyRecording(picker.live, recording.uid);
       setRecordingPicker(null);
       toast.success("Grabación vinculada", {
@@ -694,7 +694,7 @@ const AdminLiveManager = () => {
                 <button onClick={async () => {
                   if (!activeLive?.stream_live_input_id) { toast.error("Primero configurá el Live Input ID"); return; }
                   toast.info("Buscando grabación en Cloudflare...");
-                  const result = await fetchRecording(activeLive.stream_live_input_id);
+                  const result = await fetchRecording(activeLive.stream_live_input_id, { startsAt: activeLive.starts_at });
                   if (result.recording_uid) {
                     setFormData(prev => ({ ...prev, recording_stream_uid: result.recording_uid }));
                     toast.success("Grabación encontrada y vinculada");
@@ -855,7 +855,7 @@ const AdminLiveManager = () => {
                   if (!window.confirm("¿Finalizar esta sala? Pasara a estado 'ended' y no aparecerá más como próxima sala.")) return;
                   try {
                     const recordingUid = activeLive!.stream_live_input_id
-                      ? (await fetchRecording(activeLive!.stream_live_input_id)).recording_uid
+                      ? (await fetchRecording(activeLive!.stream_live_input_id, { startsAt: activeLive!.starts_at })).recording_uid
                       : null;
                     const updated = await updateLive(activeLive!.id, { status: "ended", recording_stream_uid: recordingUid || formData.recording_stream_uid });
                     setLives(prev => prev.map(l => l.id === updated.id ? updated : l).filter(l => l.status !== "ended"));
