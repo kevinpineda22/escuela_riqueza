@@ -4,14 +4,10 @@ ALTER TABLE public.lives ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEF
 ALTER TABLE public.lives ADD COLUMN IF NOT EXISTS is_paused boolean NOT NULL DEFAULT false;
 ALTER TABLE public.lives ADD COLUMN IF NOT EXISTS recording_stream_uid text;
 
--- 2. RLS para la tabla lives (permite CRUD a usuarios autenticados)
+-- 2. RLS para la tabla lives
+-- Las policies de escritura viven en migrate-lives-rls-admin.sql (solo admin).
+-- La policy abierta "Allow all for authenticated on lives" fue retirada (ver docs/LIVE_STABILITY_PLAN.md H1).
 ALTER TABLE public.lives ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Allow all for authenticated on lives" ON public.lives;
-CREATE POLICY "Allow all for authenticated on lives" ON public.lives
-  FOR ALL TO authenticated
-  USING (true)
-  WITH CHECK (true);
 
 -- 3. RLS para el bucket backgrounds en Storage
 -- (asegurate de haber creado el bucket 'backgrounds' primero en Supabase Storage)

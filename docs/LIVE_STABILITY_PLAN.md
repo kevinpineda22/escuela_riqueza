@@ -24,10 +24,10 @@ No construir dashboards de salud ni reestructurar la arquitectura antes de medir
 
 | # | Hallazgo | Ubicación | Severidad | Verificado |
 |---|---|---|---|---|
-| H1 | Policy `FOR ALL TO authenticated USING (true) WITH CHECK (true)` sobre `lives`. Cualquier alumno logueado puede pausar, finalizar, editar o borrar un live. | `sql/migrate-lives-schema.sql:10` | 🔴 Crítico | En SQL del repo. **No confirmado** que esté desplegada así en Supabase. |
+| H1 | Policy `FOR ALL TO authenticated USING (true) WITH CHECK (true)` sobre `lives`. Cualquier alumno logueado puede pausar, finalizar, editar o borrar un live. | `sql/migrate-lives-schema.sql:10` | 🔴 Crítico | **Confirmado desplegada en Supabase (2026-09-18).** Fix: `sql/migrate-lives-rls-admin.sql`. |
 | H2 | El webhook evalúa `event.includes('connected')` antes que `'disconnected'`. `"live_input.disconnected"` contiene `"connected"` → un evento de desconexión se clasifica como conexión. | `api/stream/cloudflare-webhook.ts:82` | 🔴 Alto | Sí |
-| H3 | El webhook lee `payload.event`, `payload.notificationName`, `payload.liveInput`, `payload.meta.liveInputUid`. El formato documentado de Live Notifications de Cloudflare usa `data.event_type` y `data.input_id`. Con el formato real, el parser devuelve `unknown` y no hace nada. | `api/stream/cloudflare-webhook.ts:57-92` | 🔴 Alto | Parcial: hay que capturar un payload real para confirmar el formato. |
-| H4 | `live-input-status` evalúa `input?.status?.connected === true`. La documentación del endpoint describe `result.status` de otra forma (posiblemente texto `"connected"`, o un objeto con `current.state`). En cualquiera de los dos casos el campo `status.connected` no existe → `connected` es siempre `false`. | `api/stream/live-input-status.ts:56` | 🟠 Medio | Sí (el campo no existe). **Formato real de la respuesta: pendiente de confirmar** con una llamada a la API desde nuestra cuenta. |
+| H3 | El webhook lee `payload.event`, `payload.notificationName`, `payload.liveInput`, `payload.meta.liveInputUid`. El formato documentado de Live Notifications de Cloudflare usa `data.event_type` y `data.input_id`. Con el formato real, el parser devuelve `unknown` y no hace nada. | `api/stream/cloudflare-webhook.ts:57-92` | 🟠 Medio | **Confirmado (2026-09-18)**: formato documentado es `data.event_type` / `data.input_id`. Además el handler exige HMAC `Webhook-Signature` (webhooks de video), pero Live Notifications usan header `cf-webhook-auth`. Y en Cloudflare → Notifications **no existe ninguna notificación de Stream Live Input**: el webhook nunca recibió eventos de OBS. Código muerto; no explica cortes pasados. |
+| H4 | `live-input-status` evalúa `input?.status?.connected === true`. La documentación del endpoint describe `result.status` de otra forma (posiblemente texto `"connected"`, o un objeto con `current.state`). En cualquiera de los dos casos el campo `status.connected` no existe → `connected` es siempre `false`. | `api/stream/live-input-status.ts:56` | 🟠 Medio | **Confirmado con respuesta real (2026-09-18)**: `result.status` es un objeto `{ current: { state: "connected"\|"disconnected", reason, ingestProtocol, statusEnteredAt, statusLastSeen }, history: [...] }`. Fix: `status?.current?.state === 'connected'`. |
 | H5 | Cambio de calidad usa `hls.currentLevel = index`, que vacía el buffer. `nextLevel` cambia sin vaciar. | `src/components/feature/LiveHLSPlayer.tsx:106` | 🟠 Medio | Sí |
 | H6 | `latencyMode` está dentro de la config de `Hls`. Cambiar de modo destruye y recrea el reproductor (reinicia reproducción). | `src/components/feature/LiveHLSPlayer.tsx:129-160` | 🟠 Medio | Sí |
 | H7 | `showIframe = !isPaused && ...` desmonta el reproductor cuando `is_paused = true`. Se pierde buffer, volumen y contexto; al volver puede requerir otra interacción para audio. | `src/pages/student/VIPLiveRoom.tsx:129` | 🟠 Medio | Sí |
@@ -45,24 +45,21 @@ No construir dashboards de salud ni reestructurar la arquitectura antes de medir
 
 ### Paquete 0 — Verificaciones previas (sin cambiar código)
 
-- [ ] **RLS desplegada**: en Supabase → Authentication → Policies → `lives`. Confirmar si existe `"Allow all for authenticated on lives"`.
-- [ ] **Respuesta real de Cloudflare**: llamar a `GET /accounts/{id}/stream/live_inputs/{input_id}` con el token de la cuenta y guardar el JSON de `result.status` con OBS conectado y con OBS desconectado. Esto define el fix de H4.
-- [ ] **Payload real del webhook**: apuntar temporalmente el webhook del Live Input a un endpoint de captura (o loguear `rawBody` en el handler actual) y conectar/desconectar OBS. Esto define el fix de H3.
-- [ ] **Autenticación del webhook**: confirmar que el header y el formato de firma que valida `cloudflare-webhook.ts` coinciden con lo que Cloudflare envía para Live Notifications (puede diferir del webhook de `video.ready`).
+- [x] **RLS desplegada**: confirmada. Existen `"Allow all for authenticated on lives"` (ALL, authenticated) y `"Authenticated users can view lives"` (SELECT, public).
+- [x] **Respuesta real de Cloudflare**: capturada con OBS desconectado. `status.current.state = "disconnected"`, `history[0].state = "connected"`. Formato confirmado, ver H4.
+- [x] **Webhook**: no hay notificación de Stream Live Input configurada en Cloudflare. Nunca llegó un evento de OBS. Logs de Vercel (retención 1 día) no permiten ver el live del 12/09.
 
 ### Paquete 1 — Seguridad (H1)
 
-- [ ] Reemplazar la policy de `lives` por:
-  - `SELECT` para `authenticated` (o `public` si la landing lo requiere).
-  - `INSERT / UPDATE / DELETE` solo si `profiles.role = 'admin'` para `auth.uid()`.
+- [x] Migración escrita: `sql/migrate-lives-rls-admin.sql` (SELECT existente se conserva; INSERT/UPDATE/DELETE solo admin).
 - [ ] Revisar con el mismo criterio las policies de `storage.objects` (`backgrounds`) y `live_messages`.
-- [ ] Aplicar en Supabase y actualizar `sql/migrate-lives-schema.sql` para que el repo refleje lo desplegado.
+- [ ] Aplicar `sql/migrate-lives-rls-admin.sql` en Supabase (SQL Editor). `migrate-lives-schema.sql` ya no propone la policy abierta.
 - [ ] Verificar desde una cuenta no-admin que no puede modificar `lives`.
 
 ### Paquete 2 — Sincronización Cloudflare ↔ sala (H2, H3, H4)
 
-- [ ] `live-input-status.ts`: parsear el formato real capturado en Paquete 0.
-- [ ] `cloudflare-webhook.ts`: reescribir `parseEvent` contra el payload real. Comparar nombres completos de evento (`=== 'live_input.connected'`), no substrings. Cubrir con tests unitarios de `parseEvent` usando payloads reales.
+- [x] `live-input-status.ts`: parsea `status.current.state` (aplicado 2026-09-18).
+- [ ] **Hacer DESPUÉS del Paquete 3 (H7)**. Crear en Cloudflare → Manage account → Notifications una notificación "Stream Live Input" con destino webhook a `/api/stream/cloudflare-webhook` y secret. Adaptar el handler: aceptar `cf-webhook-auth` (comparación timing-safe con el secret) para Live Notifications, manteniendo HMAC para `video.ready`. Reescribir `parseEvent` contra `data.event_type` / `data.input_id`. Comparar nombres completos de evento (`=== 'live_input.connected'`), no substrings. Cubrir con tests unitarios de `parseEvent` usando payloads reales.
 - [ ] Antes de activar el webhook corregido: asegurarse de que H7 esté resuelto. Un webhook que empieza a funcionar bien va a marcar `is_paused = true` en cada microcorte de OBS, y hoy eso desmonta el reproductor de todos los alumnos.
 
 ### Paquete 3 — Reproductor: eliminar interrupciones autogeneradas (H5–H10)

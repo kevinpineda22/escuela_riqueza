@@ -5,6 +5,14 @@
 
 ---
 
+## 2026-09-18
+
+### Lives — RLS cerrada y detección de OBS corregida (Paquete 0-1 del plan de estabilización)
+- **Contexto**: auditoría externa del sistema de lives contrastada contra el código. Plan completo con hallazgos H1–H14 en `docs/LIVE_STABILITY_PLAN.md`.
+- **Seguridad (H1)**: la policy `"Allow all for authenticated on lives"` (`FOR ALL ... USING (true)`) estaba desplegada en Supabase — cualquier alumno logueado podía editar o borrar lives. Reemplazada por `sql/migrate-lives-rls-admin.sql`: SELECT se conserva, INSERT/UPDATE/DELETE solo si `profiles.role = 'admin'`. Aplicada en producción.
+- **Detección de OBS (H4)** (`api/stream/live-input-status.ts`): evaluaba `status.connected`, campo que no existe. Cloudflare devuelve `status.current.state` (verificado con respuesta real de la cuenta). `connected` era siempre `false`.
+- **Webhook (H2/H3)**: verificado que en Cloudflare → Notifications no existe ninguna notificación de Stream Live Input. El endpoint `/api/stream/cloudflare-webhook` nunca recibió eventos de OBS; toda la sincronización real fue polling. Se corrige después de H7 (ver plan).
+
 ## 2026-09-11
 
 ### Login — la red móvil ya no tumba una sesión válida
