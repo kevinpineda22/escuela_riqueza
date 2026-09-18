@@ -6,6 +6,8 @@ import { ArrowRight, LayoutDashboard } from "lucide-react";
 import { useAuthStore } from "@/stores/auth.store";
 import { usePlatformSettings } from "@/hooks/usePlatformSettings";
 import AnimationToggle from "@/components/feature/AnimationToggle";
+import AppearanceToggle from "@/components/feature/AppearanceToggle";
+import BrandLogo from "@/components/layout/BrandLogo";
 import { cn } from "@/lib/utils";
 
 const LOGO_FALLBACK =
@@ -45,7 +47,7 @@ const LandingHeader = () => {
       <div
         aria-hidden
         className={cn(
-          "fixed inset-x-0 top-0 z-40 h-32 md:h-40 bg-gradient-to-b from-darker via-darker/80 to-transparent pointer-events-none transition-opacity duration-500",
+          "fixed inset-x-0 top-0 z-40 h-32 md:h-40 bg-gradient-to-b from-surface-page via-surface-page/80 to-transparent pointer-events-none transition-opacity duration-500",
           scrolled ? "opacity-100" : "opacity-0"
         )}
       />
@@ -62,7 +64,7 @@ const LandingHeader = () => {
           className="relative flex items-center shrink-0 group"
           aria-label={`${platformName} — Inicio`}
         >
-          <img
+          <BrandLogo
             src={logoUrl}
             alt={platformName}
             className="h-12 sm:h-14 md:h-20 w-auto object-contain drop-shadow-[0_0_18px_rgba(204,164,59,0.35)] group-hover:scale-105 transition-transform duration-300"
@@ -72,11 +74,12 @@ const LandingHeader = () => {
         {/* Actions */}
         <div className="relative flex items-center gap-1.5 sm:gap-3 md:gap-4">
           <AnimationToggle />
+          <AppearanceToggle />
 
           {user ? (
             <Link
               to="/dashboard?tab=modulos"
-              className="group relative inline-flex items-center gap-2 overflow-hidden rounded-full bg-gradient-to-r from-goldHover to-gold px-4 sm:px-6 py-2 sm:py-2.5 text-xs sm:text-sm font-bold text-darker shadow-[0_10px_34px_-10px_rgba(204,164,59,0.7)] transition-all hover:-translate-y-0.5 hover:shadow-[0_14px_44px_-10px_rgba(204,164,59,0.9)]"
+              className="group relative inline-flex items-center gap-2 overflow-hidden rounded-full bg-gradient-to-r from-brand-hover to-brand px-4 sm:px-6 py-2 sm:py-2.5 text-xs sm:text-sm font-bold text-on-brand shadow-[0_10px_34px_-10px_rgba(204,164,59,0.7)] transition-all hover:-translate-y-0.5 hover:shadow-[0_14px_44px_-10px_rgba(204,164,59,0.9)]"
             >
               <span
                 aria-hidden
@@ -88,7 +91,7 @@ const LandingHeader = () => {
           ) : (
             <Link
               to="/login"
-              className="group relative inline-flex items-center gap-1.5 sm:gap-2 overflow-hidden rounded-full bg-gradient-to-r from-goldHover to-gold px-4 sm:px-7 py-2 sm:py-2.5 text-xs sm:text-sm font-bold text-darker shadow-[0_10px_34px_-10px_rgba(204,164,59,0.7)] transition-all hover:-translate-y-0.5 hover:shadow-[0_14px_44px_-10px_rgba(204,164,59,0.9)]"
+              className="group relative inline-flex items-center gap-1.5 sm:gap-2 overflow-hidden rounded-full bg-gradient-to-r from-brand-hover to-brand px-4 sm:px-7 py-2 sm:py-2.5 text-xs sm:text-sm font-bold text-on-brand shadow-[0_10px_34px_-10px_rgba(204,164,59,0.7)] transition-all hover:-translate-y-0.5 hover:shadow-[0_14px_44px_-10px_rgba(204,164,59,0.9)]"
             >
               <span
                 aria-hidden

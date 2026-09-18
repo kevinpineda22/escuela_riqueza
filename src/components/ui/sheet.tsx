@@ -18,7 +18,7 @@ function SheetOverlay({
     <DialogPrimitive.Overlay
       ref={ref}
       className={cn(
-        "fixed inset-0 z-50 bg-darker/80 backdrop-blur-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+        "fixed inset-0 z-50 bg-surface-page/80 light:bg-scrim backdrop-blur-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
         className
       )}
       {...props}
@@ -27,7 +27,7 @@ function SheetOverlay({
 }
 
 const sheetVariants = cva(
-  "fixed z-50 gap-4 bg-darker/95 backdrop-blur-xl border-white/10 p-6 shadow-2xl transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500 data-[state=open]:animate-in data-[state=closed]:animate-out",
+  "fixed z-50 gap-4 bg-surface-page/95 backdrop-blur-xl border-line-subtle p-6 shadow-2xl light:bg-surface-panel light:shadow-panel transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500 data-[state=open]:animate-in data-[state=closed]:animate-out",
   {
     variants: {
       side: {
@@ -56,7 +56,7 @@ function SheetContent({ side = "right", className, children, ref, ...props }: Sh
       <SheetOverlay />
       <DialogPrimitive.Content ref={ref} className={cn(sheetVariants({ side }), className)} {...props}>
         {children}
-        <SheetClose className="absolute right-5 top-5 rounded-full p-1 text-textMuted opacity-70 transition-opacity hover:opacity-100 hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-gold disabled:pointer-events-none">
+        <SheetClose className="absolute right-5 top-5 rounded-full p-1 text-foreground-muted opacity-70 transition-opacity hover:opacity-100 hover:bg-ink/5 focus:outline-none focus:ring-2 focus:ring-focus disabled:pointer-events-none">
           <X className="h-5 w-5" />
           <span className="sr-only">Cerrar</span>
         </SheetClose>
@@ -86,7 +86,7 @@ function SheetTitle({
   return (
     <DialogPrimitive.Title
       ref={ref}
-      className={cn("text-xl font-bold text-white", className)}
+      className={cn("text-xl font-bold text-foreground-strong", className)}
       {...props}
     />
   );
@@ -100,7 +100,7 @@ function SheetDescription({
   return (
     <DialogPrimitive.Description
       ref={ref}
-      className={cn("text-sm text-textMuted", className)}
+      className={cn("text-sm text-foreground-muted", className)}
       {...props}
     />
   );

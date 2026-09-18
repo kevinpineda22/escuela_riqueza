@@ -11,18 +11,18 @@ const HistoryPage = () => {
   const [isVideoInteracted, setIsVideoInteracted] = useState(false);
 
   return (
-    <div className="min-h-[100dvh] relative bg-darker selection:bg-gold/30 font-sans text-textMain">
+    <div className="min-h-[100dvh] relative bg-surface-page selection:bg-brand/30 font-sans text-foreground">
       <div
         aria-hidden
         className="fixed inset-0 -z-10 bg-[linear-gradient(to_right,#80808008_1px,transparent_1px),linear-gradient(to_bottom,#80808008_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"
       />
       <div
         aria-hidden
-        className="hidden md:block fixed top-0 left-0 -z-10 h-[600px] w-[600px] rounded-full bg-gold opacity-[0.07] blur-[150px] pointer-events-none"
+        className="hidden md:block fixed top-0 left-0 -z-10 h-[600px] w-[600px] rounded-full bg-brand opacity-[0.07] blur-[150px] pointer-events-none"
       />
       <div
         aria-hidden
-        className="hidden md:block fixed bottom-0 right-0 -z-10 h-[600px] w-[600px] rounded-full bg-gold opacity-[0.05] blur-[120px] pointer-events-none"
+        className="hidden md:block fixed bottom-0 right-0 -z-10 h-[600px] w-[600px] rounded-full bg-brand opacity-[0.05] blur-[120px] pointer-events-none"
       />
 
       <Header />
@@ -31,28 +31,28 @@ const HistoryPage = () => {
         <section className="max-w-4xl mx-auto px-5 sm:px-6">
           <Link
             to="/"
-            className="inline-flex items-center gap-1.5 text-xs sm:text-sm text-textMuted hover:text-gold transition-colors mb-8"
+            className="inline-flex items-center gap-1.5 text-xs sm:text-sm text-foreground-muted hover:text-accent transition-colors mb-8"
           >
             <ArrowLeft size={14} /> Volver al inicio
           </Link>
 
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gold/5 border border-gold/20 mb-6">
-            <Sparkles size={12} className="text-gold" />
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-brand/5 border border-brand/20 mb-6">
+            <Sparkles size={12} className="text-accent" />
             <EditableField
               as="span"
-              className="text-[10px] sm:text-xs uppercase tracking-[0.3em] font-bold text-gold/80"
+              className="text-[10px] sm:text-xs uppercase tracking-[0.3em] font-bold text-accent/80"
               textKey="history_badge"
               defaultValue="Nuestra historia"
             />
           </div>
 
-          <h1 className="text-3xl sm:text-5xl md:text-6xl font-extrabold text-white tracking-tight mb-6 leading-tight">
+          <h1 className="text-3xl sm:text-5xl md:text-6xl font-extrabold text-foreground-strong tracking-tight mb-6 leading-tight">
             <EditableField
               as="span"
               textKey="history_title"
               defaultValue="¿Qué es la Escuela de La Riqueza y por qué llegó para"
             />{" "}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-gold via-amber-100 to-goldHover italic">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-gilt-start via-gilt-mid to-gilt-end italic">
               <EditableField
                 as="span"
                 className="inline"
@@ -64,13 +64,13 @@ const HistoryPage = () => {
 
           <EditableField
             as="div"
-            className="mb-10 text-lg sm:text-2xl text-gold italic font-serif leading-relaxed border-l-4 border-gold pl-6 py-2"
+            className="mb-10 text-lg sm:text-2xl text-accent italic font-serif leading-relaxed border-l-4 border-accent pl-6 py-2"
             textKey="history_quote_1"
             defaultValue="“La riqueza es una consecuencia de la transformación mental, del carácter, de la conciencia y de la manera de servir al mundo”."
             multiline
           />
 
-          <div className="prose prose-invert max-w-none prose-p:text-textMuted prose-p:leading-relaxed prose-p:text-base sm:prose-p:text-lg">
+          <div className="prose prose-invert max-w-none prose-p:text-foreground-muted prose-p:leading-relaxed prose-p:text-base sm:prose-p:text-lg">
             <EditableField
               as="p"
               textKey="history_intro_1"
@@ -85,7 +85,7 @@ const HistoryPage = () => {
             />
 
             <div 
-              className="my-12 rounded-2xl overflow-hidden shadow-[0_0_40px_rgba(204,164,59,0.15)] border border-white/10 relative bg-black aspect-video group"
+              className="my-12 rounded-2xl overflow-hidden shadow-[0_0_40px_rgba(204,164,59,0.15)] border border-line-subtle relative bg-black aspect-video group"
               onMouseLeave={() => setIsVideoInteracted(false)}
             >
               {!isVideoInteracted && (
@@ -106,8 +106,8 @@ const HistoryPage = () => {
 
             <div className="space-y-16 mt-16">
               <div>
-                <h2 className="text-2xl sm:text-3xl font-bold text-white mb-6 flex items-center gap-3">
-                  <User className="text-gold shrink-0" size={28} />
+                <h2 className="text-2xl sm:text-3xl font-bold text-foreground-strong mb-6 flex items-center gap-3">
+                  <User className="text-accent shrink-0" size={28} />
                   <EditableField
                     as="span"
                     textKey="history_founder_title"
@@ -135,8 +135,8 @@ const HistoryPage = () => {
               </div>
 
               <div>
-                <h2 className="text-2xl sm:text-3xl font-bold text-white mb-6 flex items-center gap-3">
-                  <Target className="text-gold shrink-0" size={28} />
+                <h2 className="text-2xl sm:text-3xl font-bold text-foreground-strong mb-6 flex items-center gap-3">
+                  <Target className="text-accent shrink-0" size={28} />
                   <EditableField
                     as="span"
                     textKey="history_audience_title"
@@ -169,11 +169,11 @@ const HistoryPage = () => {
               </div>
             </div>
 
-            <div className="mt-20 p-8 sm:p-12 bg-gold/5 border border-gold/20 rounded-3xl text-center relative overflow-hidden">
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-gold/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="mt-20 p-8 sm:p-12 bg-brand/5 border border-brand/20 rounded-3xl text-center relative overflow-hidden">
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-brand/10 rounded-full blur-3xl pointer-events-none" />
               <EditableField
                 as="h3"
-                className="text-xl sm:text-3xl font-serif italic text-white leading-relaxed relative z-10 m-0"
+                className="text-xl sm:text-3xl font-serif italic text-foreground-strong leading-relaxed relative z-10 m-0"
                 textKey="history_quote_2"
                 defaultValue="“La verdadera riqueza no es cuánto dinero produces, sino en quién te conviertes mientras lo produces”."
                 multiline

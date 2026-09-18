@@ -3,6 +3,180 @@
 @import "tw-animate-css";
 @config "../tailwind.config.js";
 
+/* Una sola autoridad para `dark:`: el atributo data-theme, no el media query
+   del sistema (que contradiría la elección manual). */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* `light:` solo para lo que en claro cambia de ESTRUCTURA (p. ej. vidrio
+   translúcido → tarjeta blanca con sombra). Lo demás va por tokens. Excluye las
+   islas: dentro de un data-theme="dark" no aplica aunque la página sea clara. */
+@custom-variant light (&:where([data-theme="light"], [data-theme="light"] *):not(:where([data-theme="dark"], [data-theme="dark"] *)));
+
+/* ── Tokens de tema ────────────────────────────────────────────────────────
+   Única fuente de valores; tailwind.config.js solo expone los nombres.
+   El bloque oscuro reproduce los valores actuales: el oscuro es la referencia
+   de regresión. [data-theme] también sirve para islas: un contenedor con
+   data-theme="dark" (video, live, vitrina) redefine la paleta completa adentro,
+   aunque la página esté en claro. */
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --surface-page: #0a0a0a;
+  --surface-panel: #121212;
+  --surface-subtle: rgb(255 255 255 / 0.05);
+  --surface-input: rgb(255 255 255 / 0.05);
+  --surface-popover: rgb(10 10 10 / 0.95);
+
+  --foreground: #e5e5e5;
+  --foreground-strong: #ffffff;
+  --foreground-muted: #a3a3a3;
+  --foreground-placeholder: rgb(255 255 255 / 0.3);
+  /* Tinta para tintes/bordes translúcidos: `white/X` de siempre ⇒ `ink/X`. */
+  --ink: #ffffff;
+
+  /* Escalera de texto: fg-N ≡ `text-white/N` en oscuro. En claro, hex con contraste
+     ≥ al del oscuro y jerarquía intacta (ink/N compuesto quedaría por debajo). */
+  --fg-90: rgb(255 255 255 / 0.9);
+  --fg-85: rgb(255 255 255 / 0.85);
+  --fg-80: rgb(255 255 255 / 0.8);
+  --fg-70: rgb(255 255 255 / 0.7);
+  --fg-65: rgb(255 255 255 / 0.65);
+  --fg-60: rgb(255 255 255 / 0.6);
+  --fg-55: rgb(255 255 255 / 0.55);
+  --fg-50: rgb(255 255 255 / 0.5);
+  --fg-40: rgb(255 255 255 / 0.4);
+  --fg-30: rgb(255 255 255 / 0.3);
+  --fg-25: rgb(255 255 255 / 0.25);
+  --fg-20: rgb(255 255 255 / 0.2);
+  --fg-15: rgb(255 255 255 / 0.15);
+
+  --line-subtle: rgb(255 255 255 / 0.1);
+  --line-control: rgb(255 255 255 / 0.2);
+
+  --brand-fill: #cca43b;
+  --brand-fill-hover: #e1b846;
+  --on-brand: #0a0a0a;
+  --accent-foreground: #cca43b;
+  --accent-foreground-hover: #e1b846;
+  --focus-ring: #cca43b;
+  /* Texto dorado degradado (titulares): oro → amber-100 → oro. */
+  --gilt-start: #cca43b;
+  --gilt-mid: oklch(96.2% 0.059 95.617);
+  --gilt-end: #e1b846;
+
+  --media-surface: #000000;
+  --media-foreground: #ffffff;
+  --media-muted: #a3a3a3;
+  --scrim: rgb(0 0 0 / 0.6);
+
+  --shadow-panel: 0 20px 50px -20px rgb(0 0 0 / 0.8);
+
+  /* Estados: texto *-400, tinte *-500/10, borde *-500/30 (paleta Tailwind 4). */
+  --success: oklch(76.5% 0.177 163.223);
+  --success-surface: oklch(69.6% 0.17 162.48 / 0.1);
+  --success-line: oklch(69.6% 0.17 162.48 / 0.3);
+  --warning: oklch(82.8% 0.189 84.429);
+  --warning-surface: oklch(76.9% 0.188 70.08 / 0.1);
+  --warning-line: oklch(76.9% 0.188 70.08 / 0.3);
+  --danger: oklch(70.4% 0.191 22.216);
+  --danger-surface: oklch(63.7% 0.237 25.331 / 0.1);
+  --danger-line: oklch(63.7% 0.237 25.331 / 0.3);
+  --info: oklch(74.6% 0.16 232.661);
+  --info-surface: oklch(68.5% 0.169 237.323 / 0.1);
+  --info-line: oklch(68.5% 0.169 237.323 / 0.3);
+  --violet: oklch(71.4% 0.203 305.504);
+  --violet-surface: oklch(62.7% 0.265 303.9 / 0.1);
+  --violet-line: oklch(62.7% 0.265 303.9 / 0.3);
+
+  --scrollbar-track: #0a0a0a;
+  --scrollbar-thumb: rgb(204 164 59 / 0.3);
+  --scrollbar-thumb-hover: rgb(204 164 59 / 0.5);
+  --selection-bg: rgb(204 164 59 / 0.3);
+  --selection-fg: #ffffff;
+  --grid-line: rgb(255 255 255 / 0.03);
+}
+
+/* Claro: marfil y oro. Contrastes medidos sobre sólidos (docs/MODO_CLARO_ESPECIFICACION.md §3.3):
+   foreground 16,1:1 · muted 6,0:1 · accent 5,2:1 · placeholder 4,9:1 (sobre blanco)
+   · line-control 3,3:1 · estados ≥5,7:1 sobre su tinte. El oro #cca43b NO es texto. */
+[data-theme="light"] {
+  color-scheme: light;
+
+  --surface-page: #f8f6f1;
+  --surface-panel: #ffffff;
+  --surface-subtle: #f0ece3;
+  --surface-input: #ffffff;
+  --surface-popover: rgb(255 255 255 / 0.97);
+
+  --foreground: #1c1a16;
+  --foreground-strong: #1c1a16;
+  --foreground-muted: #625e56;
+  --foreground-placeholder: #747067;
+  --ink: #1c1a16;
+
+  --fg-90: #2b2823;
+  --fg-85: #35322c;
+  --fg-80: #403c35;
+  --fg-70: #524e46;
+  --fg-65: #5a564e;
+  --fg-60: #625e56;
+  --fg-55: #67635a;
+  --fg-50: #6b665d;
+  --fg-40: #716c63;
+  --fg-30: #8c877d;
+  --fg-25: #99948a;
+  --fg-20: #aaa59a;
+  --fg-15: #bbb6ab;
+
+  --line-subtle: #ded8cc;
+  --line-control: #8c877d;
+
+  --brand-fill: #cca43b;
+  --brand-fill-hover: #e1b846;
+  --on-brand: #0a0a0a;
+  --accent-foreground: #846313;
+  --accent-foreground-hover: #6b4e0b;
+  --focus-ring: #846313;
+  /* Oro profundo legible en TODO el recorrido (texto grande ≥3:1): 5,9 → 3,6
+     → 7,2 sobre marfil, ≥3,3 sobre surface-subtle. Los extremos oscuros hacen
+     que la banda central se lea como brillo metálico al desplazarse. */
+  --gilt-start: #7a5a10;
+  --gilt-mid: #a37a17;
+  --gilt-end: #6b4e0b;
+
+  --media-surface: #000000;
+  --media-foreground: #ffffff;
+  --media-muted: #a3a3a3;
+  --scrim: rgb(28 26 22 / 0.4);
+
+  /* Profundidad por sombra cálida y difusa, no por oscurecer regiones. */
+  --shadow-panel: 0 1px 2px rgb(60 45 15 / 0.06), 0 16px 40px -18px rgb(60 45 15 / 0.22);
+
+  --success: #166534;
+  --success-surface: #ecfdf3;
+  --success-line: #a7dcb8;
+  --warning: #854d0e;
+  --warning-surface: #fef6e0;
+  --warning-line: #ecd08a;
+  --danger: #b91c1c;
+  --danger-surface: #fdeeee;
+  --danger-line: #f1b4b4;
+  --info: #1e40af;
+  --info-surface: #eef3fe;
+  --info-line: #b3c6f3;
+  --violet: #6b21a8;
+  --violet-surface: #f5eefc;
+  --violet-line: #d4b8ee;
+
+  --scrollbar-track: #f0ece3;
+  --scrollbar-thumb: rgb(132 99 19 / 0.35);
+  --scrollbar-thumb-hover: rgb(132 99 19 / 0.55);
+  --selection-bg: rgb(204 164 59 / 0.35);
+  --selection-fg: #1c1a16;
+  --grid-line: rgb(28 26 22 / 0.06);
+}
+
 @layer base {
   /* No usamos scroll-behavior: smooth — Lenis maneja smooth scroll en desktop.
      Mobile usa scroll nativo (momentum). */
@@ -11,31 +185,46 @@
   }
 
   body {
-    @apply bg-darker text-textMain antialiased font-sans;
+    @apply bg-surface-page text-foreground antialiased font-sans;
     overflow-x: hidden;
   }
 
-  /* Scrollbar discreto en gold/dark */
+  /* Scrollbar discreto en oro sobre la superficie del tema */
   ::-webkit-scrollbar {
     width: 10px;
     height: 10px;
   }
   ::-webkit-scrollbar-track {
-    background: #0a0a0a;
+    background: var(--scrollbar-track);
   }
   ::-webkit-scrollbar-thumb {
-    background: rgba(204, 164, 59, 0.3);
+    background: var(--scrollbar-thumb);
     border-radius: 9999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(204, 164, 59, 0.5);
+    background: var(--scrollbar-thumb-hover);
   }
 
-  /* Selección con gold */
+  /* Selección con oro */
   ::selection {
-    background: rgba(204, 164, 59, 0.3);
-    color: #fff;
+    background: var(--selection-bg);
+    color: var(--selection-fg);
   }
+}
+
+/* Grilla de fondo por tema. Solo define background-image: respeta el
+   bg-[size:…] y el mask-image que ya tenga el elemento. En oscuro los
+   componentes conservan su grilla original; en claro se usa `light:bg-grid-ink`. */
+@utility bg-grid-ink {
+  background-image:
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+}
+
+/* Relleno de texto que le gana al bg-clip-text transparente de los titulares
+   degradados (EditableField). Oscuro: #fff como siempre; claro: tinta. */
+@utility text-fill-foreground {
+  -webkit-text-fill-color: var(--foreground-strong);
 }
 
 @layer utilities {

@@ -2,6 +2,8 @@ import { Link } from "react-router-dom";
 import type { ReactElement } from "react";
 import { Shield, Scale, Mail, ArrowUpRight, Sparkles } from "lucide-react";
 import AnimationToggle from "@/components/feature/AnimationToggle";
+import AppearanceToggle from "@/components/feature/AppearanceToggle";
+import BrandLogo from "@/components/layout/BrandLogo";
 import { usePlatformSettings } from "@/hooks/usePlatformSettings";
 
 const LOGO_FALLBACK =
@@ -129,7 +131,7 @@ const Footer = () => {
     return (
       <>
         {before}
-        <span className="text-transparent bg-clip-text bg-gradient-to-r from-gold via-amber-100 to-goldHover italic">
+        <span className="text-transparent bg-clip-text bg-gradient-to-r from-gilt-start via-gilt-mid to-gilt-end italic">
           {match}
         </span>
         {after}
@@ -138,11 +140,11 @@ const Footer = () => {
   };
 
   return (
-    <footer className="relative bg-darker border-t border-white/5 mt-16 sm:mt-24 overflow-hidden">
+    <footer className="relative bg-surface-page light:bg-surface-subtle border-t border-ink/5 mt-16 sm:mt-24 overflow-hidden">
       {/* Línea dorada superior decorativa */}
       <div
         aria-hidden
-        className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-gold/40 to-transparent"
+        className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-brand/40 to-transparent"
       />
       {/* Glow ambiental — solo desktop */}
       <div
@@ -152,20 +154,20 @@ const Footer = () => {
 
       {/* Tagline cinemático */}
       <div className="relative max-w-7xl mx-auto px-5 sm:px-6 pt-12 sm:pt-16 pb-8 sm:pb-10 text-center">
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gold/5 border border-gold/20 mb-5">
-          <Sparkles size={12} className="text-gold" />
-          <span className="text-[10px] uppercase tracking-[0.3em] font-bold text-gold/80">
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-brand/5 border border-brand/20 mb-5">
+          <Sparkles size={12} className="text-accent" />
+          <span className="text-[10px] uppercase tracking-[0.3em] font-bold text-accent/80 light:text-accent">
             {s.platform_name}
           </span>
         </div>
-        <p className="text-lg sm:text-2xl md:text-3xl font-extrabold text-white tracking-tight leading-tight max-w-2xl mx-auto text-balance">
+        <p className="text-lg sm:text-2xl md:text-3xl font-extrabold text-foreground-strong tracking-tight leading-tight max-w-2xl mx-auto text-balance">
           {renderTagline()}
         </p>
       </div>
 
       {/* Separador sutil */}
       <div className="relative max-w-7xl mx-auto px-5 sm:px-6">
-        <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+        <div className="h-px bg-gradient-to-r from-transparent via-ink/10 to-transparent" />
       </div>
 
       {/* Contenido principal — 4 columnas */}
@@ -173,13 +175,13 @@ const Footer = () => {
         {/* Brand (mobile: full width, md: 5/12) */}
         <div className="col-span-2 md:col-span-5">
           <Link to="/" className="inline-block mb-4 group">
-            <img
+            <BrandLogo
               src={s.logo_url}
               alt={s.platform_name}
               className="h-12 sm:h-14 w-auto object-contain opacity-90 group-hover:opacity-100 transition-opacity drop-shadow-[0_0_18px_rgba(204,164,59,0.25)]"
             />
           </Link>
-          <p className="text-textMuted text-sm leading-relaxed max-w-sm">
+          <p className="text-foreground-muted text-sm leading-relaxed max-w-sm">
             Una escuela de rediseño cerebral para emprendedores. Aprende, practica y transforma —
             de la mano de Iván Mazo.
           </p>
@@ -194,7 +196,7 @@ const Footer = () => {
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={label}
-                  className="w-10 h-10 rounded-full bg-white/[0.04] border border-white/10 hover:border-gold/40 hover:bg-gold/10 text-white/60 hover:text-gold flex items-center justify-center transition-all hover:-translate-y-0.5"
+                  className="w-10 h-10 rounded-full bg-ink/[0.04] light:bg-surface-panel border border-line-subtle hover:border-brand/40 hover:bg-brand/10 text-fg-60 hover:text-accent flex items-center justify-center transition-all hover:-translate-y-0.5"
                 >
                   <Icon size={16} />
                 </a>
@@ -206,9 +208,9 @@ const Footer = () => {
         {/* Columnas */}
         {columns.map((col) => (
           <div key={col.title} className="md:col-span-2 lg:col-span-2">
-            <h4 className="text-white font-semibold mb-4 text-sm tracking-wide flex items-center gap-2">
+            <h4 className="text-foreground-strong font-semibold mb-4 text-sm tracking-wide flex items-center gap-2">
               {col.title}
-              <span className="flex-1 h-px bg-gradient-to-r from-gold/30 to-transparent" />
+              <span className="flex-1 h-px bg-gradient-to-r from-brand/30 to-transparent" />
             </h4>
             <ul className="space-y-2.5 text-sm">
               {col.links.map((link) => {
@@ -219,10 +221,10 @@ const Footer = () => {
                     {link.external ? (
                       <a
                         href={link.href}
-                        className="text-textMuted hover:text-gold transition-colors inline-flex items-center gap-1.5 group"
+                        className="text-foreground-muted hover:text-accent transition-colors inline-flex items-center gap-1.5 group"
                       >
                         {Icon && <Icon size={13} className="opacity-70 group-hover:opacity-100" />}
-                        <span className="border-b border-transparent group-hover:border-gold/40 transition-colors">
+                        <span className="border-b border-transparent group-hover:border-brand/40 transition-colors">
                           {link.label}
                         </span>
                         <ArrowUpRight size={12} className="opacity-0 group-hover:opacity-60 transition-opacity" />
@@ -230,20 +232,20 @@ const Footer = () => {
                     ) : isHashOrPath ? (
                       <Link
                         to={link.href}
-                        className="text-textMuted hover:text-gold transition-colors inline-flex items-center gap-1.5 group"
+                        className="text-foreground-muted hover:text-accent transition-colors inline-flex items-center gap-1.5 group"
                       >
                         {Icon && <Icon size={13} className="opacity-70 group-hover:opacity-100" />}
-                        <span className="border-b border-transparent group-hover:border-gold/40 transition-colors">
+                        <span className="border-b border-transparent group-hover:border-brand/40 transition-colors">
                           {link.label}
                         </span>
                       </Link>
                     ) : (
                       <a
                         href={link.href}
-                        className="text-textMuted hover:text-gold transition-colors inline-flex items-center gap-1.5 group"
+                        className="text-foreground-muted hover:text-accent transition-colors inline-flex items-center gap-1.5 group"
                       >
                         {Icon && <Icon size={13} className="opacity-70 group-hover:opacity-100" />}
-                        <span className="border-b border-transparent group-hover:border-gold/40 transition-colors">
+                        <span className="border-b border-transparent group-hover:border-brand/40 transition-colors">
                           {link.label}
                         </span>
                       </a>
@@ -260,13 +262,14 @@ const Footer = () => {
       </div>
 
       {/* Barra inferior */}
-      <div className="relative border-t border-white/5">
-        <div className="max-w-7xl mx-auto px-5 sm:px-6 py-5 flex flex-col-reverse sm:flex-row items-center justify-between gap-4 text-xs text-textMuted">
+      <div className="relative border-t border-ink/5">
+        <div className="max-w-7xl mx-auto px-5 sm:px-6 py-5 flex flex-col-reverse sm:flex-row items-center justify-between gap-4 text-xs text-foreground-muted">
           <span className="text-center sm:text-left">
             © {year} {s.platform_name} · Todos los derechos reservados.
           </span>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
             <AnimationToggle variant="labeled" />
+            <AppearanceToggle variant="labeled" className="w-64" />
           </div>
         </div>
       </div>

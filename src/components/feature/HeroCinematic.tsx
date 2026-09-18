@@ -48,7 +48,7 @@ const ShimmerAccent = ({
       backgroundPosition: { duration: 6, repeat: Infinity, ease: "linear" },
     }}
     className={cn(
-      "text-transparent bg-clip-text bg-gradient-to-r from-gold via-amber-100 to-goldHover italic pr-3 sm:pr-5 box-decoration-clone [background-size:200%_auto]",
+      "text-transparent bg-clip-text bg-gradient-to-r from-gilt-start via-gilt-mid to-gilt-end italic pr-3 sm:pr-5 box-decoration-clone [background-size:200%_auto]",
       className,
     )}
   >
@@ -64,14 +64,14 @@ const ScrollIndicator = () => (
     transition={{ delay: 1.4, duration: 0.8 }}
     className="absolute bottom-6 md:bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3 pointer-events-none"
   >
-    <div className="w-7 h-12 border-2 border-gold/40 rounded-full flex items-start justify-center pt-2">
+    <div className="w-7 h-12 border-2 border-brand/40 rounded-full flex items-start justify-center pt-2">
       <motion.div
-        className="w-1 h-2 rounded-full bg-gold"
+        className="w-1 h-2 rounded-full bg-brand"
         animate={{ y: [0, 14, 0], opacity: [1, 0, 1] }}
         transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
       />
     </div>
-    <span className="text-[10px] uppercase tracking-[0.4em] text-textMuted font-semibold">
+    <span className="text-[10px] uppercase tracking-[0.4em] text-foreground-muted font-semibold">
       Continuar
     </span>
   </motion.div>
@@ -126,7 +126,7 @@ export const HeroCinematic = () => {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.9, ease: "easeOut" }}
-            className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-extrabold tracking-tight md:tracking-tighter mb-6 sm:mb-8 pb-2 text-white leading-[1.2] sm:leading-[1.25] drop-shadow-2xl text-balance"
+            className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-extrabold tracking-tight md:tracking-tighter mb-6 sm:mb-8 pb-2 text-foreground-strong leading-[1.2] sm:leading-[1.25] drop-shadow-2xl light:drop-shadow-none text-balance"
           >
             <Reveal delay={0.15}>
               <EditableField textKey="hero_title" defaultValue="Una escuela de" as="span" />
@@ -140,7 +140,7 @@ export const HeroCinematic = () => {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.3, ease: "easeOut" }}
-            className="text-base sm:text-xl md:text-2xl lg:text-3xl font-bold tracking-tight text-white/85 leading-[1.35] max-w-2xl text-pretty pb-2"
+            className="text-base sm:text-xl md:text-2xl lg:text-3xl font-bold tracking-tight text-fg-85 leading-[1.35] max-w-2xl text-pretty pb-2"
           >
             <Reveal delay={0.5}>
               <EditableField textKey="hero_subtitle" defaultValue="para que te conviertas en el" as="span" />
@@ -167,7 +167,7 @@ export const HeroCinematic = () => {
             {/* Glow dorado pulsante detrás de la foto */}
             <motion.div
               aria-hidden
-              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[70%] max-w-[520px] aspect-square rounded-full bg-[radial-gradient(circle_at_center,rgba(204,164,59,0.35),transparent_60%)] blur-3xl pointer-events-none"
+              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[70%] max-w-[520px] aspect-square rounded-full bg-[radial-gradient(circle_at_center,rgba(204,164,59,0.35),transparent_60%)] light:bg-[radial-gradient(circle_at_center,rgba(204,164,59,0.22),transparent_60%)] blur-3xl pointer-events-none"
               animate={{ scale: [1, 1.08, 1], opacity: [0.6, 0.9, 0.6] }}
               transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
             />
@@ -176,7 +176,7 @@ export const HeroCinematic = () => {
                 y este overlay dejaba una banda oscura cortada. */}
             <div
               aria-hidden
-              className="hidden md:block absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-darker via-darker/40 to-transparent z-10 pointer-events-none"
+              className="hidden md:block absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-surface-page via-surface-page/40 to-transparent z-10 pointer-events-none"
             />
             <motion.img
               src={IVAN_IMAGE}

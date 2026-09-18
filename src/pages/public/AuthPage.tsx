@@ -32,6 +32,7 @@ import { requestPasswordReset } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
 import { USER_ROLES } from "@/types/user";
 import { cn } from "@/lib/utils";
+import BrandLogo from "@/components/layout/BrandLogo";
 import { usePlatformSettings, formatPrice } from "@/hooks/usePlatformSettings";
 
 const LOGO_LIGHT_FALLBACK =
@@ -71,11 +72,11 @@ const Field = ({
   registration,
 }: FieldProps) => (
   <div className="space-y-1.5">
-    <label htmlFor={id} className="text-xs font-semibold text-white/80 ml-1">
+    <label htmlFor={id} className="text-xs font-semibold text-fg-80 ml-1">
       {label}
     </label>
     <div className="relative group">
-      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 group-focus-within:text-gold transition-colors pointer-events-none">
+      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-fg-40 group-focus-within:text-accent transition-colors pointer-events-none">
         {icon}
       </div>
       <input
@@ -84,8 +85,9 @@ const Field = ({
         autoComplete={autoComplete}
         placeholder={placeholder}
         className={cn(
-          "w-full bg-black/40 border border-white/10 rounded-xl pl-11 py-2.5 text-sm text-white placeholder:text-white/30",
-          "focus:outline-none focus:border-gold/60 focus:ring-2 focus:ring-gold/20 focus:bg-black/60 transition-all",
+          "w-full bg-black/40 border border-line-subtle rounded-xl pl-11 py-2.5 text-sm text-foreground-strong placeholder:text-fg-30",
+          "focus:outline-none focus:border-brand/60 focus:ring-2 focus:ring-focus/20 focus:bg-black/60 transition-all",
+          "light:bg-surface-input light:border-line-control/50 light:placeholder:text-foreground-placeholder light:focus:bg-surface-input light:focus:border-accent",
           rightSlot ? "pr-11" : "pr-4"
         )}
         {...registration}
@@ -96,7 +98,7 @@ const Field = ({
         </div>
       )}
     </div>
-    {error && <p className="text-xs text-red-400 ml-1">{error}</p>}
+    {error && <p className="text-xs text-danger ml-1">{error}</p>}
   </div>
 );
 
@@ -152,14 +154,14 @@ const SignInForm = ({ onSuccess, onSwitch, onForgot, compact = false }: SignInFo
       className="w-full flex flex-col gap-4"
     >
       <div className="text-center">
-        <h2 className="text-2xl md:text-[26px] font-extrabold text-white tracking-tight">
+        <h2 className="text-2xl md:text-[26px] font-extrabold text-foreground-strong tracking-tight">
           Iniciar sesión
         </h2>
-        <div className="w-10 h-1 bg-gold rounded-full mx-auto mt-2" />
+        <div className="w-10 h-1 bg-brand rounded-full mx-auto mt-2" />
       </div>
 
       {submitError && (
-        <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-2 text-red-400">
+        <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-2 text-danger">
           <AlertCircle size={18} className="shrink-0 mt-0.5" />
           <p className="text-sm font-medium leading-tight">{submitError}</p>
         </div>
@@ -190,7 +192,7 @@ const SignInForm = ({ onSuccess, onSwitch, onForgot, compact = false }: SignInFo
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="text-white/40 hover:text-white transition-colors"
+              className="text-fg-40 hover:text-foreground-strong transition-colors"
               aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
             >
               {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -201,7 +203,7 @@ const SignInForm = ({ onSuccess, onSwitch, onForgot, compact = false }: SignInFo
           <button
             type="button"
             onClick={onForgot}
-            className="text-xs text-gold hover:text-goldHover transition-colors font-medium"
+            className="text-xs text-accent hover:text-accent-hover transition-colors font-medium"
           >
             ¿Olvidaste tu contraseña?
           </button>
@@ -211,7 +213,7 @@ const SignInForm = ({ onSuccess, onSwitch, onForgot, compact = false }: SignInFo
       <button
         type="submit"
         disabled={isSubmitting}
-        className="mt-1 w-full py-3 bg-gold hover:bg-goldHover text-darker font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-[0_8px_24px_-8px_rgba(204,164,59,0.6)] hover:shadow-[0_8px_28px_-6px_rgba(204,164,59,0.8)] disabled:opacity-70 disabled:cursor-not-allowed"
+        className="mt-1 w-full py-3 bg-brand hover:bg-brand-hover text-on-brand font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-[0_8px_24px_-8px_rgba(204,164,59,0.6)] hover:shadow-[0_8px_28px_-6px_rgba(204,164,59,0.8)] disabled:opacity-70 disabled:cursor-not-allowed"
       >
         {isSubmitting ? (
           <>
@@ -225,12 +227,12 @@ const SignInForm = ({ onSuccess, onSwitch, onForgot, compact = false }: SignInFo
       </button>
 
       {compact && (
-        <p className="text-center text-sm text-textMuted font-normal">
+        <p className="text-center text-sm text-foreground-muted font-normal">
           ¿No tienes una cuenta?{" "}
           <button
             type="button"
             onClick={onSwitch}
-            className="text-gold hover:text-goldHover font-bold transition-colors"
+            className="text-accent hover:text-accent-hover font-bold transition-colors"
           >
             Crear cuenta
           </button>
@@ -326,19 +328,19 @@ const SignUpForm = ({ onSuccess, onSwitch, compact = false }: SignUpFormProps) =
   if (step === "check-email") {
     return (
       <div className="w-full flex flex-col items-center text-center gap-4 py-2 animate-in fade-in duration-300">
-        <CheckCircle2 className="text-gold" size={44} />
-        <h2 className="text-xl md:text-2xl font-extrabold text-white tracking-tight">
+        <CheckCircle2 className="text-accent" size={44} />
+        <h2 className="text-xl md:text-2xl font-extrabold text-foreground-strong tracking-tight">
           Revisa tu correo
         </h2>
-        <p className="text-sm text-textMuted leading-relaxed max-w-[280px]">
+        <p className="text-sm text-foreground-muted leading-relaxed max-w-[280px]">
           Te enviamos un enlace de confirmación a{" "}
-          <span className="text-white font-semibold">{savedInput?.email}</span>. Haz clic
+          <span className="text-foreground-strong font-semibold">{savedInput?.email}</span>. Haz clic
           en él para activar tu cuenta y entrar. Revisa también la carpeta de spam.
         </p>
         <button
           type="button"
           onClick={onSwitch}
-          className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-gold hover:text-goldHover transition-colors"
+          className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-accent hover:text-accent-hover transition-colors"
         >
           <ArrowLeft size={14} /> Volver al inicio de sesión
         </button>
@@ -349,27 +351,27 @@ const SignUpForm = ({ onSuccess, onSwitch, compact = false }: SignUpFormProps) =
   if (step === "payment") {
     return (
       <div className="w-full flex flex-col gap-4 animate-in fade-in slide-in-from-right-4 duration-300">
-        <button onClick={() => setStep("plans")} className="text-white/40 hover:text-white flex items-center gap-2 text-sm w-fit transition-colors">
+        <button onClick={() => setStep("plans")} className="text-fg-40 hover:text-foreground-strong flex items-center gap-2 text-sm w-fit transition-colors">
           <ArrowLeft size={16} /> Volver a planes
         </button>
         <div className="text-center mb-2">
-          <h2 className="text-2xl font-extrabold text-white tracking-tight">Simular Pago</h2>
-          <p className="text-xs text-textMuted mt-1">Has seleccionado el plan {selectedPlan.toUpperCase()}</p>
+          <h2 className="text-2xl font-extrabold text-foreground-strong tracking-tight">Simular Pago</h2>
+          <p className="text-xs text-foreground-muted mt-1">Has seleccionado el plan {selectedPlan.toUpperCase()}</p>
         </div>
         
-        <div className="bg-white/5 border border-white/10 rounded-xl p-5 mb-2">
-          <div className="flex items-center gap-3 mb-4 text-white/50">
+        <div className="bg-ink/5 border border-line-subtle rounded-xl p-5 mb-2">
+          <div className="flex items-center gap-3 mb-4 text-fg-50">
             <CreditCard size={24} />
             <span className="text-sm font-semibold">Pasarela de pago segura (MOCK)</span>
           </div>
-          <p className="text-sm text-center text-textMuted mb-4">
-            Esto simula el proceso de Stripe. Al hacer clic, se creará tu cuenta con el plan <strong className="text-white">{selectedPlan}</strong> activo.
+          <p className="text-sm text-center text-foreground-muted mb-4">
+            Esto simula el proceso de Stripe. Al hacer clic, se creará tu cuenta con el plan <strong className="text-foreground-strong">{selectedPlan}</strong> activo.
           </p>
           <button
             type="button"
             disabled={isProcessing}
             onClick={() => executeSignup(selectedPlan)}
-            className="w-full py-3 bg-green-500 hover:bg-green-600 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-70"
+            className="w-full py-3 bg-green-500 hover:bg-green-600 text-foreground-strong font-bold rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-70"
           >
             {isProcessing ? <><Loader2 size={18} className="animate-spin" /> Procesando...</> : "Simular Pago Exitoso"}
           </button>
@@ -381,29 +383,29 @@ const SignUpForm = ({ onSuccess, onSwitch, compact = false }: SignUpFormProps) =
   if (step === "plans") {
     return (
       <div className="w-full flex flex-col gap-4 animate-in fade-in slide-in-from-right-4 duration-300">
-        <button onClick={() => setStep("form")} className="text-white/40 hover:text-white flex items-center gap-2 text-sm w-fit transition-colors">
+        <button onClick={() => setStep("form")} className="text-fg-40 hover:text-foreground-strong flex items-center gap-2 text-sm w-fit transition-colors">
           <ArrowLeft size={16} /> Volver al formulario
         </button>
         <div className="text-center mb-2">
-          <h2 className="text-2xl font-extrabold text-white tracking-tight">Elige tu Plan</h2>
-          <div className="w-10 h-1 bg-gold rounded-full mx-auto mt-2" />
+          <h2 className="text-2xl font-extrabold text-foreground-strong tracking-tight">Elige tu Plan</h2>
+          <div className="w-10 h-1 bg-brand rounded-full mx-auto mt-2" />
         </div>
 
         {isProcessing && (
-          <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center rounded-xl">
-            <Loader2 className="animate-spin text-gold mb-4" size={32} />
-            <p className="text-white font-semibold">Configurando tu cuenta...</p>
+          <div className="absolute inset-0 z-50 bg-black/80 light:bg-surface-panel/85 backdrop-blur-sm flex flex-col items-center justify-center rounded-xl">
+            <Loader2 className="animate-spin text-accent mb-4" size={32} />
+            <p className="text-foreground-strong font-semibold">Configurando tu cuenta...</p>
           </div>
         )}
 
         <div className="space-y-3">
           {/* FREE */}
-          <button onClick={() => handlePlanSelect("free")} className="w-full text-left bg-black/40 border border-white/10 hover:border-white/30 rounded-xl p-4 transition-all group">
+          <button onClick={() => handlePlanSelect("free")} className="w-full text-left bg-black/40 light:bg-surface-panel border border-line-subtle hover:border-ink/30 rounded-xl p-4 transition-all group">
             <div className="flex justify-between items-center">
-              <h3 className="font-bold text-white group-hover:text-gold transition-colors">Free</h3>
-              <span className="text-sm font-semibold text-white/50">{formatPrice(0, currency)}</span>
+              <h3 className="font-bold text-foreground-strong group-hover:text-accent transition-colors">Free</h3>
+              <span className="text-sm font-semibold text-fg-50">{formatPrice(0, currency)}</span>
             </div>
-            <p className="text-xs text-textMuted mt-1">Con publicidad y funciones limitadas.</p>
+            <p className="text-xs text-foreground-muted mt-1">Con publicidad y funciones limitadas.</p>
           </button>
 
           {/* INDIVIDUAL */}
@@ -416,13 +418,13 @@ const SignUpForm = ({ onSuccess, onSwitch, compact = false }: SignUpFormProps) =
           </button>
 
           {/* VIP */}
-          <button onClick={() => handlePlanSelect("vip")} className="w-full text-left bg-gold/10 border border-gold/40 hover:border-gold/60 rounded-xl p-4 transition-all group relative overflow-hidden shadow-[0_0_15px_rgba(204,164,59,0.1)] hover:shadow-[0_0_20px_rgba(204,164,59,0.2)]">
-            <div className="absolute top-0 right-0 bg-gold text-darker text-[9px] font-black uppercase px-2 py-0.5 rounded-bl-lg">Recomendado</div>
+          <button onClick={() => handlePlanSelect("vip")} className="w-full text-left bg-brand/10 border border-brand/40 hover:border-brand/60 rounded-xl p-4 transition-all group relative overflow-hidden shadow-[0_0_15px_rgba(204,164,59,0.1)] hover:shadow-[0_0_20px_rgba(204,164,59,0.2)]">
+            <div className="absolute top-0 right-0 bg-brand text-on-brand text-[9px] font-black uppercase px-2 py-0.5 rounded-bl-lg">Recomendado</div>
             <div className="flex justify-between items-center relative z-10">
-              <h3 className="font-bold text-gold group-hover:text-goldHover transition-colors flex items-center gap-1"><Crown size={14}/> VIP</h3>
-              <span className="text-sm font-bold text-gold">{formatPrice(vipPrice, currency)}<span className="text-xs opacity-50">/mes</span></span>
+              <h3 className="font-bold text-accent group-hover:text-accent-hover transition-colors flex items-center gap-1"><Crown size={14}/> VIP</h3>
+              <span className="text-sm font-bold text-accent">{formatPrice(vipPrice, currency)}<span className="text-xs opacity-50">/mes</span></span>
             </div>
-            <p className="text-xs text-gold/60 mt-1 relative z-10">Acceso total, lives y mentoría grupal.</p>
+            <p className="text-xs text-accent/60 mt-1 relative z-10">Acceso total, lives y mentoría grupal.</p>
           </button>
         </div>
       </div>
@@ -436,14 +438,14 @@ const SignUpForm = ({ onSuccess, onSwitch, compact = false }: SignUpFormProps) =
       className="w-full flex flex-col gap-3.5 animate-in fade-in duration-300"
     >
       <div className="text-center">
-        <h2 className="text-2xl md:text-[26px] font-extrabold text-white tracking-tight">
+        <h2 className="text-2xl md:text-[26px] font-extrabold text-foreground-strong tracking-tight">
           Crear cuenta
         </h2>
-        <div className="w-10 h-1 bg-gold rounded-full mx-auto mt-2" />
+        <div className="w-10 h-1 bg-brand rounded-full mx-auto mt-2" />
       </div>
 
       {!allowSignups && (
-        <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-2 text-amber-300">
+        <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-2 text-amber-300 light:text-warning">
           <AlertCircle size={18} className="shrink-0 mt-0.5" />
           <p className="text-sm font-medium leading-tight">
             Los registros nuevos están temporalmente pausados. Volvé a intentarlo en un rato.
@@ -452,13 +454,13 @@ const SignUpForm = ({ onSuccess, onSwitch, compact = false }: SignUpFormProps) =
       )}
 
       {submitError && (
-        <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-2 text-red-400">
+        <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-2 text-danger">
           <AlertCircle size={18} className="shrink-0 mt-0.5" />
           <p className="text-sm font-medium leading-tight">{submitError}</p>
         </div>
       )}
       {successMsg && (
-        <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-xl flex items-start gap-2 text-green-400">
+        <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-xl flex items-start gap-2 text-green-400 light:text-success">
           <Sparkles size={18} className="shrink-0 mt-0.5" />
           <p className="text-sm font-medium leading-tight">{successMsg}</p>
         </div>
@@ -499,7 +501,7 @@ const SignUpForm = ({ onSuccess, onSwitch, compact = false }: SignUpFormProps) =
           <button
             type="button"
             onClick={() => setShowPassword(!showPassword)}
-            className="text-white/40 hover:text-white transition-colors"
+            className="text-fg-40 hover:text-foreground-strong transition-colors"
             aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
           >
             {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -521,18 +523,18 @@ const SignUpForm = ({ onSuccess, onSwitch, compact = false }: SignUpFormProps) =
       <button
         type="submit"
         disabled={!allowSignups}
-        className="mt-1 w-full py-3 bg-gold hover:bg-goldHover text-darker font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-[0_8px_24px_-8px_rgba(204,164,59,0.6)] hover:shadow-[0_8px_28px_-6px_rgba(204,164,59,0.8)] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-gold"
+        className="mt-1 w-full py-3 bg-brand hover:bg-brand-hover text-on-brand font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-[0_8px_24px_-8px_rgba(204,164,59,0.6)] hover:shadow-[0_8px_28px_-6px_rgba(204,164,59,0.8)] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-brand"
       >
         Continuar <ArrowRight size={18} />
       </button>
 
       {compact && (
-        <p className="text-center text-sm text-textMuted font-normal">
+        <p className="text-center text-sm text-foreground-muted font-normal">
           ¿Ya tienes una cuenta?{" "}
           <button
             type="button"
             onClick={onSwitch}
-            className="text-gold hover:text-goldHover font-bold transition-colors"
+            className="text-accent hover:text-accent-hover font-bold transition-colors"
           >
             Iniciar sesión
           </button>
@@ -577,19 +579,19 @@ const ForgotForm = ({ onBack }: ForgotFormProps) => {
   if (sentTo) {
     return (
       <div className="w-full flex flex-col items-center text-center gap-4 py-2">
-        <CheckCircle2 className="text-gold" size={44} />
-        <h2 className="text-xl md:text-2xl font-extrabold text-white tracking-tight">
+        <CheckCircle2 className="text-accent" size={44} />
+        <h2 className="text-xl md:text-2xl font-extrabold text-foreground-strong tracking-tight">
           Revisa tu correo
         </h2>
-        <p className="text-sm text-textMuted leading-relaxed max-w-[280px]">
-          Si <span className="text-white font-semibold">{sentTo}</span> está
+        <p className="text-sm text-foreground-muted leading-relaxed max-w-[280px]">
+          Si <span className="text-foreground-strong font-semibold">{sentTo}</span> está
           registrado, te llegará un enlace para restablecer tu contraseña en los
           próximos minutos. Revisa también la carpeta de spam.
         </p>
         <button
           type="button"
           onClick={onBack}
-          className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-gold hover:text-goldHover transition-colors"
+          className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-accent hover:text-accent-hover transition-colors"
         >
           <ArrowLeft size={14} /> Volver al inicio de sesión
         </button>
@@ -604,17 +606,17 @@ const ForgotForm = ({ onBack }: ForgotFormProps) => {
       className="w-full flex flex-col gap-4"
     >
       <div className="text-center">
-        <h2 className="text-2xl md:text-[26px] font-extrabold text-white tracking-tight">
+        <h2 className="text-2xl md:text-[26px] font-extrabold text-foreground-strong tracking-tight">
           Recuperar contraseña
         </h2>
-        <div className="w-10 h-1 bg-gold rounded-full mx-auto mt-2" />
-        <p className="text-xs text-textMuted mt-3 max-w-[260px] mx-auto leading-relaxed">
+        <div className="w-10 h-1 bg-brand rounded-full mx-auto mt-2" />
+        <p className="text-xs text-foreground-muted mt-3 max-w-[260px] mx-auto leading-relaxed">
           Ingresa tu correo y te enviaremos un enlace para crear una nueva.
         </p>
       </div>
 
       {submitError && (
-        <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-2 text-red-400">
+        <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-2 text-danger">
           <AlertCircle size={18} className="shrink-0 mt-0.5" />
           <p className="text-sm font-medium leading-tight">{submitError}</p>
         </div>
@@ -634,7 +636,7 @@ const ForgotForm = ({ onBack }: ForgotFormProps) => {
       <button
         type="submit"
         disabled={isSubmitting}
-        className="mt-1 w-full py-3 bg-gold hover:bg-goldHover text-darker font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-[0_8px_24px_-8px_rgba(204,164,59,0.6)] hover:shadow-[0_8px_28px_-6px_rgba(204,164,59,0.8)] disabled:opacity-70 disabled:cursor-not-allowed"
+        className="mt-1 w-full py-3 bg-brand hover:bg-brand-hover text-on-brand font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-[0_8px_24px_-8px_rgba(204,164,59,0.6)] hover:shadow-[0_8px_28px_-6px_rgba(204,164,59,0.8)] disabled:opacity-70 disabled:cursor-not-allowed"
       >
         {isSubmitting ? (
           <>
@@ -650,7 +652,7 @@ const ForgotForm = ({ onBack }: ForgotFormProps) => {
       <button
         type="button"
         onClick={onBack}
-        className="text-center text-sm text-textMuted hover:text-gold transition-colors font-medium inline-flex items-center justify-center gap-1.5"
+        className="text-center text-sm text-foreground-muted hover:text-accent transition-colors font-medium inline-flex items-center justify-center gap-1.5"
       >
         <ArrowLeft size={14} /> Volver al inicio de sesión
       </button>
@@ -683,13 +685,14 @@ const WelcomePanel = ({
 }: WelcomePanelProps) => (
   <div className="h-full w-full px-8 py-10 flex flex-col items-center justify-center text-center gap-5 text-[#120e05]">
     {/* Medallón oscuro: el logo dorado sobre fondo negro, con glow — resuelve el
-        contraste oro-sobre-oro y le da profundidad al panel. */}
-    <div className="relative">
+        contraste oro-sobre-oro y le da profundidad al panel. Isla oscura: es
+        igual en ambos temas (spec §3.4). */}
+    <div className="relative" data-theme="dark">
       <div
         aria-hidden
         className="absolute -inset-3 rounded-[2rem] bg-[#0a0a0a]/30 blur-2xl"
       />
-      <div className="relative flex items-center justify-center rounded-[1.75rem] bg-gradient-to-b from-[#151515] to-[#0a0a0a] border border-white/10 px-9 py-7 shadow-[0_16px_40px_-12px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.06)]">
+      <div className="relative flex items-center justify-center rounded-[1.75rem] bg-gradient-to-b from-[#151515] to-[#0a0a0a] border border-line-subtle px-9 py-7 shadow-[0_16px_40px_-12px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.06)]">
         <img
           src={logoSrc}
           alt={platformName}
@@ -732,18 +735,18 @@ const NOISE_SVG =
 const AuthBackground = () => (
   <div aria-hidden className="absolute inset-0 overflow-hidden pointer-events-none">
     {/* Base: negro profundo con un cálido dorado naciendo arriba. */}
-    <div className="absolute inset-0 bg-[radial-gradient(ellipse_130%_90%_at_50%_-10%,#1c150c_0%,#0a0a0a_48%,#050505_100%)]" />
+    <div className="absolute inset-0 bg-[radial-gradient(ellipse_130%_90%_at_50%_-10%,#1c150c_0%,#0a0a0a_48%,#050505_100%)] light:bg-[radial-gradient(ellipse_130%_90%_at_50%_-10%,#f1e3c2_0%,#f8f6f1_50%,#f3efe6_100%)]" />
 
     {/* Dos halos: uno vivo (arriba-izq), uno profundo (abajo-der). Dan color y
         contraste sin lavar la escena. Fijos: el movimiento lo pone la constelación. */}
-    <div className="absolute -top-[18%] -left-[12%] w-[60vw] h-[60vw] max-w-[620px] max-h-[620px] rounded-full bg-[radial-gradient(circle_at_center,rgba(204,164,59,0.22),transparent_66%)] blur-[80px]" />
-    <div className="absolute -bottom-[20%] -right-[10%] w-[55vw] h-[55vw] max-w-[560px] max-h-[560px] rounded-full bg-[radial-gradient(circle_at_center,rgba(160,110,30,0.16),transparent_68%)] blur-[100px]" />
+    <div className="absolute -top-[18%] -left-[12%] w-[60vw] h-[60vw] max-w-[620px] max-h-[620px] rounded-full bg-[radial-gradient(circle_at_center,rgba(204,164,59,0.22),transparent_66%)] light:bg-[radial-gradient(circle_at_center,rgba(204,164,59,0.14),transparent_66%)] blur-[80px]" />
+    <div className="absolute -bottom-[20%] -right-[10%] w-[55vw] h-[55vw] max-w-[560px] max-h-[560px] rounded-full bg-[radial-gradient(circle_at_center,rgba(160,110,30,0.16),transparent_68%)] light:bg-[radial-gradient(circle_at_center,rgba(160,110,30,0.09),transparent_68%)] blur-[100px]" />
 
     {/* La constelación dorada — protagonista del fondo. */}
     <ParticleNetwork />
 
     {/* Viñeta radial: oscurece los bordes para que la mirada caiga en el centro. */}
-    <div className="absolute inset-0 bg-[radial-gradient(ellipse_75%_75%_at_50%_50%,transparent_35%,rgba(5,5,5,0.55)_100%)]" />
+    <div className="absolute inset-0 bg-[radial-gradient(ellipse_75%_75%_at_50%_50%,transparent_35%,rgba(5,5,5,0.55)_100%)] light:bg-[radial-gradient(ellipse_75%_75%_at_50%_50%,transparent_40%,rgba(120,95,40,0.1)_100%)]" />
 
     {/* Grano sutil: mata el banding de los gradientes y da textura premium. */}
     <div
@@ -817,13 +820,13 @@ const AuthPage = ({ initialMode = "signin" }: AuthPageProps) => {
   };
 
   return (
-    <div className="min-h-[100dvh] w-full bg-[#050505] flex flex-col justify-center items-center relative overflow-hidden font-sans p-4 sm:p-6 selection:bg-gold/30">
+    <div className="min-h-[100dvh] w-full bg-[#050505] light:bg-surface-page flex flex-col justify-center items-center relative overflow-hidden font-sans p-4 sm:p-6 selection:bg-brand/30">
       <AuthBackground />
 
       {/* ==== Volver al inicio (estilo gold pill, coherente con header) ==== */}
       <Link
         to="/"
-        className="absolute top-3 left-3 sm:top-6 sm:left-6 z-30 inline-flex items-center gap-2 text-xs sm:text-sm font-bold text-darker bg-gold/95 hover:bg-goldHover px-3 sm:px-4 py-2 rounded-full transition-all shadow-[0_4px_18px_-4px_rgba(204,164,59,0.6)] hover:shadow-[0_6px_22px_-4px_rgba(204,164,59,0.8)] hover:-translate-y-0.5"
+        className="absolute top-3 left-3 sm:top-6 sm:left-6 z-30 inline-flex items-center gap-2 text-xs sm:text-sm font-bold text-on-brand bg-brand/95 hover:bg-brand-hover px-3 sm:px-4 py-2 rounded-full transition-all shadow-[0_4px_18px_-4px_rgba(204,164,59,0.6)] hover:shadow-[0_6px_22px_-4px_rgba(204,164,59,0.8)] hover:-translate-y-0.5"
         aria-label="Volver al inicio"
       >
         <ArrowLeft size={14} />
@@ -841,7 +844,7 @@ const AuthPage = ({ initialMode = "signin" }: AuthPageProps) => {
           {/* Borde base tenue: mantiene el ring visible entre pasadas del haz. */}
           <div
             aria-hidden
-            className="absolute inset-0 rounded-3xl bg-white/10 pointer-events-none"
+            className="absolute inset-0 rounded-3xl bg-ink/10 pointer-events-none"
           />
           {/* Haz giratorio (cuadrado > diagonal ≈ 1030px, centrado). */}
           <motion.div
@@ -851,12 +854,12 @@ const AuthPage = ({ initialMode = "signin" }: AuthPageProps) => {
             transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
           />
       <article
-        className="relative w-[860px] h-[560px] rounded-[22px] overflow-hidden bg-darker/95 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.8)]"
+        className="relative w-[860px] h-[560px] rounded-[22px] overflow-hidden bg-surface-page/95 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.8)] light:bg-surface-panel light:shadow-[0_30px_80px_-30px_rgba(60,45,15,0.35)]"
       >
         {/* Brillo de borde superior */}
         <div
           aria-hidden
-          className="absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-gold/40 to-transparent pointer-events-none"
+          className="absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-brand/40 to-transparent pointer-events-none"
         />
 
         {/* Forms — mitad izquierda (signin/forgot con crossfade), mitad derecha (signup) */}
@@ -900,7 +903,7 @@ const AuthPage = ({ initialMode = "signin" }: AuthPageProps) => {
           animate={{ x: overlayOnLeft ? "0%" : "100%" }}
           transition={slideTransition}
         >
-          <div className="relative h-full w-full bg-gradient-to-br from-[#F0C959] via-gold to-[#7d5e18] overflow-hidden">
+          <div className="relative h-full w-full bg-gradient-to-br from-[#F0C959] via-brand to-[#7d5e18] overflow-hidden">
             {/* Brillo lineal súper suave arriba */}
             <div
               aria-hidden
@@ -964,24 +967,25 @@ const AuthPage = ({ initialMode = "signin" }: AuthPageProps) => {
           className="flex justify-center mb-6"
           aria-label="Inicio"
         >
-          <img
+          <BrandLogo
             src={logoLight}
             alt={platformName}
             className="h-20 sm:h-24 w-auto object-contain drop-shadow-[0_0_22px_rgba(204,164,59,0.4)]"
+            plateClassName="light:rounded-3xl light:px-5 light:py-3"
           />
         </Link>
 
         {/* Tabs solo visibles cuando NO estás en modo forgot */}
         {!isForgot && (
-          <div className="grid grid-cols-2 bg-white/[0.04] border border-white/10 rounded-2xl p-1 mb-5 backdrop-blur-xl">
+          <div className="grid grid-cols-2 bg-ink/[0.04] light:bg-surface-panel/80 border border-line-subtle rounded-2xl p-1 mb-5 backdrop-blur-xl">
             <button
               type="button"
               onClick={() => switchTo("signin")}
               className={cn(
                 "py-2.5 rounded-xl text-sm font-bold transition-all",
                 !isSignUp
-                  ? "bg-gold text-darker shadow-[0_4px_18px_-6px_rgba(204,164,59,0.6)]"
-                  : "text-white/70 hover:text-white"
+                  ? "bg-brand text-on-brand shadow-[0_4px_18px_-6px_rgba(204,164,59,0.6)]"
+                  : "text-fg-70 hover:text-foreground-strong"
               )}
             >
               Iniciar sesión
@@ -992,8 +996,8 @@ const AuthPage = ({ initialMode = "signin" }: AuthPageProps) => {
               className={cn(
                 "py-2.5 rounded-xl text-sm font-bold transition-all",
                 isSignUp
-                  ? "bg-gold text-darker shadow-[0_4px_18px_-6px_rgba(204,164,59,0.6)]"
-                  : "text-white/70 hover:text-white"
+                  ? "bg-brand text-on-brand shadow-[0_4px_18px_-6px_rgba(204,164,59,0.6)]"
+                  : "text-fg-70 hover:text-foreground-strong"
               )}
             >
               Crear cuenta
@@ -1001,7 +1005,7 @@ const AuthPage = ({ initialMode = "signin" }: AuthPageProps) => {
           </div>
         )}
 
-        <div className="bg-white/[0.04] border border-gold/15 rounded-3xl p-5 sm:p-6 backdrop-blur-xl shadow-[0_20px_50px_-20px_rgba(0,0,0,0.8),0_0_44px_-12px_rgba(204,164,59,0.28)]">
+        <div className="bg-ink/[0.04] border border-brand/15 rounded-3xl p-5 sm:p-6 backdrop-blur-xl shadow-[0_20px_50px_-20px_rgba(0,0,0,0.8),0_0_44px_-12px_rgba(204,164,59,0.28)] light:bg-surface-panel light:shadow-[0_24px_56px_-28px_rgba(60,45,15,0.35),0_0_40px_-16px_rgba(204,164,59,0.25)]">
           <AnimatePresence mode="wait">
             <motion.div
               key={mode}

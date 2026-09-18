@@ -70,11 +70,11 @@ const EditableField = ({
   // Aquí forzamos texto normal, con espaciado y color garantizados.
   if (editing) {
     const editorBase = cn(
-      "w-full bg-darker text-white text-base font-normal not-italic normal-case",
+      "w-full bg-surface-page text-foreground-strong text-base font-normal not-italic normal-case",
       "font-sans leading-relaxed tracking-normal [letter-spacing:normal] [word-spacing:normal]",
-      "[-webkit-text-fill-color:#fff] caret-[color:#CCA43B]",
-      "border-2 border-gold rounded-lg shadow-lg",
-      "focus:outline-none focus:ring-2 focus:ring-gold/50",
+      "text-fill-foreground caret-accent",
+      "border-2 border-accent rounded-lg shadow-lg",
+      "focus:outline-none focus:ring-2 focus:ring-focus/50",
     );
     return (
       <span
@@ -121,7 +121,7 @@ const EditableField = ({
         "group cursor-pointer rounded-[3px] outline-dashed outline-1 outline-offset-2 transition-colors",
         isPending
           ? "outline-amber-400/70 bg-amber-400/5"
-          : "outline-gold/30 hover:outline-gold/70 hover:bg-gold/5",
+          : "outline-brand/30 hover:outline-brand/70 light:outline-accent/40 light:hover:outline-accent/80 hover:bg-brand/5",
       )
     : "";
 
@@ -145,8 +145,8 @@ const EditableField = ({
           className={cn(
             "inline-block ml-1.5 align-middle transition-opacity",
             isPending
-              ? "opacity-100 text-amber-400"
-              : "opacity-40 group-hover:opacity-100 text-gold",
+              ? "opacity-100 text-warning"
+              : "opacity-40 group-hover:opacity-100 text-accent",
           )}
         />
       )}

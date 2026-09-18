@@ -81,26 +81,26 @@ const IntelligenceCard = ({ intelligence, index, total, layout = "carousel" }: C
   return (
     <Link
       to={linkTo}
-      className={`group relative ${sizeClasses} rounded-3xl bg-gradient-to-br from-white/[0.04] to-white/[0.01] border border-white/[0.08] backdrop-blur-md flex flex-col justify-between overflow-hidden transition-colors duration-300 hover:border-gold/40`}
+      className={`group relative ${sizeClasses} rounded-3xl bg-gradient-to-br from-white/[0.04] to-white/[0.01] border border-ink/[0.08] backdrop-blur-md light:bg-none light:bg-surface-panel light:border-line-subtle light:shadow-panel flex flex-col justify-between overflow-hidden transition-colors duration-300 hover:border-brand/40`}
     >
       <div
         aria-hidden
-        className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-gold/10 blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+        className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-brand/10 blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"
       />
 
       <div className={`relative z-10 flex flex-col ${layout === "stack" ? "gap-3 sm:gap-4" : "gap-6"}`}>
-        <div className="flex items-center justify-between text-[10px] sm:text-xs uppercase tracking-widest text-textMuted">
+        <div className="flex items-center justify-between text-[10px] sm:text-xs uppercase tracking-widest text-foreground-muted">
           <span>
-            Inteligencia <span className="text-gold font-bold">{String(index + 1).padStart(2, "0")}</span>
+            Inteligencia <span className="text-accent font-bold">{String(index + 1).padStart(2, "0")}</span>
           </span>
           <span>{String(total).padStart(2, "0")}</span>
         </div>
 
-        <div className={`${layout === "stack" ? "w-14 h-14 sm:w-16 sm:h-16" : "w-20 h-20"} rounded-2xl bg-gold/10 text-gold flex items-center justify-center group-hover:scale-110 group-hover:bg-gold/20 transition-transform`}>
+        <div className={`${layout === "stack" ? "w-14 h-14 sm:w-16 sm:h-16" : "w-20 h-20"} rounded-2xl bg-brand/10 text-accent flex items-center justify-center group-hover:scale-110 group-hover:bg-brand/20 transition-transform`}>
           {intelligence.icon}
         </div>
 
-        <h3 className={`${layout === "stack" ? "text-2xl sm:text-3xl" : "text-3xl md:text-4xl"} font-extrabold tracking-tight text-white leading-tight text-balance`}>
+        <h3 className={`${layout === "stack" ? "text-2xl sm:text-3xl" : "text-3xl md:text-4xl"} font-extrabold tracking-tight text-foreground-strong leading-tight text-balance`}>
           <EditableField
             textKey={`intelligence_${intelligence.id}_title`}
             defaultValue={intelligence.title}
@@ -108,7 +108,7 @@ const IntelligenceCard = ({ intelligence, index, total, layout = "carousel" }: C
           />
         </h3>
 
-        <p className={`text-textMuted leading-relaxed ${layout === "stack" ? "text-sm sm:text-base" : "text-base md:text-lg"} text-pretty`}>
+        <p className={`text-foreground-muted leading-relaxed ${layout === "stack" ? "text-sm sm:text-base" : "text-base md:text-lg"} text-pretty`}>
           <EditableField
             textKey={`intelligence_${intelligence.id}_desc`}
             defaultValue={intelligence.description}
@@ -119,15 +119,15 @@ const IntelligenceCard = ({ intelligence, index, total, layout = "carousel" }: C
       </div>
 
       <div className="relative z-10 flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm font-semibold text-gold group-hover:gap-4 transition-all">
+        <div className="flex items-center gap-2 text-sm font-semibold text-accent group-hover:gap-4 transition-all">
           {user ? "Ir a clases" : "Explorar lecciones"} <ArrowRight size={18} />
         </div>
         {user && isPremium ? (
-          <div className="flex items-center gap-1 text-xs font-bold bg-gold/10 text-gold px-2 py-1 rounded-full border border-gold/20">
+          <div className="flex items-center gap-1 text-xs font-bold bg-brand/10 text-accent px-2 py-1 rounded-full border border-brand/20">
             <PlayCircle size={12} /> Acceso Total
           </div>
         ) : user ? (
-          <div className="flex items-center gap-1 text-xs font-bold bg-white/5 text-white/50 px-2 py-1 rounded-full border border-white/10">
+          <div className="flex items-center gap-1 text-xs font-bold bg-ink/5 text-fg-50 px-2 py-1 rounded-full border border-line-subtle">
             <Lock size={12} /> Plan Free (Con anuncios)
           </div>
         ) : null}
@@ -143,10 +143,10 @@ const IntroHeading = () => (
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-100px" }}
       transition={{ duration: 0.7 }}
-      className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tighter text-white leading-tight max-w-3xl text-balance"
+      className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tighter text-foreground-strong leading-tight max-w-3xl text-balance"
     >
       <EditableField textKey="intelligences_title_prefix" defaultValue="Seis inteligencias." as="span" />{" "}
-      <span className="text-transparent bg-clip-text bg-gradient-to-r from-gold via-amber-100 to-goldHover italic pr-5 box-decoration-clone">
+      <span className="text-transparent bg-clip-text bg-gradient-to-r from-gilt-start via-gilt-mid to-gilt-end italic pr-5 box-decoration-clone">
         <EditableField textKey="intelligences_title_accent" defaultValue="Una transformación." as="span" className="inline" />
       </span>
     </motion.h2>
@@ -155,7 +155,7 @@ const IntroHeading = () => (
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-100px" }}
       transition={{ duration: 0.7, delay: 0.15 }}
-      className="text-textMuted text-lg mt-4 max-w-xl"
+      className="text-foreground-muted text-lg mt-4 max-w-xl"
     >
       <EditableField textKey="intelligences_description" defaultValue="Cada módulo es una pieza del rediseño. Recórrelas a tu ritmo." as="span" />
     </motion.p>

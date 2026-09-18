@@ -10,7 +10,7 @@ import { PlansAct } from "@/components/feature/PlansAct";
 
 const LandingPage = () => {
   return (
-    <div className="min-h-[100dvh] relative bg-darker selection:bg-gold/30 font-sans text-textMain">
+    <div className="min-h-[100dvh] relative bg-surface-page selection:bg-brand/30 font-sans text-foreground">
       {/* Background grid sutil — fixed para sensación de profundidad cinematic */}
       <div
         aria-hidden
@@ -19,7 +19,7 @@ const LandingPage = () => {
       {/* Glow gold del hero — solo desktop (perf mobile) */}
       <div
         aria-hidden
-        className="hidden md:block fixed top-0 right-0 -z-10 h-[600px] w-[600px] rounded-full bg-gold opacity-[0.12] blur-[150px] pointer-events-none"
+        className="hidden md:block fixed top-0 right-0 -z-10 h-[600px] w-[600px] rounded-full bg-brand opacity-[0.12] light:opacity-[0.07] blur-[150px] pointer-events-none"
       />
 
       <LandingHeader />

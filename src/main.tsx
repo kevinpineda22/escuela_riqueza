@@ -6,6 +6,7 @@ import MotionProvider from "@/components/providers/MotionProvider";
 import AuthBootstrap from "@/components/providers/AuthBootstrap";
 import ErrorBoundary from "@/components/layout/ErrorBoundary";
 import PodcastEngine from "@/components/feature/PodcastEngine";
+import ThemeSync from "@/components/providers/ThemeSync";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { queryClient } from "@/lib/query-client";
 import "@/index.css";
@@ -18,6 +19,8 @@ if (!rootElement) {
 
 createRoot(rootElement).render(
   <StrictMode>
+    {/* Hermano, no envoltorio: el fallback de error también recibe el tema. */}
+    <ThemeSync />
     <ErrorBoundary>
       <>
         <PodcastEngine />

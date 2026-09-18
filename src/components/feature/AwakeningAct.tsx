@@ -4,6 +4,7 @@ import EditableField from "@/components/feature/EditableField";
 import { useAdminStore, useIsCurrentUserAdmin } from "@/stores/admin.store";
 import { usePrefersReducedMotion } from "@/hooks/useMediaQuery";
 import { usePreferencesStore } from "@/stores/preferences.store";
+import { useEffectiveTheme } from "@/hooks/useTheme";
 
 /* ============================================================ */
 /* Count-up de los stats                                         */
@@ -198,14 +199,29 @@ const StatCard = ({ valueKey, labelKey, defaultValue, defaultLabel, delay }: Sta
     transition={{ duration: 0.6, delay, ease: "easeOut" }}
     className="flex flex-col items-center text-center"
   >
-    <div className="text-5xl sm:text-6xl md:text-7xl font-extrabold text-gold drop-shadow-[0_0_15px_rgba(204,164,59,0.35)]">
+    <div className="text-5xl sm:text-6xl md:text-7xl font-extrabold text-accent drop-shadow-[0_0_15px_rgba(204,164,59,0.35)] light:drop-shadow-[0_0_12px_rgba(204,164,59,0.2)]">
       <AnimatedStat textKey={valueKey} defaultValue={defaultValue} />
     </div>
-    <div className="text-textMuted uppercase tracking-widest text-xs md:text-sm font-semibold mt-3 max-w-[200px]">
+    <div className="text-foreground-muted uppercase tracking-widest text-xs md:text-sm font-semibold mt-3 max-w-[200px]">
       <EditableField textKey={labelKey} defaultValue={defaultLabel} as="span" />
     </div>
   </motion.div>
 );
+
+// Pulso dorado de "cambiar.". Mismo ritmo en ambos temas; en claro el halo baja
+// porque un glow al 80% alrededor de texto oscuro sobre marfil se lee como mancha.
+const ACCENT_GLOW = {
+  dark: [
+    "0 0 20px rgba(204,164,59,0.35)",
+    "0 0 48px rgba(204,164,59,0.8)",
+    "0 0 20px rgba(204,164,59,0.35)",
+  ],
+  light: [
+    "0 0 18px rgba(204,164,59,0.18)",
+    "0 0 40px rgba(204,164,59,0.4)",
+    "0 0 18px rgba(204,164,59,0.18)",
+  ],
+};
 
 /**
  * Acto 2 — El Despertar.
@@ -215,13 +231,15 @@ const StatCard = ({ valueKey, labelKey, defaultValue, defaultLabel, delay }: Sta
  * dorado sutil de fondo para que no caiga la energía tras el hero.
  */
 export const AwakeningAct = () => {
+  const theme = useEffectiveTheme();
+
   return (
     <div aria-label="El despertar" className="relative overflow-hidden">
       <AwakeningAmbient />
 
       {/* Frame 1 — La pregunta (se revela palabra por palabra) */}
       <section className="relative z-10 min-h-[58svh] md:min-h-[68svh] flex items-center justify-center px-5 sm:px-6 py-16 sm:py-20 overflow-hidden">
-        <h2 className="text-3xl sm:text-5xl md:text-7xl lg:text-8xl font-bold text-white/55 leading-[1.15] tracking-tight max-w-5xl text-center text-balance">
+        <h2 className="text-3xl sm:text-5xl md:text-7xl lg:text-8xl font-bold text-fg-55 leading-[1.15] tracking-tight max-w-5xl text-center text-balance">
           <AnimatedPhrase
             textKey="awakening_question"
             defaultValue="¿Cuántas oportunidades dejaste pasar?"
@@ -238,17 +256,13 @@ export const AwakeningAct = () => {
           transition={{ duration: 0.9, ease: "easeOut" }}
           className="text-4xl sm:text-6xl md:text-8xl lg:text-9xl font-extrabold leading-[1.2] tracking-tight max-w-5xl text-center text-balance pb-3"
         >
-          <span className="text-transparent bg-clip-text bg-gradient-to-b from-white to-white/60">
+          <span className="text-transparent bg-clip-text bg-gradient-to-b from-white to-white/60 light:from-foreground-strong light:to-fg-60">
             <EditableField textKey="awakening_answer" defaultValue="Es momento de" as="span" className="inline" />
           </span>{" "}
           <motion.span
-            className="text-gold italic pr-3 sm:pr-5 box-decoration-clone"
+            className="text-accent italic pr-3 sm:pr-5 box-decoration-clone"
             animate={{
-              textShadow: [
-                "0 0 20px rgba(204,164,59,0.35)",
-                "0 0 48px rgba(204,164,59,0.8)",
-                "0 0 20px rgba(204,164,59,0.35)",
-              ],
+              textShadow: ACCENT_GLOW[theme],
             }}
             transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
           >

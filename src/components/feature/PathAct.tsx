@@ -62,17 +62,17 @@ const MilestoneRow = ({ milestone, index }: MilestoneRowProps) => {
       transition={{ duration: 0.7, delay: index * 0.08, ease: "easeOut" }}
       className="relative pl-20 md:pl-28"
     >
-      <div className="absolute left-6 md:left-10 top-1 -translate-x-1/2 w-12 h-12 md:w-14 md:h-14 rounded-full bg-darker border-2 border-gold flex items-center justify-center text-gold shadow-[0_0_20px_rgba(204,164,59,0.45)] z-10">
+      <div className="absolute left-6 md:left-10 top-1 -translate-x-1/2 w-12 h-12 md:w-14 md:h-14 rounded-full bg-surface-page border-2 border-accent flex items-center justify-center text-accent shadow-[0_0_20px_rgba(204,164,59,0.45)] light:bg-surface-panel light:shadow-[0_0_0_6px_rgba(204,164,59,0.14),0_10px_24px_-10px_rgba(60,45,15,0.3)] z-10">
         {milestone.icon}
       </div>
 
-      <span className="block text-xs md:text-sm uppercase tracking-[0.2em] text-gold font-bold mb-2">
+      <span className="block text-xs md:text-sm uppercase tracking-[0.2em] text-accent font-bold mb-2">
         Paso {milestone.number}
       </span>
-      <h3 className="text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight text-white mb-4 leading-tight">
+      <h3 className="text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight text-foreground-strong mb-4 leading-tight">
         <EditableField textKey={milestone.titleKey} defaultValue={milestone.defaultTitle} as="span" />
       </h3>
-      <p className="text-textMuted leading-relaxed text-base md:text-lg max-w-xl text-pretty">
+      <p className="text-foreground-muted leading-relaxed text-base md:text-lg max-w-xl text-pretty">
         <EditableField textKey={milestone.descriptionKey} defaultValue={milestone.defaultDescription} as="span" multiline />
       </p>
     </motion.div>
@@ -117,10 +117,10 @@ export const PathAct = () => {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-100px" }}
           transition={{ duration: 0.7 }}
-          className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tighter text-white leading-tight mb-4 text-balance"
+          className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tighter text-foreground-strong leading-tight mb-4 text-balance"
         >
           <EditableField textKey="path_title" defaultValue="Tu camino en" as="span" />{" "}
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-gold via-amber-100 to-goldHover italic pr-5 box-decoration-clone">
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-gilt-start via-gilt-mid to-gilt-end italic pr-5 box-decoration-clone">
             <EditableField textKey="path_accent" defaultValue="tres pasos" as="span" className="inline" />
           </span>
           .
@@ -130,7 +130,7 @@ export const PathAct = () => {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-100px" }}
           transition={{ duration: 0.7, delay: 0.15 }}
-          className="text-textMuted text-lg md:text-xl"
+          className="text-foreground-muted text-lg md:text-xl"
         >
           <EditableField textKey="path_subtitle" defaultValue="Aprender, practicar, transformar. Sin atajos, sin promesas vacías." as="span" />
         </motion.p>
@@ -139,12 +139,12 @@ export const PathAct = () => {
       <div className="relative">
         <div
           aria-hidden
-          className="absolute left-6 md:left-10 top-0 bottom-0 w-0.5 bg-white/8"
+          className="absolute left-6 md:left-10 top-0 bottom-0 w-0.5 bg-ink/8 light:bg-line-subtle"
         />
         <motion.div
           aria-hidden
           style={{ scaleY: lineScale, opacity: lineOpacity }}
-          className="absolute left-6 md:left-10 top-0 bottom-0 w-0.5 bg-gradient-to-b from-gold via-goldHover to-gold origin-top will-change-transform"
+          className="absolute left-6 md:left-10 top-0 bottom-0 w-0.5 bg-gradient-to-b from-brand via-brand-hover to-brand light:from-accent light:via-brand light:to-accent origin-top will-change-transform"
         />
 
         <div className="flex flex-col gap-20 md:gap-28">
