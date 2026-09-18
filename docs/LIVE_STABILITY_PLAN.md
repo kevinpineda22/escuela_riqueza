@@ -64,16 +64,16 @@ No construir dashboards de salud ni reestructurar la arquitectura antes de medir
 
 ### Paquete 3 — Reproductor: eliminar interrupciones autogeneradas (H5–H10)
 
-- [ ] H5: `currentLevel` → `nextLevel`.
-- [ ] H10: "EN VIVO" debe usar el `liveSyncDuration` del modo activo (3 u 8), no un 8 fijo.
-- [ ] H7: al pausar, mantener el `<video>` montado. Mostrar overlay "Transmisión pausada" y **pausar el elemento de video explícitamente** (no solo taparlo: si se tapa visualmente, el audio sigue sonando). Distinguir dos casos:
+- [x] H5: `currentLevel` → `nextLevel` (2026-09-18).
+- [x] H10: "EN VIVO" usa `liveSyncOffset` según modo (3 / 8). Umbrales de "estás atrasado" con piso absoluto 10/5 s en modo low para no parpadear dentro del jitter.
+- [x] H7 (2026-09-18): el player queda montado mientras `status = live`; overlay de pausa encima; prop `roomPaused` pausa/reanuda el `<video>` explícitamente. La intención del alumno solo la setea `setUserPaused` desde `handleTogglePlay` (NO se infiere del evento `pause` nativo — Safari lo dispara al ir a background). Al volver la pestaña visible se reintenta `play()` si nadie pausó. Pendiente: al pausar, mantener el `<video>` montado. Mostrar overlay "Transmisión pausada" y **pausar el elemento de video explícitamente** (no solo taparlo: si se tapa visualmente, el audio sigue sonando). Distinguir dos casos:
   - Pausa deliberada del admin → video pausado + overlay.
   - Reconexión / microcorte → overlay "Reconectando…" conservando buffer, sin pausar.
-- [ ] H8: límite total de recargas y backoff progresivo (ej. 1 s, 2 s, 4 s, 8 s, tope). Al agotar, mostrar estado de error con botón de reintento manual.
-- [ ] H9: "Activar audio" debe esperar el resultado de `video.play()`; si rechaza, mantener el aviso y ofrecer reintento.
+- [x] H8 (2026-09-18): backoff 1/2/4/8 s, máximo 6 recargas por montaje, contador se resetea solo tras 15 s de reproducción estable (no por fragmento). `onFatalError` → estado de error en la sala con botón "Reintentar" que remonta el player. Original: límite total de recargas y backoff progresivo (ej. 1 s, 2 s, 4 s, 8 s, tope). Al agotar, mostrar estado de error con botón de reintento manual.
+- [x] H9 (2026-09-18, en `VIPLiveRoom.handleEnableAudio`): espera `video.play()`; si rechaza, revierte `muted`, mantiene el aviso y muestra hint de reintento. Original: "Activar audio" debe esperar el resultado de `video.play()`; si rechaza, mantener el aviso y ofrecer reintento.
 - [ ] H6: evaluar si el cambio de modo de latencia se puede hacer sin recrear `Hls`. Si no, aceptarlo y documentarlo como operación disruptiva en la UI (o quitar el selector del alumno).
-- [ ] Respetar la intención del alumno: ninguna recuperación debe reanudar un video que el alumno pausó a propósito.
-- [ ] Tests: ampliar los tests existentes del reproductor para cubrir estas transiciones.
+- [x] Respetar la intención del alumno: `MANIFEST_PARSED` y el camino nativo iOS no llaman `play()` si `userPausedRef` está activo.
+- [x] Tests: `LiveHLSPlayer.test.tsx` 6 → 10 (nextLevel, backoff + cap, pausa manual vs pausa nativa, autoplay respetado). Sin tests para `LivePlayerControls` ni `VIPLiveRoom` (H7/H9/H10 sin cobertura automática — validar en el live de prueba).
 
 ### Paquete 4 — Medición (antes de decidir cualquier rediseño)
 

@@ -49,6 +49,13 @@ const VIPLiveRoom = () => {
   const [isBuffering, setIsBuffering] = useState(false);
   const [qualityLevels, setQualityLevels] = useState<QualityLevel[]>([]);
   const [currentQualityLevel, setCurrentQualityLevel] = useState(-1);
+  // H9: si `video.play()` rechaza al activar sonido, mantenemos el aviso
+  // visible y mostramos un hint de reintento en vez de ocultarlo a ciegas.
+  const [audioRetryHint, setAudioRetryHint] = useState(false);
+  // H8: sin reintentos automáticos disponibles — la UI muestra error + botón
+  // manual. `playerKey` fuerza el remount (nuevo `Hls`, contador en 0).
+  const [playerError, setPlayerError] = useState(false);
+  const [playerKey, setPlayerKey] = useState(0);
   const playerWrapperRef = useRef<HTMLDivElement>(null);
   const isDesktop = useIsDesktop();
   const { clearPlayer } = usePlayerStore();
@@ -72,21 +79,29 @@ const VIPLiveRoom = () => {
     if (isDesktop && !isChatVisibleDesktop) setUnreadCount(c => c + 1);
   };
 
-  const handleEnableAudio = () => {
-    setAudioPromptDismissed(true);
-    setIsMuted(false);
+  const handleEnableAudio = async () => {
     const video = livePlayerRef.current?.video;
     if (!video) return;
+    setAudioRetryHint(false);
     try {
       video.muted = false;
       video.volume = 1;
-      const result = video.play();
-      if (result && typeof result.catch === "function") {
-        result.catch(() => {});
-      }
+      // H9: esperamos la promesa real de play() antes de ocultar el aviso —
+      // antes se ocultaba optimistamente y un rechazo (bloqueo del browser,
+      // error de media) dejaba al alumno sin sonido y sin explicación.
+      await video.play();
+      setIsMuted(false);
+      setAudioPromptDismissed(true);
     } catch (e) {
-      console.warn("[VIPLiveRoom] No se pudo desmutear:", e);
+      console.warn("[VIPLiveRoom] No se pudo activar el audio:", e);
+      video.muted = true;
+      setAudioRetryHint(true);
     }
+  };
+
+  const handleRetryPlayer = () => {
+    setPlayerError(false);
+    setPlayerKey((k) => k + 1);
   };
 
   const handleTogglePlay = () => {
@@ -94,8 +109,12 @@ const VIPLiveRoom = () => {
     if (!video) return;
     try {
       if (isPlaying) {
+        // Intención explícita del alumno — el player ya no la infiere del
+        // evento nativo 'pause' (ver fix H7/autoplay-respect).
+        livePlayerRef.current?.setUserPaused(true);
         video.pause();
       } else {
+        livePlayerRef.current?.setUserPaused(false);
         const result = video.play();
         if (result && typeof result.catch === "function") result.catch(() => {});
       }
@@ -126,7 +145,10 @@ const VIPLiveRoom = () => {
   const isEnded = live?.status === "ended";
   const isPaused = live?.is_paused === true;
   const startsAt = live?.starts_at ? new Date(live.starts_at).getTime() : 0;
-  const showIframe = !isPaused && (isLive || liveInputConnected);
+  // H7: el player se mantiene montado mientras la sala esté "live", esté o no
+  // pausada — antes `!isPaused` lo desmontaba en cada micro-pausa (webhook de
+  // OBS), perdiendo buffer, volumen y el estado de audio activado.
+  const showIframe = live?.status === "live" || liveInputConnected;
   const hasStreamId = Boolean(live?.stream_live_input_id);
 
   // Fetch active live on mount + validate plan access
@@ -441,12 +463,14 @@ const VIPLiveRoom = () => {
                 />
                 <div ref={playerWrapperRef} className="w-full h-full absolute inset-0 z-0 bg-black">
                   <LiveHLSPlayer
+                    key={playerKey}
                     ref={livePlayerRef}
                     liveInputId={live.stream_live_input_id!}
                     customerCode={CF_CUSTOMER_CODE}
                     muted={isMuted}
                     autoPlay
                     latencyMode={liveLatencyMode}
+                    roomPaused={isPaused}
                     className="w-full h-full object-contain bg-black"
                     onPlay={() => { setIsPlaying(true); setIsBuffering(false); }}
                     onPause={() => setIsPlaying(false)}
@@ -456,6 +480,7 @@ const VIPLiveRoom = () => {
                       setQualityLevels(lvls);
                       setCurrentQualityLevel(current);
                     }}
+                    onFatalError={() => setPlayerError(true)}
                   />
                   <LivePlayerControls
                     playerRef={livePlayerRef}
@@ -474,7 +499,7 @@ const VIPLiveRoom = () => {
                       Una vez dismissed, no reaparece aunque el usuario mutee o
                       ponga el volumen a 0 desde los controles. */}
                   <AnimatePresence>
-                    {!audioPromptDismissed && (
+                    {!audioPromptDismissed && !isPaused && (
                       <motion.div
                         key="enable-audio-overlay"
                         initial={{ opacity: 0 }}
@@ -505,6 +530,59 @@ const VIPLiveRoom = () => {
                           </span>
                           <span className="relative">Activar sonido</span>
                         </motion.button>
+                        {audioRetryHint && (
+                          <p className="absolute bottom-10 left-0 right-0 text-center text-xs text-red-400 font-bold px-4">
+                            No se pudo activar el sonido. Tocá de nuevo para reintentar.
+                          </p>
+                        )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* H7: overlay de pausa de sala — el <video> sigue montado (y pausado
+                      explícitamente por LiveHLSPlayer vía `roomPaused`), solo se tapa
+                      visualmente para no mostrar el último frame congelado. */}
+                  <AnimatePresence>
+                    {isPaused && (
+                      <motion.div
+                        key="room-paused-overlay"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="absolute inset-0 z-[45] flex items-center justify-center bg-black/85"
+                      >
+                        <div className="text-center p-8">
+                          <VideoOff size={64} className="mx-auto text-yellow-500/50 mb-6" />
+                          <h2 className="text-2xl font-bold text-white mb-2">Transmisión en Pausa</h2>
+                          <p className="text-textMuted max-w-md mx-auto">La transmisión se ha pausado temporalmente. Volveremos en breve.</p>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* H8: se agotaron los reintentos automáticos de recarga — error
+                      manual con botón de reintento que remonta el player (key bump). */}
+                  <AnimatePresence>
+                    {playerError && (
+                      <motion.div
+                        key="player-error-overlay"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="absolute inset-0 z-[46] flex items-center justify-center bg-black/90"
+                      >
+                        <div className="text-center p-8">
+                          <VideoOff size={64} className="mx-auto text-red-500/60 mb-6" />
+                          <h2 className="text-2xl font-bold text-white mb-2">Error de reproducción</h2>
+                          <p className="text-textMuted max-w-md mx-auto mb-6">No pudimos recuperar la transmisión automáticamente.</p>
+                          <button
+                            type="button"
+                            onClick={handleRetryPlayer}
+                            className="px-6 py-3 rounded-full bg-gold hover:bg-goldHover text-darker font-black tracking-wide transition-colors"
+                          >
+                            Reintentar
+                          </button>
+                        </div>
                       </motion.div>
                     )}
                   </AnimatePresence>
