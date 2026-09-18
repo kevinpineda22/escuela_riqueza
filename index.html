@@ -1,10 +1,39 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0a0a0a" />
+    <!-- Tema antes del primer pintado. Gemelo de src/lib/theme.ts (ver theme.test.ts). -->
+    <script id="theme-init">
+      (function () {
+        var root = document.documentElement;
+        var theme = "dark";
+        try {
+          var raw = window.localStorage.getItem("escuela-riqueza-preferences");
+          var parsed = raw ? JSON.parse(raw) : null;
+          var pref = parsed && parsed.state ? parsed.state.themePreference : null;
+          if (pref === "system") {
+            theme = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+          } else if (pref === "light") {
+            theme = "light";
+          }
+        } catch (e) {
+          theme = "dark";
+        }
+        if (root.getAttribute("data-theme-lock") === "dark") theme = "dark";
+        root.setAttribute("data-theme", theme);
+        root.style.colorScheme = theme;
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute("content", theme === "light" ? "#f8f6f1" : "#0a0a0a");
+      })();
+    </script>
+    <!-- Fondo mínimo mientras llega el CSS de la app: evita el destello contrario. -->
+    <style>
+      html { background: #0a0a0a; }
+      html[data-theme="light"] { background: #f8f6f1; }
+    </style>
     <title>Escuela de la Riqueza</title>
   </head>
   <body>

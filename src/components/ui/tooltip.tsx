@@ -17,7 +17,7 @@ function TooltipContent({
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        "z-50 overflow-hidden rounded-lg border border-white/10 bg-darker/95 backdrop-blur-md px-3 py-1.5 text-xs font-medium text-white shadow-xl",
+        "z-50 overflow-hidden rounded-lg border border-line-subtle bg-surface-page/95 backdrop-blur-md px-3 py-1.5 text-xs font-medium text-foreground-strong shadow-xl light:bg-surface-panel light:shadow-panel",
         "data-[state=delayed-open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=delayed-open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=delayed-open]:zoom-in-95",
         "data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
         className

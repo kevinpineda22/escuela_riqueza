@@ -60,21 +60,21 @@ const EditModeToggle = () => {
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="fixed top-3 left-1/2 -translate-x-1/2 z-[210] w-[calc(100%-1.5rem)] max-w-xl"
         >
-          <div className="flex items-center gap-3 bg-darker/95 backdrop-blur-lg border border-gold/40 rounded-2xl px-3 sm:px-4 py-2.5 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.7),0_0_30px_-12px_rgba(204,164,59,0.5)]">
-            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-gold/15 text-gold shrink-0">
+          <div className="flex items-center gap-3 bg-surface-page/95 backdrop-blur-lg border border-brand/40 rounded-2xl px-3 sm:px-4 py-2.5 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.7),0_0_30px_-12px_rgba(204,164,59,0.5)] light:bg-surface-panel light:shadow-[0_16px_40px_-16px_rgba(60,45,15,0.35),0_0_30px_-14px_rgba(204,164,59,0.45)]">
+            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-brand/15 text-accent shrink-0">
               <MousePointerClick size={18} />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-white leading-tight">
+              <p className="text-sm font-bold text-foreground-strong leading-tight">
                 Modo edición
                 {hasPending && (
-                  <span className="text-amber-400 font-semibold">
+                  <span className="text-warning font-semibold">
                     {" · "}
                     {pendingCount} sin guardar
                   </span>
                 )}
               </p>
-              <p className="text-[11px] text-textMuted leading-tight truncate">
+              <p className="text-[11px] text-foreground-muted leading-tight truncate">
                 Tocá cualquier texto con lápiz para editarlo. Nada se guarda hasta que confirmes.
               </p>
             </div>
@@ -83,7 +83,7 @@ const EditModeToggle = () => {
                 <button
                   onClick={handleSave}
                   disabled={saving}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-gold hover:bg-goldHover text-darker text-xs font-bold rounded-xl transition-all disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
+                  className="flex items-center gap-1.5 px-3 py-2 bg-brand hover:bg-brand-hover text-on-brand text-xs font-bold rounded-xl transition-all disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
                 >
                   {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                   <span className="hidden sm:inline">{saving ? "Guardando..." : "Guardar"}</span>
@@ -92,7 +92,7 @@ const EditModeToggle = () => {
                   onClick={handleDiscardAll}
                   disabled={saving}
                   title="Descartar todos los cambios"
-                  className="flex items-center gap-1.5 px-3 py-2 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white text-xs font-bold rounded-xl transition-all border border-white/10 disabled:opacity-60 shrink-0"
+                  className="flex items-center gap-1.5 px-3 py-2 bg-ink/5 hover:bg-ink/10 text-fg-70 hover:text-foreground-strong text-xs font-bold rounded-xl transition-all border border-line-subtle disabled:opacity-60 shrink-0"
                 >
                   <Undo2 size={14} />
                   <span className="hidden md:inline">Descartar</span>
@@ -101,7 +101,7 @@ const EditModeToggle = () => {
             )}
             <button
               onClick={handleToggle}
-              className="flex items-center gap-1.5 px-3 py-2 bg-white/5 hover:bg-white/10 text-white/80 hover:text-white text-xs font-bold rounded-xl transition-all border border-white/10 shrink-0"
+              className="flex items-center gap-1.5 px-3 py-2 bg-ink/5 hover:bg-ink/10 text-fg-80 hover:text-foreground-strong text-xs font-bold rounded-xl transition-all border border-line-subtle shrink-0"
             >
               <X size={14} />
               <span className="hidden sm:inline">Salir</span>
@@ -119,8 +119,8 @@ const EditModeToggle = () => {
             w-12 h-12 rounded-full shadow-2xl flex items-center justify-center transition-all duration-300
             ${
               isEditMode
-                ? "bg-gold text-darker shadow-[0_0_20px_rgba(204,164,59,0.5)] scale-110"
-                : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white border border-white/10"
+                ? "bg-brand text-on-brand shadow-[0_0_20px_rgba(204,164,59,0.5)] scale-110"
+                : "bg-ink/10 text-fg-70 hover:bg-ink/20 hover:text-foreground-strong border border-line-subtle light:bg-surface-panel light:shadow-panel light:hover:bg-surface-subtle"
             }
           `}
           title={isEditMode ? "Salir del modo edición" : "Editar landing page"}
