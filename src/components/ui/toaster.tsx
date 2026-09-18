@@ -1,34 +1,39 @@
 import { Toaster as SonnerToaster } from "sonner";
+import { useEffectiveTheme } from "@/hooks/useTheme";
 
-const Toaster = () => (
-  <SonnerToaster
-    position="top-right"
-    theme="dark"
-    richColors={false}
-    closeButton
-    visibleToasts={4}
-    gap={10}
-    toastOptions={{
-      duration: 4500,
-      classNames: {
-        toast:
-          "group !bg-darker/95 !border !border-white/10 !backdrop-blur-xl !text-textMain !rounded-2xl !shadow-[0_20px_50px_-20px_rgba(0,0,0,0.8)] !font-sans",
-        title: "!text-white !font-semibold !text-sm",
-        description: "!text-textMuted !text-xs !leading-relaxed",
-        actionButton:
-          "!bg-gold !text-darker !font-bold !rounded-full !px-3 !py-1.5 !text-xs hover:!bg-goldHover",
-        cancelButton:
-          "!bg-white/5 !text-white/70 !rounded-full !px-3 !py-1.5 !text-xs hover:!text-white",
-        closeButton:
-          "!bg-darker !border !border-white/10 !text-white/60 hover:!text-white",
-        success: "!border-gold/30 [&_[data-icon]]:!text-gold",
-        error: "!border-red-500/30 [&_[data-icon]]:!text-red-400",
-        info: "!border-sky-500/30 [&_[data-icon]]:!text-sky-400",
-        warning: "!border-amber-500/30 [&_[data-icon]]:!text-amber-400",
-      },
-    }}
-  />
-);
+const Toaster = () => {
+  const theme = useEffectiveTheme();
+
+  return (
+    <SonnerToaster
+      position="top-right"
+      theme={theme}
+      richColors={false}
+      closeButton
+      visibleToasts={4}
+      gap={10}
+      toastOptions={{
+        duration: 4500,
+        classNames: {
+          toast:
+            "group !bg-surface-popover !border !border-line-subtle !backdrop-blur-xl !text-foreground !rounded-2xl !shadow-panel !font-sans",
+          title: "!text-foreground-strong !font-semibold !text-sm",
+          description: "!text-foreground-muted !text-xs !leading-relaxed",
+          actionButton:
+            "!bg-brand !text-on-brand !font-bold !rounded-full !px-3 !py-1.5 !text-xs hover:!bg-brand-hover",
+          cancelButton:
+            "!bg-surface-subtle !text-foreground-strong/70 !rounded-full !px-3 !py-1.5 !text-xs hover:!text-foreground-strong",
+          closeButton:
+            "!bg-surface-page !border !border-line-subtle !text-foreground-strong/60 hover:!text-foreground-strong",
+          success: "!border-brand/30 [&_[data-icon]]:!text-accent",
+          error: "!border-danger-line [&_[data-icon]]:!text-danger",
+          info: "!border-info-line [&_[data-icon]]:!text-info",
+          warning: "!border-warning-line [&_[data-icon]]:!text-warning",
+        },
+      }}
+    />
+  );
+};
 
 export { Toaster };
 export { toast } from "sonner";

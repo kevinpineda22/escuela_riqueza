@@ -1,37 +1,65 @@
 import { Link } from "react-router-dom";
 import { motion } from "motion/react";
 import { ArrowLeft, Compass, Home } from "lucide-react";
+import { useThemedLogo } from "@/hooks/useThemedLogo";
+import { cn } from "@/lib/utils";
 
 const LOGO_LIGHT =
   "https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/18dc9190-6625-4b89-8f1e-3f221e96b500/public";
 
+// Logo según el tema (mismo criterio que BrandLogo).
+const NotFoundLogo = () => {
+  const logo = useThemedLogo(LOGO_LIGHT);
+  return (
+    <span
+      className={cn(
+        "mb-10 inline-flex",
+        logo.needsPlate &&
+          "light:rounded-2xl light:bg-darker light:px-4 light:py-2 light:shadow-panel light:ring-1 light:ring-brand/25"
+      )}
+    >
+      <motion.img
+        src={logo.src}
+        alt="Escuela de la Riqueza"
+        className={cn(
+          "h-16 sm:h-20 w-auto object-contain drop-shadow-[0_0_22px_rgba(204,164,59,0.4)]",
+          !logo.needsPlate && "light:drop-shadow-none"
+        )}
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.6 }}
+      />
+    </span>
+  );
+};
+
 const NotFound = () => (
-  <div className="min-h-[100dvh] w-full bg-[#050505] flex flex-col items-center justify-center relative overflow-hidden font-sans px-6 py-12 selection:bg-gold/30">
+  <div className="min-h-[100dvh] w-full bg-[#050505] light:bg-surface-page flex flex-col items-center justify-center relative overflow-hidden font-sans px-6 py-12 selection:bg-brand/30">
     {/* Fondo cinemático coherente con AuthPage */}
     <div
       aria-hidden
-      className="absolute inset-0 bg-[radial-gradient(ellipse_120%_80%_at_50%_0%,#1a1410_0%,#0a0a0a_50%,#050505_100%)] pointer-events-none"
+      className="absolute inset-0 bg-[radial-gradient(ellipse_120%_80%_at_50%_0%,#1a1410_0%,#0a0a0a_50%,#050505_100%)] light:bg-[radial-gradient(ellipse_120%_80%_at_50%_0%,#f1e7d0_0%,#f8f6f1_55%,#f8f6f1_100%)] pointer-events-none"
     />
     <motion.div
       aria-hidden
-      className="hidden md:block absolute -top-1/3 -left-1/4 w-[80vw] h-[80vw] max-w-[900px] max-h-[900px] rounded-full bg-[radial-gradient(circle_at_center,rgba(204,164,59,0.3)_0%,rgba(204,164,59,0.04)_45%,transparent_70%)] blur-3xl pointer-events-none"
+      className="hidden md:block absolute -top-1/3 -left-1/4 w-[80vw] h-[80vw] max-w-[900px] max-h-[900px] rounded-full bg-[radial-gradient(circle_at_center,rgba(204,164,59,0.3)_0%,rgba(204,164,59,0.04)_45%,transparent_70%)] blur-3xl light:opacity-50 pointer-events-none"
       animate={{ x: [0, 60, -20, 0], y: [0, -40, 20, 0] }}
       transition={{ duration: 22, repeat: Infinity, ease: "easeInOut" }}
     />
     <motion.div
       aria-hidden
-      className="hidden md:block absolute -bottom-1/3 -right-1/4 w-[80vw] h-[80vw] max-w-[1000px] max-h-[1000px] rounded-full bg-[radial-gradient(circle_at_center,rgba(225,184,70,0.25)_0%,rgba(225,184,70,0.04)_50%,transparent_75%)] blur-3xl pointer-events-none"
+      className="hidden md:block absolute -bottom-1/3 -right-1/4 w-[80vw] h-[80vw] max-w-[1000px] max-h-[1000px] rounded-full bg-[radial-gradient(circle_at_center,rgba(225,184,70,0.25)_0%,rgba(225,184,70,0.04)_50%,transparent_75%)] blur-3xl light:opacity-50 pointer-events-none"
       animate={{ x: [0, -50, 30, 0], y: [0, 30, -40, 0] }}
       transition={{ duration: 26, repeat: Infinity, ease: "easeInOut", delay: 2 }}
     />
     {/* En mobile, un único orbe estático más chico para mantener el ambiente sin tirar el GPU */}
     <div
       aria-hidden
-      className="md:hidden absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/3 w-[120vw] h-[120vw] rounded-full bg-[radial-gradient(circle_at_center,rgba(204,164,59,0.18),transparent_60%)] blur-2xl pointer-events-none"
+      className="md:hidden absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/3 w-[120vw] h-[120vw] rounded-full bg-[radial-gradient(circle_at_center,rgba(204,164,59,0.18),transparent_60%)] blur-2xl light:opacity-50 pointer-events-none"
     />
     <div
       aria-hidden
-      className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff06_1px,transparent_1px),linear-gradient(to_bottom,#ffffff06_1px,transparent_1px)] bg-[size:64px_64px] [mask-image:radial-gradient(ellipse_70%_60%_at_50%_50%,#000_30%,transparent_85%)] pointer-events-none"
+      className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff06_1px,transparent_1px),linear-gradient(to_bottom,#ffffff06_1px,transparent_1px)] light:bg-grid-ink bg-[size:64px_64px] [mask-image:radial-gradient(ellipse_70%_60%_at_50%_50%,#000_30%,transparent_85%)] pointer-events-none"
     />
     <div
       aria-hidden
@@ -44,14 +72,7 @@ const NotFound = () => (
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.7, ease: "easeOut" }}
     >
-      <motion.img
-        src={LOGO_LIGHT}
-        alt="Escuela de la Riqueza"
-        className="h-16 sm:h-20 w-auto object-contain drop-shadow-[0_0_22px_rgba(204,164,59,0.4)] mb-10"
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.6 }}
-      />
+      <NotFoundLogo />
 
       <motion.div
         className="relative"
@@ -59,19 +80,19 @@ const NotFound = () => (
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.8, delay: 0.15, ease: "easeOut" }}
       >
-        <h1 className="text-[160px] sm:text-[220px] xl:text-[260px] font-extrabold leading-none tracking-tighter bg-gradient-to-br from-gold via-goldHover to-amber-300 bg-clip-text text-transparent drop-shadow-[0_0_40px_rgba(204,164,59,0.3)]">
+        <h1 className="text-[160px] sm:text-[220px] xl:text-[260px] font-extrabold leading-none tracking-tighter bg-gradient-to-br from-brand via-brand-hover to-amber-300 light:from-gilt-end light:via-gilt-mid light:to-gilt-start bg-clip-text text-transparent drop-shadow-[0_0_40px_rgba(204,164,59,0.3)] light:drop-shadow-[0_0_32px_rgba(204,164,59,0.18)]">
           404
         </h1>
         <motion.div
           aria-hidden
-          className="absolute -inset-4 rounded-full bg-gold/20 blur-[80px] -z-10"
+          className="absolute -inset-4 rounded-full bg-brand/20 blur-[80px] -z-10"
           animate={{ opacity: [0.4, 0.7, 0.4], scale: [0.95, 1.05, 0.95] }}
           transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
         />
       </motion.div>
 
       <motion.div
-        className="flex items-center gap-2 text-gold/80 text-xs uppercase tracking-[0.3em] font-bold mt-2 mb-5"
+        className="flex items-center gap-2 text-accent/80 light:text-accent text-xs uppercase tracking-[0.3em] font-bold mt-2 mb-5"
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.4 }}
@@ -81,7 +102,7 @@ const NotFound = () => (
       </motion.div>
 
       <motion.h2
-        className="text-2xl sm:text-3xl xl:text-4xl font-extrabold text-white tracking-tight max-w-md"
+        className="text-2xl sm:text-3xl xl:text-4xl font-extrabold text-foreground-strong tracking-tight max-w-md"
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.5 }}
@@ -90,7 +111,7 @@ const NotFound = () => (
       </motion.h2>
 
       <motion.p
-        className="text-sm sm:text-base text-textMuted leading-relaxed mt-4 max-w-md"
+        className="text-sm sm:text-base text-foreground-muted leading-relaxed mt-4 max-w-md"
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.6 }}
@@ -107,14 +128,14 @@ const NotFound = () => (
       >
         <Link
           to="/"
-          className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-gold hover:bg-goldHover text-darker font-bold text-sm transition-all shadow-[0_8px_24px_-8px_rgba(204,164,59,0.6)] hover:shadow-[0_8px_28px_-6px_rgba(204,164,59,0.85)] hover:-translate-y-0.5"
+          className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-brand hover:bg-brand-hover text-on-brand font-bold text-sm transition-all shadow-[0_8px_24px_-8px_rgba(204,164,59,0.6)] hover:shadow-[0_8px_28px_-6px_rgba(204,164,59,0.85)] hover:-translate-y-0.5"
         >
           <Home size={16} /> Volver al inicio
         </Link>
         <button
           type="button"
           onClick={() => window.history.back()}
-          className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-white/80 hover:text-white font-medium text-sm transition-all"
+          className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-ink/[0.04] hover:bg-ink/[0.08] light:bg-surface-panel light:hover:bg-surface-subtle border border-line-subtle text-fg-80 hover:text-foreground-strong font-medium text-sm transition-all"
         >
           <ArrowLeft size={16} /> Atrás
         </button>

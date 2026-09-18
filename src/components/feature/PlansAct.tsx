@@ -53,8 +53,8 @@ const PlanFeatures = ({ planId, defaultFeatures, highlight }: PlanFeaturesProps)
       <ul className="space-y-3 sm:space-y-4">
         {features.map((feature, idx) => (
           <li key={idx} className="flex items-start gap-3">
-            <Check className="text-gold w-5 h-5 shrink-0 mt-0.5" />
-            <span className={highlight ? "text-sm text-white/90" : "text-sm text-textMuted"}>
+            <Check className="text-accent w-5 h-5 shrink-0 mt-0.5" />
+            <span className={highlight ? "text-sm text-fg-90" : "text-sm text-foreground-muted"}>
               {feature}
             </span>
           </li>
@@ -67,7 +67,7 @@ const PlanFeatures = ({ planId, defaultFeatures, highlight }: PlanFeaturesProps)
     <div className="space-y-2">
       {features.map((feature, idx) => (
         <div key={idx} className="flex items-center gap-2">
-          <Check className="text-gold w-4 h-4 shrink-0" />
+          <Check className="text-accent w-4 h-4 shrink-0" />
           <input
             value={feature}
             onChange={(e) => {
@@ -76,14 +76,14 @@ const PlanFeatures = ({ planId, defaultFeatures, highlight }: PlanFeaturesProps)
               commit(next);
             }}
             placeholder="Describe el beneficio…"
-            className="flex-1 min-w-0 bg-darker border border-gold/30 focus:border-gold rounded-lg px-2.5 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-gold/40"
+            className="flex-1 min-w-0 bg-surface-page border border-brand/30 focus:border-accent rounded-lg px-2.5 py-1.5 text-sm text-foreground-strong focus:outline-none focus:ring-1 focus:ring-focus/40"
           />
           <button
             type="button"
             onClick={() => commit(features.filter((_, i) => i !== idx))}
             title="Quitar este ítem"
             aria-label="Quitar este ítem"
-            className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-white/40 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+            className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-fg-40 hover:text-danger hover:bg-red-500/10 transition-colors"
           >
             <Trash2 size={15} />
           </button>
@@ -92,7 +92,7 @@ const PlanFeatures = ({ planId, defaultFeatures, highlight }: PlanFeaturesProps)
       <button
         type="button"
         onClick={() => commit([...features, ""])}
-        className="mt-1 inline-flex items-center gap-1.5 text-xs font-bold text-gold hover:text-goldHover transition-colors"
+        className="mt-1 inline-flex items-center gap-1.5 text-xs font-bold text-accent hover:text-accent-hover transition-colors"
       >
         <Plus size={14} /> Agregar ítem
       </button>
@@ -187,7 +187,7 @@ export const PlansAct = () => {
   ];
 
   return (
-    <section id="planes" className="relative z-10 max-w-7xl mx-auto px-5 sm:px-6 py-20 sm:py-24 md:py-32 border-t border-white/5">
+    <section id="planes" className="relative z-10 max-w-7xl mx-auto px-5 sm:px-6 py-20 sm:py-24 md:py-32 border-t border-ink/5">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
@@ -195,10 +195,10 @@ export const PlansAct = () => {
         transition={{ duration: 0.7 }}
         className="text-center mb-12 sm:mb-16 md:mb-24"
       >
-        <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-white mb-4 tracking-tight">
+        <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-foreground-strong mb-4 tracking-tight">
           <EditableField textKey="plans_title" defaultValue="Elige tu Plan de Crecimiento" as="span" />
         </h2>
-        <p className="text-textMuted max-w-xl mx-auto text-base sm:text-lg md:text-xl text-balance">
+        <p className="text-foreground-muted max-w-xl mx-auto text-base sm:text-lg md:text-xl text-balance">
           <EditableField textKey="plans_subtitle" defaultValue="Impulsa tu desarrollo al nivel que necesitas. Comienza gratis o accede a la experiencia completa." as="span" />
         </p>
       </motion.div>
@@ -216,36 +216,36 @@ export const PlansAct = () => {
             variants={itemVariants}
             className={`relative p-6 sm:p-8 rounded-3xl backdrop-blur-md transition-all duration-300 ${
               plan.highlight
-                ? "bg-darker border-2 border-gold lg:-translate-y-4 shadow-[0_0_30px_rgba(204,164,59,0.15)] hover:shadow-[0_0_40px_rgba(204,164,59,0.25)] mt-3 lg:mt-0"
-                : "bg-white/[0.02] border border-white/[0.05] hover:bg-white/[0.04] hover:border-white/10"
+                ? "bg-surface-page border-2 border-accent lg:-translate-y-4 shadow-[0_0_30px_rgba(204,164,59,0.15)] hover:shadow-[0_0_40px_rgba(204,164,59,0.25)] light:bg-surface-panel light:shadow-[0_0_0_4px_rgba(204,164,59,0.1),0_28px_56px_-24px_rgba(60,45,15,0.4)] light:hover:shadow-[0_0_0_5px_rgba(204,164,59,0.16),0_32px_64px_-24px_rgba(60,45,15,0.45)] mt-3 lg:mt-0"
+                : "bg-ink/[0.02] border border-ink/[0.05] hover:bg-ink/[0.04] hover:border-line-subtle light:bg-surface-panel/70 light:border-line-subtle light:hover:bg-surface-panel light:hover:shadow-panel"
             }`}
           >
             {plan.badge && (
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-gold text-darker text-[10px] sm:text-xs font-bold px-3 sm:px-4 py-1 sm:py-1.5 rounded-full uppercase tracking-wide whitespace-nowrap shadow-[0_4px_14px_-2px_rgba(204,164,59,0.5)]">
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-brand text-on-brand text-[10px] sm:text-xs font-bold px-3 sm:px-4 py-1 sm:py-1.5 rounded-full uppercase tracking-wide whitespace-nowrap shadow-[0_4px_14px_-2px_rgba(204,164,59,0.5)]">
                 {plan.badge}
               </div>
             )}
 
-            <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">
+            <h3 className="text-xl sm:text-2xl font-bold text-foreground-strong mb-2">
               <EditableField textKey={`plan_${plan.id}_name`} defaultValue={plan.name} as="span" />
             </h3>
-            <p className="text-textMuted text-sm mb-5 sm:mb-6 sm:h-10 text-pretty">
+            <p className="text-foreground-muted text-sm mb-5 sm:mb-6 sm:h-10 text-pretty">
               <EditableField textKey={`plan_${plan.id}_desc`} defaultValue={plan.description} as="span" multiline />
             </p>
 
             <div className="mb-6 sm:mb-8 flex items-baseline gap-1 flex-wrap">
-              <span className="font-bold text-4xl sm:text-5xl text-white">
+              <span className="font-bold text-4xl sm:text-5xl text-foreground-strong">
                 {plan.price}
               </span>
-              <span className="text-textMuted text-sm sm:text-base">{plan.period}</span>
+              <span className="text-foreground-muted text-sm sm:text-base">{plan.period}</span>
             </div>
 
             <Button
               asChild
               className={`w-full py-5 sm:py-6 mb-6 sm:mb-8 rounded-xl text-sm sm:text-base ${
                 plan.highlight
-                  ? "bg-gold hover:bg-goldHover text-darker font-bold shadow-[0_0_15px_rgba(204,164,59,0.4)]"
-                  : "bg-white/5 hover:bg-white/10 border border-white/10 text-white font-medium"
+                  ? "bg-brand hover:bg-brand-hover text-on-brand font-bold shadow-[0_0_15px_rgba(204,164,59,0.4)]"
+                  : "bg-ink/5 hover:bg-ink/10 border border-line-subtle text-foreground-strong font-medium"
               }`}
             >
               <Link to={`/registro?plan=${plan.id}`}>

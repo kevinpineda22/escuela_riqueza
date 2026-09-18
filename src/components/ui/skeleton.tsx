@@ -17,13 +17,13 @@ const Skeleton = ({ variant = "rect", className, ...rest }: SkeletonProps) => (
   <div
     aria-hidden
     className={cn(
-      "relative overflow-hidden bg-white/[0.04] border border-white/[0.06]",
+      "relative overflow-hidden bg-ink/[0.04] border border-ink/[0.06] light:bg-surface-subtle light:border-line-subtle/70",
       variantClasses[variant],
       className,
     )}
     {...rest}
   >
-    <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-gold/10 to-transparent" />
+    <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-brand/10 light:via-white/80 to-transparent" />
   </div>
 );
 
@@ -46,7 +46,7 @@ const SkeletonText = ({ count = 3, className, ...rest }: SkeletonGroupProps) => 
 const SkeletonCard = ({ className, ...rest }: HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      "p-4 sm:p-5 rounded-2xl bg-white/[0.03] border border-white/[0.06] flex flex-col gap-3 sm:gap-4",
+      "p-4 sm:p-5 rounded-2xl bg-ink/[0.03] border border-ink/[0.06] light:bg-surface-panel light:border-line-subtle flex flex-col gap-3 sm:gap-4",
       className,
     )}
     {...rest}

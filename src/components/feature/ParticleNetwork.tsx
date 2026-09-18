@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import { useIsDesktop, usePrefersReducedMotion } from "@/hooks/useMediaQuery";
 import { usePreferencesStore } from "@/stores/preferences.store";
+import { useEffectiveTheme } from "@/hooks/useTheme";
+import type { EffectiveTheme } from "@/lib/theme";
 
 /**
  * Constelación dorada sobre canvas 2D: puntos que flotan y se conectan con líneas
@@ -25,8 +27,24 @@ interface Particle {
   r: number;
 }
 
-// Paleta oro del cliente (tailwind.config): gold #CCA43B.
-const GOLD = { r: 204, g: 164, b: 59 };
+// Color por tema. Oscuro: oro de marca #CCA43B con glow (valores originales).
+// Claro: bronce que se distingue sobre marfil, líneas más discretas y glow
+// mínimo (un halo difuso sobre fondo claro ensucia en vez de brillar).
+interface ParticlePalette {
+  r: number;
+  g: number;
+  b: number;
+  line: number;
+  mouseLine: number;
+  dot: number;
+  glow: number;
+  glowBlur: number;
+}
+
+const PALETTES: Record<EffectiveTheme, ParticlePalette> = {
+  dark: { r: 204, g: 164, b: 59, line: 0.28, mouseLine: 0.4, dot: 0.85, glow: 0.8, glowBlur: 8 },
+  light: { r: 140, g: 104, b: 24, line: 0.2, mouseLine: 0.3, dot: 0.7, glow: 0.3, glowBlur: 4 },
+};
 const LINK_DISTANCE = 140; // px a partir de los cuales dos puntos se unen
 const MOUSE_DISTANCE = 170; // radio de influencia del cursor
 
@@ -36,6 +54,17 @@ const ParticleNetwork = () => {
   const prefersReducedMotion = usePrefersReducedMotion();
   const animationsEnabled = usePreferencesStore((s) => s.animationsEnabled);
   const reduce = prefersReducedMotion || !animationsEnabled;
+  const theme = useEffectiveTheme();
+  // El tema entra por ref: cambiarlo no regenera partículas ni reinicia el loop.
+  const paletteRef = useRef<ParticlePalette>(PALETTES[theme]);
+  const redrawRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    paletteRef.current = PALETTES[theme];
+    // Con animación el próximo frame ya sale con el color nuevo; en modo
+    // estático no hay próximo frame, así que se repinta el único que hay.
+    if (reduce) redrawRef.current?.();
+  }, [theme, reduce]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -83,6 +112,7 @@ const ParticleNetwork = () => {
     };
 
     const draw = () => {
+      const pal = paletteRef.current;
       ctx.clearRect(0, 0, width, height);
 
       // Líneas: cada par por debajo del umbral, opacidad según cercanía.
@@ -94,8 +124,8 @@ const ParticleNetwork = () => {
           const dy = a.y - b.y;
           const dist = Math.hypot(dx, dy);
           if (dist < LINK_DISTANCE) {
-            const alpha = (1 - dist / LINK_DISTANCE) * 0.28;
-            ctx.strokeStyle = `rgba(${GOLD.r},${GOLD.g},${GOLD.b},${alpha})`;
+            const alpha = (1 - dist / LINK_DISTANCE) * pal.line;
+            ctx.strokeStyle = `rgba(${pal.r},${pal.g},${pal.b},${alpha})`;
             ctx.lineWidth = 1;
             ctx.beginPath();
             ctx.moveTo(a.x, a.y);
@@ -110,8 +140,8 @@ const ParticleNetwork = () => {
           const dy = a.y - mouse.y;
           const dist = Math.hypot(dx, dy);
           if (dist < MOUSE_DISTANCE) {
-            const alpha = (1 - dist / MOUSE_DISTANCE) * 0.4;
-            ctx.strokeStyle = `rgba(${GOLD.r},${GOLD.g},${GOLD.b},${alpha})`;
+            const alpha = (1 - dist / MOUSE_DISTANCE) * pal.mouseLine;
+            ctx.strokeStyle = `rgba(${pal.r},${pal.g},${pal.b},${alpha})`;
             ctx.lineWidth = 1;
             ctx.beginPath();
             ctx.moveTo(a.x, a.y);
@@ -124,9 +154,9 @@ const ParticleNetwork = () => {
       // Puntos con leve glow.
       for (const p of particles) {
         ctx.beginPath();
-        ctx.fillStyle = `rgba(${GOLD.r},${GOLD.g},${GOLD.b},0.85)`;
-        ctx.shadowColor = `rgba(${GOLD.r},${GOLD.g},${GOLD.b},0.8)`;
-        ctx.shadowBlur = 8;
+        ctx.fillStyle = `rgba(${pal.r},${pal.g},${pal.b},${pal.dot})`;
+        ctx.shadowColor = `rgba(${pal.r},${pal.g},${pal.b},${pal.glow})`;
+        ctx.shadowBlur = pal.glowBlur;
         ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
         ctx.fill();
       }
@@ -146,6 +176,7 @@ const ParticleNetwork = () => {
     };
 
     resize();
+    redrawRef.current = draw;
 
     // Control de loop: sólo corre cuando el canvas está en pantalla.
     let running = false;
@@ -201,6 +232,7 @@ const ParticleNetwork = () => {
 
     return () => {
       stop();
+      redrawRef.current = null;
       io.disconnect();
       window.removeEventListener("resize", onResize);
       window.removeEventListener("mousemove", onMouseMove);
