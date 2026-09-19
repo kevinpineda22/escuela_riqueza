@@ -285,19 +285,19 @@ const VIPLiveRoom = () => {
 
   if (loading) {
     return (
-      <div className="min-h-[100dvh] bg-black flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-gold" />
+      <div className="min-h-[100dvh] bg-black light:bg-surface-page flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-accent" />
       </div>
     );
   }
 
   if (!live) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center p-6">
+      <div className="min-h-screen bg-black light:bg-surface-page flex items-center justify-center p-6">
         <div className="text-center max-w-md">
-          <Radio size={48} className="mx-auto text-white/20 mb-6" />
-          <h2 className="text-2xl font-bold text-white mb-2">No hay eventos programados</h2>
-          <p className="text-textMuted">Los próximos encuentros VIP aparecerán aquí. Vuelve pronto.</p>
+          <Radio size={48} className="mx-auto text-fg-20 mb-6" />
+          <h2 className="text-2xl font-bold text-foreground-strong mb-2">No hay eventos programados</h2>
+          <p className="text-foreground-muted">Los próximos encuentros VIP aparecerán aquí. Vuelve pronto.</p>
         </div>
       </div>
     );
@@ -308,8 +308,10 @@ const VIPLiveRoom = () => {
   const mobileVideoHeightClass = "h-[50dvh] shrink-0";
 
   return (
-    <div className="h-[100dvh] bg-black text-textMain flex flex-col md:flex-row overflow-hidden font-sans">
-      <div className={cn(
+    <div className="h-[100dvh] bg-black light:bg-surface-page text-foreground flex flex-col md:flex-row overflow-hidden font-sans">
+      {/* Isla oscura: escenario, intro, countdown y controles son iguales en ambos
+          temas (spec §3.4). El chat y la lista de conectados, afuera, sí se adaptan. */}
+      <div data-theme="dark" className={cn(
         "flex flex-col relative",
         isDesktop ? "flex-1 md:h-screen" : mobileVideoHeightClass
       )}>
@@ -328,7 +330,7 @@ const VIPLiveRoom = () => {
                 transition={{ duration: 2, ease: "easeOut" }}
                 className="relative"
               >
-                <div className="absolute inset-0 bg-gold blur-[100px] opacity-20 animate-pulse" />
+                <div className="absolute inset-0 bg-brand blur-[100px] opacity-20 animate-pulse" />
                 <img
                   src="https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/18dc9190-6625-4b89-8f1e-3f221e96b500/public"
                   alt="Logo"
@@ -341,14 +343,14 @@ const VIPLiveRoom = () => {
                 transition={{ delay: 1, duration: 1 }}
                 className="mt-8 text-center z-10"
               >
-                <h2 className="text-2xl font-bold text-gold tracking-[0.3em] uppercase mb-2">Conectando señal</h2>
+                <h2 className="text-2xl font-bold text-accent tracking-[0.3em] uppercase mb-2">Conectando señal</h2>
                 <div className="flex gap-1 justify-center">
                   {[1, 2, 3].map((i) => (
                     <motion.div
                       key={i}
                       animate={{ scaleY: [1, 2, 1], opacity: [0.3, 1, 0.3] }}
                       transition={{ repeat: Infinity, duration: 1, delay: i * 0.2 }}
-                      className="w-1 h-4 bg-gold rounded-full"
+                      className="w-1 h-4 bg-brand rounded-full"
                     />
                   ))}
                 </div>
@@ -368,11 +370,11 @@ const VIPLiveRoom = () => {
             <button
               onClick={() => navigate("/dashboard")}
               aria-label="Volver al dashboard"
-              className="p-2 sm:p-2.5 bg-black/50 backdrop-blur-md border border-white/10 rounded-xl sm:rounded-2xl text-white/80 hover:text-white hover:bg-black/70 transition-colors shrink-0"
+              className="p-2 sm:p-2.5 bg-black/50 backdrop-blur-md border border-line-subtle rounded-xl sm:rounded-2xl text-fg-80 hover:text-foreground-strong hover:bg-black/70 transition-colors shrink-0"
             >
               <ArrowLeft size={18} />
             </button>
-            <div className="p-2 sm:p-2.5 bg-black/40 backdrop-blur-md border border-white/10 rounded-xl sm:rounded-2xl shrink-0">
+            <div className="p-2 sm:p-2.5 bg-black/40 backdrop-blur-md border border-line-subtle rounded-xl sm:rounded-2xl shrink-0">
               <img
                 src="https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/18dc9190-6625-4b89-8f1e-3f221e96b500/public"
                 alt="Logo"
@@ -380,19 +382,19 @@ const VIPLiveRoom = () => {
               />
             </div>
             <div className="hidden md:block min-w-0">
-              <h1 className="font-extrabold text-base lg:text-xl leading-tight text-white tracking-tight drop-shadow-2xl truncate">
-                {live.title || "Sesión de Riqueza"} <span className="text-gold">VIP</span>
+              <h1 className="font-extrabold text-base lg:text-xl leading-tight text-foreground-strong tracking-tight drop-shadow-2xl truncate">
+                {live.title || "Sesión de Riqueza"} <span className="text-accent">VIP</span>
               </h1>
               <div className="flex items-center gap-2 mt-1">
-                <Sparkles size={12} className="text-gold" />
-                <span className="text-[10px] text-white/60 uppercase font-black tracking-[0.2em]">Encuentro con Iván Mazo</span>
+                <Sparkles size={12} className="text-accent" />
+                <span className="text-[10px] text-fg-60 uppercase font-black tracking-[0.2em]">Encuentro con Iván Mazo</span>
               </div>
             </div>
           </div>
 
           <div className="flex flex-col items-end gap-2 sm:gap-3 pointer-events-auto shrink-0">
             {isEnded ? (
-              <div className="flex items-center gap-1.5 sm:gap-2.5 bg-gray-600/20 backdrop-blur-md border border-gray-600/50 text-textMuted px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl text-[9px] sm:text-[10px] font-black tracking-widest">
+              <div className="flex items-center gap-1.5 sm:gap-2.5 bg-gray-600/20 backdrop-blur-md border border-gray-600/50 text-foreground-muted px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl text-[9px] sm:text-[10px] font-black tracking-widest">
                 <VideoOff size={12} /> FINALIZADO
               </div>
             ) : isPaused ? (
@@ -413,8 +415,8 @@ const VIPLiveRoom = () => {
                 EN VIVO
               </motion.div>
             ) : (
-              <div className="flex items-center gap-1.5 sm:gap-2.5 bg-black/40 backdrop-blur-md border border-white/10 text-white/70 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl text-[9px] sm:text-[10px] font-bold tracking-wider">
-                <Clock size={12} className="text-gold" />
+              <div className="flex items-center gap-1.5 sm:gap-2.5 bg-black/40 backdrop-blur-md border border-line-subtle text-fg-70 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl text-[9px] sm:text-[10px] font-bold tracking-wider">
+                <Clock size={12} className="text-accent" />
                 {showIframe ? "EN ESPERA" : "PRÓXIMAMENTE"}
               </div>
             )}
@@ -424,9 +426,9 @@ const VIPLiveRoom = () => {
               <button
                 onClick={() => setShowViewersList(true)}
                 aria-label={`${totalViewers} conectados`}
-                className="flex items-center gap-1.5 sm:gap-2 bg-black/50 backdrop-blur-md border border-gold/20 text-white/85 hover:text-gold hover:border-gold/50 hover:bg-black/70 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl text-[10px] sm:text-xs font-black tracking-wide active:scale-95 transition-all"
+                className="flex items-center gap-1.5 sm:gap-2 bg-black/50 backdrop-blur-md border border-brand/20 text-fg-85 hover:text-accent hover:border-brand/50 hover:bg-black/70 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl text-[10px] sm:text-xs font-black tracking-wide active:scale-95 transition-all"
               >
-                <Users size={12} className="text-gold" />
+                <Users size={12} className="text-accent" />
                 <span>{totalViewers}</span>
               </button>
             )}
@@ -523,21 +525,21 @@ const VIPLiveRoom = () => {
                           transition={{ type: "spring", damping: 18, stiffness: 220 }}
                           whileHover={{ scale: 1.04 }}
                           whileTap={{ scale: 0.96 }}
-                          className="relative flex items-center gap-3 px-7 py-4 sm:px-9 sm:py-5 rounded-full bg-gradient-to-br from-gold via-goldHover to-gold text-darker font-black text-base sm:text-lg tracking-tight shadow-[0_25px_60px_-10px_rgba(204,164,59,0.7)] ring-1 ring-gold/50"
+                          className="relative flex items-center gap-3 px-7 py-4 sm:px-9 sm:py-5 rounded-full bg-gradient-to-br from-brand via-brand-hover to-brand text-on-brand font-black text-base sm:text-lg tracking-tight shadow-[0_25px_60px_-10px_rgba(204,164,59,0.7)] ring-1 ring-focus/50"
                         >
                           {/* Pulse rings */}
-                          <span className="absolute inset-0 rounded-full bg-gold/50 animate-ping pointer-events-none" />
-                          <span className="absolute inset-0 rounded-full bg-gold/30 animate-ping pointer-events-none [animation-delay:0.6s]" />
+                          <span className="absolute inset-0 rounded-full bg-brand/50 animate-ping pointer-events-none" />
+                          <span className="absolute inset-0 rounded-full bg-brand/30 animate-ping pointer-events-none [animation-delay:0.6s]" />
 
                           {/* Content */}
-                          <span className="relative flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-darker/15">
-                            <Volume2 size={18} strokeWidth={2.5} className="text-darker" />
+                          <span className="relative flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-surface-page/15">
+                            <Volume2 size={18} strokeWidth={2.5} className="text-on-brand" />
                           </span>
                           <span className="relative">Activar sonido</span>
                         </motion.button>
                         {audioRetryHint && (
-                          <p className="absolute bottom-10 left-0 right-0 text-center text-xs text-red-400 font-bold px-4">
-                            No se pudo activar el sonido. Tocá de nuevo para reintentar.
+                          <p className="absolute bottom-10 left-0 right-0 text-center text-xs text-danger font-bold px-4">
+                            No se pudo activar el sonido. Toca de nuevo para reintentar.
                           </p>
                         )}
                       </motion.div>
@@ -558,8 +560,8 @@ const VIPLiveRoom = () => {
                       >
                         <div className="text-center p-8">
                           <VideoOff size={64} className="mx-auto text-yellow-500/50 mb-6" />
-                          <h2 className="text-2xl font-bold text-white mb-2">Transmisión en Pausa</h2>
-                          <p className="text-textMuted max-w-md mx-auto">La transmisión se ha pausado temporalmente. Volveremos en breve.</p>
+                          <h2 className="text-2xl font-bold text-foreground-strong mb-2">Transmisión en Pausa</h2>
+                          <p className="text-foreground-muted max-w-md mx-auto">La transmisión se ha pausado temporalmente. Volveremos en breve.</p>
                         </div>
                       </motion.div>
                     )}
@@ -578,12 +580,12 @@ const VIPLiveRoom = () => {
                       >
                         <div className="text-center p-8">
                           <VideoOff size={64} className="mx-auto text-red-500/60 mb-6" />
-                          <h2 className="text-2xl font-bold text-white mb-2">Error de reproducción</h2>
-                          <p className="text-textMuted max-w-md mx-auto mb-6">No pudimos recuperar la transmisión automáticamente.</p>
+                          <h2 className="text-2xl font-bold text-foreground-strong mb-2">Error de reproducción</h2>
+                          <p className="text-foreground-muted max-w-md mx-auto mb-6">No pudimos recuperar la transmisión automáticamente.</p>
                           <button
                             type="button"
                             onClick={handleRetryPlayer}
-                            className="px-6 py-3 rounded-full bg-gold hover:bg-goldHover text-darker font-black tracking-wide transition-colors"
+                            className="px-6 py-3 rounded-full bg-brand hover:bg-brand-hover text-on-brand font-black tracking-wide transition-colors"
                           >
                             Reintentar
                           </button>
@@ -601,9 +603,9 @@ const VIPLiveRoom = () => {
                 className="w-full h-full flex items-center justify-center bg-black/80 relative"
               >
                 <div className="text-center p-8 z-10">
-                  <VideoOff size={64} className="mx-auto text-white/20 mb-6" />
-                  <h2 className="text-2xl font-bold text-white mb-2">Transmisión finalizada</h2>
-                  <p className="text-textMuted max-w-md mx-auto">Gracias por acompañarnos. Podés seguir conversando en el chat.</p>
+                  <VideoOff size={64} className="mx-auto text-fg-20 mb-6" />
+                  <h2 className="text-2xl font-bold text-foreground-strong mb-2">Transmisión finalizada</h2>
+                  <p className="text-foreground-muted max-w-md mx-auto">Gracias por acompañarnos. Puedes seguir conversando en el chat.</p>
                 </div>
               </motion.div>
             ) : isPaused ? (
@@ -615,8 +617,8 @@ const VIPLiveRoom = () => {
               >
                 <div className="text-center p-8 z-10">
                   <VideoOff size={64} className="mx-auto text-yellow-500/50 mb-6" />
-                  <h2 className="text-2xl font-bold text-white mb-2">Transmisión en Pausa</h2>
-                  <p className="text-textMuted max-w-md mx-auto">La transmisión se ha pausado temporalmente. Volveremos en breve.</p>
+                  <h2 className="text-2xl font-bold text-foreground-strong mb-2">Transmisión en Pausa</h2>
+                  <p className="text-foreground-muted max-w-md mx-auto">La transmisión se ha pausado temporalmente. Volveremos en breve.</p>
                 </div>
               </motion.div>
             ) : !hasStreamId ? (
@@ -626,12 +628,12 @@ const VIPLiveRoom = () => {
                 animate={{ opacity: 1 }}
                 className="w-full h-full flex items-center justify-center z-10"
               >
-                <div className="text-white text-center p-12 bg-darker rounded-3xl border border-white/5">
+                <div className="text-foreground-strong text-center p-12 bg-surface-page rounded-3xl border border-ink/5">
                   <div className="w-16 h-16 bg-red-500/20 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
                     <Tv size={32} />
                   </div>
                   <h3 className="text-2xl font-bold mb-2">Señal no configurada</h3>
-                  <p className="text-textMuted max-w-sm mx-auto">El stream ID de Cloudflare no está vinculado a esta sala. Contactá al administrador.</p>
+                  <p className="text-foreground-muted max-w-sm mx-auto">El stream ID de Cloudflare no está vinculado a esta sala. Contacta al administrador.</p>
                 </div>
               </motion.div>
             ) : !showIframe ? (
@@ -646,25 +648,25 @@ const VIPLiveRoom = () => {
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="mb-6 sm:mb-12 inline-flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-2 sm:py-2.5 bg-gold/5 border border-gold/20 rounded-full"
+                  className="mb-6 sm:mb-12 inline-flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-2 sm:py-2.5 bg-brand/5 border border-brand/20 rounded-full"
                 >
-                  <Calendar size={14} className="text-gold" />
-                  <span className="text-[11px] sm:text-sm font-bold text-gold/80 tracking-widest uppercase">Próximo Encuentro VIP</span>
+                  <Calendar size={14} className="text-accent" />
+                  <span className="text-[11px] sm:text-sm font-bold text-accent/80 tracking-widest uppercase">Próximo Encuentro VIP</span>
                 </motion.div>
 
-                <h2 className="text-3xl sm:text-5xl md:text-7xl font-black mb-6 sm:mb-8 text-white tracking-tight md:tracking-tighter leading-[1.1] text-balance">
+                <h2 className="text-3xl sm:text-5xl md:text-7xl font-black mb-6 sm:mb-8 text-foreground-strong tracking-tight md:tracking-tighter leading-[1.1] text-balance">
                   {live.title ? (
                     live.title
                   ) : (
                     <>El conocimiento es la<br />
-                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-gold via-goldHover to-gold">
+                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand via-brand-hover to-brand">
                       moneda definitiva
                     </span></>
                   )}
                 </h2>
 
                 {live.description && (
-                  <p className="text-textMuted mb-10 sm:mb-16 text-sm sm:text-lg md:text-xl max-w-2xl mx-auto font-medium leading-relaxed text-balance">
+                  <p className="text-foreground-muted mb-10 sm:mb-16 text-sm sm:text-lg md:text-xl max-w-2xl mx-auto font-medium leading-relaxed text-balance">
                     {live.description}
                   </p>
                 )}
@@ -679,28 +681,28 @@ const VIPLiveRoom = () => {
                       <div key={idx} className="flex flex-col items-center">
                         <div
                           className={cn(
-                            "relative w-16 h-20 sm:w-24 sm:h-32 md:w-36 md:h-44 flex items-center justify-center rounded-2xl sm:rounded-3xl border border-white/10 overflow-hidden shadow-2xl transition-all duration-500",
-                            unit.highlight ? "bg-gold/10 border-gold/30" : "bg-white/5"
+                            "relative w-16 h-20 sm:w-24 sm:h-32 md:w-36 md:h-44 flex items-center justify-center rounded-2xl sm:rounded-3xl border border-line-subtle overflow-hidden shadow-2xl transition-all duration-500",
+                            unit.highlight ? "bg-brand/10 border-brand/30" : "bg-ink/5"
                           )}
                         >
                           <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent" />
                           <span
                             className={cn(
                               "text-3xl sm:text-5xl md:text-8xl font-black font-mono tracking-tighter",
-                              unit.highlight ? "text-gold" : "text-white"
+                              unit.highlight ? "text-accent" : "text-foreground-strong"
                             )}
                           >
                             {unit.val.toString().padStart(2, "0")}
                           </span>
                         </div>
-                        <span className="text-[9px] sm:text-[10px] text-textMuted uppercase tracking-[0.25em] sm:tracking-[0.3em] mt-3 sm:mt-5 font-black">{unit.label}</span>
+                        <span className="text-[9px] sm:text-[10px] text-foreground-muted uppercase tracking-[0.25em] sm:tracking-[0.3em] mt-3 sm:mt-5 font-black">{unit.label}</span>
                       </div>
                     ))}
                   </div>
                 )}
 
                 {!live.starts_at && (
-                  <p className="text-xl sm:text-2xl text-white/60 font-bold">Próximamente</p>
+                  <p className="text-xl sm:text-2xl text-fg-60 font-bold">Próximamente</p>
                 )}
               </motion.div>
             ) : (
@@ -711,8 +713,8 @@ const VIPLiveRoom = () => {
                 className="w-full h-full flex items-center justify-center z-10"
               >
                 <div className="text-center">
-                  <Clock size={48} className="mx-auto text-white/20 mb-4" />
-                  <p className="text-xl text-white/60 font-bold">Esperando señal...</p>
+                  <Clock size={48} className="mx-auto text-fg-20 mb-4" />
+                  <p className="text-xl text-fg-60 font-bold">Esperando señal...</p>
                 </div>
               </motion.div>
             )}
@@ -724,7 +726,7 @@ const VIPLiveRoom = () => {
           <button
             onClick={() => setIsChatVisibleDesktop(v => !v)}
             aria-label={isChatVisibleDesktop ? "Ocultar chat" : "Mostrar chat"}
-            className="absolute right-0 top-1/2 -translate-y-1/2 z-40 group flex items-center gap-2 pl-3 pr-2.5 py-4 rounded-l-2xl bg-black/60 backdrop-blur-md border border-r-0 border-white/15 text-white/80 hover:text-gold hover:bg-black/80 hover:pl-4 transition-all shadow-[-8px_0_25px_-5px_rgba(0,0,0,0.4)]"
+            className="absolute right-0 top-1/2 -translate-y-1/2 z-40 group flex items-center gap-2 pl-3 pr-2.5 py-4 rounded-l-2xl bg-black/60 backdrop-blur-md border border-r-0 border-ink/15 text-fg-80 hover:text-accent hover:bg-black/80 hover:pl-4 transition-all shadow-[-8px_0_25px_-5px_rgba(0,0,0,0.4)]"
           >
             {isChatVisibleDesktop ? (
               <PanelRightClose size={20} />
@@ -739,7 +741,7 @@ const VIPLiveRoom = () => {
                   animate={{ scale: 1, opacity: 1 }}
                   exit={{ scale: 0, opacity: 0 }}
                   transition={{ type: "spring", damping: 14, stiffness: 280 }}
-                  className="absolute -top-1.5 -left-1.5 min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center shadow-lg border-2 border-darker"
+                  className="absolute -top-1.5 -left-1.5 min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center shadow-lg border-2 border-surface-page"
                 >
                   {unreadCount > 99 ? "99+" : unreadCount}
                 </motion.span>
@@ -755,7 +757,7 @@ const VIPLiveRoom = () => {
       {isDesktop && (
         <div
           className={cn(
-            "md:h-screen bg-darker shrink-0 z-50 overflow-hidden transition-[width,opacity] duration-300 ease-in-out",
+            "md:h-screen bg-surface-page shrink-0 z-50 overflow-hidden transition-[width,opacity] duration-300 ease-in-out",
             isChatVisibleDesktop ? "w-80 lg:w-[400px] opacity-100" : "w-0 opacity-0"
           )}
         >
@@ -766,26 +768,26 @@ const VIPLiveRoom = () => {
       {/* Chat mobile — sibling permanente del video (split 50/50 fijo).
           Sin toggle, sin FAB. El fullscreen lo maneja el botón nativo del player. */}
       {!isDesktop && (
-        <div className="flex-1 min-h-0 bg-darker border-t border-gold/30 shadow-[0_-20px_40px_-15px_rgba(0,0,0,0.7)]">
+        <div className="flex-1 min-h-0 bg-surface-page border-t border-brand/30 shadow-[0_-20px_40px_-15px_rgba(0,0,0,0.7)] light:shadow-[0_-16px_32px_-18px_rgba(60,45,15,0.3)]">
           <LiveChat liveId={live.id} onIncomingMessage={handleIncomingMessage} />
         </div>
       )}
 
       {/* Lista de viewers conectados al live */}
       <Dialog open={showViewersList} onOpenChange={setShowViewersList}>
-        <DialogContent className="bg-darker border-white/10 max-w-md">
+        <DialogContent className="bg-surface-page border-line-subtle max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-white flex items-center gap-2.5">
-              <div className="p-1.5 rounded-lg bg-gold/15">
-                <Users size={16} className="text-gold" />
+            <DialogTitle className="text-foreground-strong flex items-center gap-2.5">
+              <div className="p-1.5 rounded-lg bg-brand/15">
+                <Users size={16} className="text-accent" />
               </div>
               Conectados
-              <span className="text-gold font-black">({totalViewers})</span>
+              <span className="text-accent font-black">({totalViewers})</span>
             </DialogTitle>
           </DialogHeader>
           <div className="max-h-[60vh] overflow-y-auto -mx-2 px-2 space-y-1">
             {viewers.length === 0 ? (
-              <p className="text-textMuted text-sm text-center py-8">Cargando conectados...</p>
+              <p className="text-foreground-muted text-sm text-center py-8">Cargando conectados...</p>
             ) : (
               viewers
                 .slice()
@@ -793,24 +795,24 @@ const VIPLiveRoom = () => {
                 .map(v => (
                   <div
                     key={v.user_id}
-                    className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-white/[0.04] transition-colors"
+                    className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-ink/[0.04] transition-colors"
                   >
                     {v.avatar_url ? (
                       <img
                         src={v.avatar_url}
                         alt={v.full_name}
-                        className="w-10 h-10 rounded-full object-cover ring-1 ring-white/10 shrink-0"
+                        className="w-10 h-10 rounded-full object-cover ring-1 ring-ink/10 shrink-0"
                       />
                     ) : (
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gold/30 to-gold/10 text-gold flex items-center justify-center font-black text-sm ring-1 ring-gold/30 shrink-0">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-brand/30 to-brand/10 text-accent flex items-center justify-center font-black text-sm ring-1 ring-focus/30 shrink-0">
                         {v.full_name?.[0]?.toUpperCase() ?? "?"}
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-white truncate">
+                      <p className="text-sm font-bold text-foreground-strong truncate">
                         {v.full_name}
                         {v.user_id === user?.id && (
-                          <span className="ml-1.5 text-gold/70 font-normal text-xs">(Tú)</span>
+                          <span className="ml-1.5 text-accent/70 light:text-accent font-normal text-xs">(Tú)</span>
                         )}
                       </p>
                       <div className="flex items-center gap-1.5 mt-0.5">
@@ -818,9 +820,9 @@ const VIPLiveRoom = () => {
                         <span
                           className={cn(
                             "text-[9px] font-black uppercase tracking-widest",
-                            v.plan === "vip" && "text-gold",
-                            v.plan === "individual" && "text-blue-300",
-                            v.plan === "free" && "text-textMuted",
+                            v.plan === "vip" && "text-accent",
+                            v.plan === "individual" && "text-blue-300 light:text-info",
+                            v.plan === "free" && "text-foreground-muted",
                           )}
                         >
                           {v.plan === "vip" ? "★ VIP" : v.plan === "individual" ? "Individual" : "Free"}
@@ -831,12 +833,12 @@ const VIPLiveRoom = () => {
                 ))
             )}
             {totalViewers > viewers.length && (
-              <div className="flex items-center gap-3 p-2.5 rounded-xl border-t border-white/5 mt-1">
-                <div className="w-10 h-10 rounded-full bg-white/5 text-textMuted flex items-center justify-center ring-1 ring-white/10 shrink-0">
+              <div className="flex items-center gap-3 p-2.5 rounded-xl border-t border-ink/5 mt-1">
+                <div className="w-10 h-10 rounded-full bg-ink/5 text-foreground-muted flex items-center justify-center ring-1 ring-ink/10 shrink-0">
                   <Users size={16} />
                 </div>
-                <p className="text-sm text-textMuted">
-                  <span className="font-bold text-white">{totalViewers - viewers.length}</span>{" "}
+                <p className="text-sm text-foreground-muted">
+                  <span className="font-bold text-foreground-strong">{totalViewers - viewers.length}</span>{" "}
                   {totalViewers - viewers.length === 1 ? "invitado" : "invitados"} por link público
                 </p>
               </div>

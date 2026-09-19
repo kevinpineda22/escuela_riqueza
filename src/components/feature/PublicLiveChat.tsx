@@ -74,17 +74,17 @@ const PublicLiveChat = ({ token, loginPath }: PublicLiveChatProps) => {
   }, [messages, loading]);
 
   return (
-    <div className="flex flex-col w-full h-full bg-darker/50 backdrop-blur-md overflow-hidden border-l border-white/10 shadow-2xl">
-      <div className="p-4 border-b border-white/10 bg-black/40 flex items-center justify-between shrink-0">
+    <div className="flex flex-col w-full h-full bg-surface-page/50 light:bg-surface-page backdrop-blur-md overflow-hidden border-l border-line-subtle shadow-2xl">
+      <div className="p-4 border-b border-line-subtle bg-black/40 light:bg-surface-subtle flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-gold/10 text-gold">
+          <div className="p-2 rounded-lg bg-brand/10 text-accent">
             <Users size={18} />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-white tracking-wide">CHAT EN VIVO</h3>
+            <h3 className="text-sm font-bold text-foreground-strong tracking-wide">CHAT EN VIVO</h3>
             <div className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-[10px] text-textMuted uppercase font-bold tracking-widest">Modo lectura</span>
+              <span className="text-[10px] text-foreground-muted uppercase font-bold tracking-widest">Modo lectura</span>
             </div>
           </div>
         </div>
@@ -119,14 +119,14 @@ const PublicLiveChat = ({ token, loginPath }: PublicLiveChatProps) => {
                   <span
                     className={cn(
                       "text-[10px] font-bold uppercase tracking-wider",
-                      msg.id === "system-1" ? "text-gold" : "text-textMuted"
+                      msg.id === "system-1" ? "text-accent" : "text-foreground-muted"
                     )}
                   >
                     {msg.user_name}
                   </span>
-                  {msg.id === "system-1" && <ShieldCheck size={10} className="text-gold" />}
+                  {msg.id === "system-1" && <ShieldCheck size={10} className="text-accent" />}
                   {msg.id !== "system-1" && (
-                    <span className="text-[9px] font-medium text-white/30 tracking-wide tabular-nums">
+                    <span className="text-[9px] font-medium text-fg-30 light:text-fg-50 tracking-wide tabular-nums">
                       {new Date(msg.created_at).toLocaleTimeString(undefined, {
                         hour: "2-digit",
                         minute: "2-digit",
@@ -139,8 +139,8 @@ const PublicLiveChat = ({ token, loginPath }: PublicLiveChatProps) => {
                   className={cn(
                     "px-4 py-2.5 rounded-2xl max-w-[90%] text-sm break-words relative overflow-hidden",
                     msg.id === "system-1"
-                      ? "bg-gold/10 text-gold border border-gold/30 shadow-[0_0_20px_rgba(204,164,59,0.1)]"
-                      : "bg-white/5 text-textMain border border-white/5"
+                      ? "bg-brand/10 text-accent border border-brand/30 shadow-[0_0_20px_rgba(204,164,59,0.1)]"
+                      : "bg-ink/5 text-foreground border border-ink/5 light:bg-surface-panel light:border-line-subtle light:shadow-sm"
                   )}
                 >
                   {msg.message}
@@ -151,15 +151,15 @@ const PublicLiveChat = ({ token, loginPath }: PublicLiveChatProps) => {
         )}
       </div>
 
-      <div className="p-4 bg-black/40 border-t border-white/10 shrink-0">
+      <div className="p-4 bg-black/40 light:bg-surface-subtle border-t border-line-subtle shrink-0">
         <Link
           to={loginPath}
-          className="w-full flex items-center justify-center gap-2 bg-gold hover:bg-goldHover text-darker px-4 py-3 rounded-xl transition-all font-bold text-sm shadow-lg shadow-gold/20"
+          className="w-full flex items-center justify-center gap-2 bg-brand hover:bg-brand-hover text-on-brand px-4 py-3 rounded-xl transition-all font-bold text-sm shadow-lg shadow-brand/20"
         >
           <LogIn size={16} />
-          Iniciá sesión para participar
+          Inicia sesión para participar
         </Link>
-        <p className="text-[9px] text-center text-textMuted mt-3 uppercase tracking-[0.2em] opacity-50">
+        <p className="text-[9px] text-center text-foreground-muted mt-3 uppercase tracking-[0.2em] opacity-50">
           Encuentro exclusivo • Escuela de la Riqueza
         </p>
       </div>

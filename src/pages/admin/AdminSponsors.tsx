@@ -153,28 +153,28 @@ const AdminSponsors = () => {
       {/* Header */}
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-gold">
+          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-accent">
             <Megaphone size={14} /> Aliados publicitarios
           </div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
+          <h1 className="text-3xl font-extrabold tracking-tight text-foreground-strong sm:text-4xl">
             Gestor de Anuncios
           </h1>
-          <p className="mt-2 max-w-2xl text-sm text-textMuted">
-            Administrá los aliados comerciales y sus videos publicitarios. Los pesos definen la
+          <p className="mt-2 max-w-2xl text-sm text-foreground-muted">
+            Administra los aliados comerciales y sus videos publicitarios. Los pesos definen la
             frecuencia relativa con la que cada aliado aparece en lecciones gratuitas.
           </p>
         </div>
         <button
           onClick={handleCreate}
-          className="inline-flex items-center gap-2 rounded-xl bg-gold px-5 py-2.5 text-sm font-bold text-darker transition-all hover:bg-goldHover shadow-[0_0_20px_rgba(204,164,59,0.25)]"
+          className="inline-flex items-center gap-2 rounded-xl bg-brand px-5 py-2.5 text-sm font-bold text-on-brand transition-all hover:bg-brand-hover shadow-[0_0_20px_rgba(204,164,59,0.25)]"
         >
           <Plus size={16} /> Nuevo aliado
         </button>
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-24 text-textMuted">
-          <Loader2 className="animate-spin text-gold" size={28} />
+        <div className="flex items-center justify-center py-24 text-foreground-muted">
+          <Loader2 className="animate-spin text-accent" size={28} />
         </div>
       ) : sponsors.length === 0 ? (
         <EmptyState onCreate={handleCreate} />
@@ -192,33 +192,33 @@ const AdminSponsors = () => {
                   className={cn(
                     "w-full rounded-xl border p-3 text-left transition-all",
                     isSel
-                      ? "border-gold/40 bg-gold/10 shadow-[0_0_20px_rgba(204,164,59,0.1)]"
-                      : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]"
+                      ? "border-brand/40 bg-brand/10 shadow-[0_0_20px_rgba(204,164,59,0.1)]"
+                      : "border-line-subtle bg-ink/[0.03] hover:border-ink/20 hover:bg-ink/[0.06] light:bg-surface-panel light:hover:bg-surface-panel light:hover:shadow-sm"
                   )}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-darker">
+                    <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-line-subtle bg-surface-page">
                       {s.logo_url ? (
                         <img src={s.logo_url} alt={s.name} className="h-full w-full object-contain p-1" />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center text-white/30">
+                        <div className="flex h-full w-full items-center justify-center text-fg-30">
                           <Building2 size={18} />
                         </div>
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
-                        <span className="truncate text-sm font-bold text-white">{s.name}</span>
+                        <span className="truncate text-sm font-bold text-foreground-strong">{s.name}</span>
                         {!s.is_active && (
-                          <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-textMuted">
+                          <span className="rounded-full bg-ink/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-foreground-muted">
                             inactivo
                           </span>
                         )}
                       </div>
-                      <div className="mt-0.5 flex items-center gap-2 text-[11px] text-textMuted">
+                      <div className="mt-0.5 flex items-center gap-2 text-[11px] text-foreground-muted">
                         <span>{s.videos.length} video{s.videos.length === 1 ? "" : "s"}</span>
                         <span>·</span>
-                        <span className={cn("font-semibold", isSel ? "text-gold" : "text-white/60")}>
+                        <span className={cn("font-semibold", isSel ? "text-accent" : "text-fg-60")}>
                           {pct.toFixed(0)}%
                         </span>
                       </div>
@@ -247,8 +247,8 @@ const AdminSponsors = () => {
                 />
               </>
             ) : (
-              <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-12 text-center text-textMuted">
-                Seleccioná un aliado para editarlo.
+              <div className="rounded-2xl border border-line-subtle bg-ink/[0.02] p-12 text-center text-foreground-muted light:bg-surface-panel light:shadow-panel">
+                Selecciona un aliado para editarlo.
               </div>
             )}
           </section>
@@ -260,15 +260,15 @@ const AdminSponsors = () => {
 
 // ---------- Empty state ----------
 const EmptyState = ({ onCreate }: { onCreate: () => void }) => (
-  <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.02] p-12 text-center">
-    <Megaphone size={40} className="mx-auto mb-4 text-white/30" />
-    <h3 className="text-lg font-bold text-white">Aún no hay aliados</h3>
-    <p className="mt-2 text-sm text-textMuted">
-      Creá tu primer aliado publicitario para empezar a rotar anuncios en lecciones gratuitas.
+  <div className="rounded-2xl border border-dashed border-ink/15 bg-ink/[0.02] p-12 text-center light:bg-surface-panel/60">
+    <Megaphone size={40} className="mx-auto mb-4 text-fg-30" />
+    <h3 className="text-lg font-bold text-foreground-strong">Aún no hay aliados</h3>
+    <p className="mt-2 text-sm text-foreground-muted">
+      Crea tu primer aliado publicitario para empezar a rotar anuncios en lecciones gratuitas.
     </p>
     <button
       onClick={onCreate}
-      className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gold px-5 py-2.5 text-sm font-bold text-darker hover:bg-goldHover"
+      className="mt-6 inline-flex items-center gap-2 rounded-xl bg-brand px-5 py-2.5 text-sm font-bold text-on-brand hover:bg-brand-hover"
     >
       <Plus size={16} /> Crear primer aliado
     </button>
@@ -287,13 +287,13 @@ interface SponsorEditorProps {
 
 const SponsorEditor = ({ draft, setDraft, dirty, saving, onSave, onDelete }: SponsorEditorProps) => {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 space-y-5">
+    <div className="rounded-2xl border border-line-subtle bg-ink/[0.03] p-6 space-y-5 light:bg-surface-panel light:shadow-panel">
       <div className="flex items-center justify-between gap-4">
-        <h2 className="text-lg font-bold text-white">Datos del aliado</h2>
+        <h2 className="text-lg font-bold text-foreground-strong">Datos del aliado</h2>
         <div className="flex gap-2">
           <button
             onClick={onDelete}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-300 transition-colors hover:bg-red-500/20"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-300 light:text-danger transition-colors hover:bg-red-500/20"
           >
             <Trash2 size={13} /> Eliminar
           </button>
@@ -303,8 +303,8 @@ const SponsorEditor = ({ draft, setDraft, dirty, saving, onSave, onDelete }: Spo
             className={cn(
               "inline-flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-bold transition-all",
               dirty
-                ? "bg-gold text-darker hover:bg-goldHover"
-                : "cursor-not-allowed bg-white/5 text-white/30"
+                ? "bg-brand text-on-brand hover:bg-brand-hover"
+                : "cursor-not-allowed bg-ink/5 text-fg-30"
             )}
           >
             {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
@@ -315,7 +315,7 @@ const SponsorEditor = ({ draft, setDraft, dirty, saving, onSave, onDelete }: Spo
 
       {/* Logo */}
       <div>
-        <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-textMuted">
+        <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-foreground-muted">
           Logo del aliado
         </label>
         <LogoUploader
@@ -326,14 +326,14 @@ const SponsorEditor = ({ draft, setDraft, dirty, saving, onSave, onDelete }: Spo
 
       {/* Nombre */}
       <div>
-        <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-textMuted">
+        <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-foreground-muted">
           Nombre
         </label>
         <input
           type="text"
           value={draft.name}
           onChange={(e) => setDraft((d) => (d ? { ...d, name: e.target.value } : d))}
-          className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-2.5 text-sm text-white outline-none transition-colors focus:border-gold/50 focus:ring-2 focus:ring-gold/15"
+          className="w-full rounded-xl border border-line-subtle bg-black/40 px-4 py-2.5 text-sm text-foreground-strong outline-none transition-colors focus:border-brand/50 focus:ring-2 focus:ring-focus/15 light:bg-surface-input light:border-line-control/50 light:placeholder:text-foreground-placeholder"
           placeholder="Ej: Banco Galicia"
         />
       </div>
@@ -341,7 +341,7 @@ const SponsorEditor = ({ draft, setDraft, dirty, saving, onSave, onDelete }: Spo
       {/* Weight + active */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
-          <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-textMuted">
+          <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-foreground-muted">
             Peso (frecuencia relativa)
           </label>
           <input
@@ -350,14 +350,14 @@ const SponsorEditor = ({ draft, setDraft, dirty, saving, onSave, onDelete }: Spo
             step={1}
             value={draft.weight}
             onChange={(e) => setDraft((d) => (d ? { ...d, weight: Number(e.target.value) } : d))}
-            className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-2.5 text-sm text-white outline-none transition-colors focus:border-gold/50 focus:ring-2 focus:ring-gold/15"
+            className="w-full rounded-xl border border-line-subtle bg-black/40 px-4 py-2.5 text-sm text-foreground-strong outline-none transition-colors focus:border-brand/50 focus:ring-2 focus:ring-focus/15 light:bg-surface-input light:border-line-control/50 light:placeholder:text-foreground-placeholder"
           />
-          <p className="mt-1.5 text-[11px] text-textMuted">
+          <p className="mt-1.5 text-[11px] text-foreground-muted">
             A mayor peso, más impresiones. Los pesos se normalizan automáticamente.
           </p>
         </div>
         <div>
-          <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-textMuted">
+          <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-foreground-muted">
             Estado
           </label>
           <button
@@ -366,8 +366,8 @@ const SponsorEditor = ({ draft, setDraft, dirty, saving, onSave, onDelete }: Spo
             className={cn(
               "flex w-full items-center justify-between rounded-xl border px-4 py-2.5 text-sm font-semibold transition-colors",
               draft.is_active
-                ? "border-gold/40 bg-gold/10 text-gold"
-                : "border-white/10 bg-black/40 text-textMuted"
+                ? "border-brand/40 bg-brand/10 text-accent"
+                : "border-line-subtle bg-black/40 text-foreground-muted light:bg-surface-panel"
             )}
           >
             <span className="flex items-center gap-2">
@@ -381,14 +381,14 @@ const SponsorEditor = ({ draft, setDraft, dirty, saving, onSave, onDelete }: Spo
 
       {/* Notas */}
       <div>
-        <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-textMuted">
+        <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-foreground-muted">
           Notas internas
         </label>
         <textarea
           value={draft.notes}
           onChange={(e) => setDraft((d) => (d ? { ...d, notes: e.target.value } : d))}
           rows={3}
-          className="w-full resize-none rounded-xl border border-white/10 bg-black/40 px-4 py-2.5 text-sm text-white outline-none transition-colors focus:border-gold/50 focus:ring-2 focus:ring-gold/15"
+          className="w-full resize-none rounded-xl border border-line-subtle bg-black/40 px-4 py-2.5 text-sm text-foreground-strong outline-none transition-colors focus:border-brand/50 focus:ring-2 focus:ring-focus/15 light:bg-surface-input light:border-line-control/50 light:placeholder:text-foreground-placeholder"
           placeholder="Contacto, vigencia del contrato, observaciones…"
         />
       </div>
@@ -413,7 +413,7 @@ const VideosManager = ({
   const handlePick = () => {
     setError(null);
     if (!title.trim()) {
-      setError("Asigná un título antes de subir el video.");
+      setError("Asigna un título antes de subir el video.");
       return;
     }
     inputRef.current?.click();
@@ -483,15 +483,15 @@ const VideosManager = ({
   };
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
+    <div className="rounded-2xl border border-line-subtle bg-ink/[0.03] p-6 light:bg-surface-panel light:shadow-panel">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-bold text-white">Videos publicitarios</h2>
-        <span className="text-xs text-textMuted">{sponsor.videos.length} en biblioteca</span>
+        <h2 className="text-lg font-bold text-foreground-strong">Videos publicitarios</h2>
+        <span className="text-xs text-foreground-muted">{sponsor.videos.length} en biblioteca</span>
       </div>
 
       {/* Upload form */}
-      <div className="mb-5 rounded-xl border border-white/10 bg-black/30 p-4">
-        <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-textMuted">
+      <div className="mb-5 rounded-xl border border-line-subtle bg-black/30 p-4 light:bg-surface-panel">
+        <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-foreground-muted">
           Subir nuevo video
         </label>
         <div className="flex flex-col gap-2 sm:flex-row">
@@ -501,12 +501,12 @@ const VideosManager = ({
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Título del anuncio (interno)"
             disabled={uploading}
-            className="flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-gold/50"
+            className="flex-1 rounded-lg border border-line-subtle bg-black/40 px-3 py-2 text-sm text-foreground-strong outline-none focus:border-brand/50 light:bg-surface-input light:border-line-control/50 light:placeholder:text-foreground-placeholder"
           />
           <button
             onClick={handlePick}
             disabled={uploading}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-gold px-4 py-2 text-sm font-bold text-darker transition-all hover:bg-goldHover disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-bold text-on-brand transition-all hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
             {uploading ? `${progress}%` : "Subir video"}
@@ -520,24 +520,24 @@ const VideosManager = ({
           onChange={handleFile}
         />
         {uploading && (
-          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/5">
-            <div className="h-full bg-gold transition-all" style={{ width: `${progress}%` }} />
+          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-ink/5">
+            <div className="h-full bg-brand transition-all" style={{ width: `${progress}%` }} />
           </div>
         )}
         {error && (
-          <div className="mt-3 flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 p-2.5 text-red-300">
+          <div className="mt-3 flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 p-2.5 text-red-300 light:text-danger">
             <AlertCircle size={14} className="mt-0.5 shrink-0" />
             <p className="text-xs">{error}</p>
           </div>
         )}
-        <p className="mt-2 text-[11px] text-textMuted">
+        <p className="mt-2 text-[11px] text-foreground-muted">
           MP4/WebM, máx 500 MB. Se sube directo a Cloudflare Stream.
         </p>
       </div>
 
       {/* Videos list */}
       {sponsor.videos.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-white/10 p-8 text-center text-sm text-textMuted">
+        <div className="rounded-xl border border-dashed border-line-subtle p-8 text-center text-sm text-foreground-muted">
           Este aliado aún no tiene videos.
         </div>
       ) : (
@@ -548,31 +548,31 @@ const VideosManager = ({
               className={cn(
                 "flex items-center gap-3 rounded-xl border p-3 transition-colors",
                 v.is_active
-                  ? "border-white/10 bg-white/[0.04]"
-                  : "border-white/5 bg-white/[0.02] opacity-60"
+                  ? "border-line-subtle bg-ink/[0.04] light:bg-surface-panel"
+                  : "border-ink/5 bg-ink/[0.02] light:bg-surface-panel opacity-60"
               )}
             >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-darker">
-                <VideoIcon size={18} className="text-gold" />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-page">
+                <VideoIcon size={18} className="text-accent" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-white">{v.title}</p>
-                <p className="font-mono text-[10px] text-textMuted truncate">{v.stream_uid}</p>
+                <p className="truncate text-sm font-semibold text-foreground-strong">{v.title}</p>
+                <p className="font-mono text-[10px] text-foreground-muted truncate">{v.stream_uid}</p>
               </div>
               <div className="hidden text-right sm:block">
-                <p className="text-xs font-bold text-gold">{v.impression_count.toLocaleString()}</p>
-                <p className="text-[10px] uppercase tracking-wider text-textMuted">impresiones</p>
+                <p className="text-xs font-bold text-accent">{v.impression_count.toLocaleString()}</p>
+                <p className="text-[10px] uppercase tracking-wider text-foreground-muted">impresiones</p>
               </div>
               <button
                 onClick={() => toggleVideo(v)}
-                className="rounded-lg border border-white/10 bg-white/5 p-2 text-textMuted hover:text-gold hover:border-gold/30"
+                className="rounded-lg border border-line-subtle bg-ink/5 p-2 text-foreground-muted hover:text-accent hover:border-brand/30"
                 title={v.is_active ? "Desactivar" : "Activar"}
               >
                 {v.is_active ? <Eye size={14} /> : <EyeOff size={14} />}
               </button>
               <button
                 onClick={() => removeVideo(v)}
-                className="rounded-lg border border-red-500/20 bg-red-500/10 p-2 text-red-300 hover:bg-red-500/20"
+                className="rounded-lg border border-red-500/20 bg-red-500/10 p-2 text-red-300 light:text-danger hover:bg-red-500/20"
                 title="Eliminar"
               >
                 <Trash2 size={14} />

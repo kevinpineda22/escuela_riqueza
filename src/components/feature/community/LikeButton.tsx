@@ -63,8 +63,8 @@ export function LikeButton({ targetType, targetId, liked, count, size = "md", on
         "relative inline-flex items-center gap-1.5 rounded-full transition-all duration-300 disabled:opacity-50 overflow-visible",
         size === "sm" ? "px-2.5 py-1 text-xs" : "px-3 py-1.5 text-sm",
         optimisticLiked
-          ? "bg-gradient-to-r from-gold/20 to-gold/10 text-gold ring-1 ring-gold/40 shadow-[0_0_12px_rgba(204,164,59,0.25)]"
-          : "bg-white/[0.04] text-textMuted hover:bg-white/10 hover:text-white ring-1 ring-white/5 hover:ring-white/10"
+          ? "bg-gradient-to-r from-brand/20 to-brand/10 text-accent ring-1 ring-focus/40 shadow-[0_0_12px_rgba(204,164,59,0.25)]"
+          : "bg-ink/[0.04] light:bg-surface-subtle text-foreground-muted hover:bg-ink/10 hover:text-foreground-strong ring-1 ring-ink/5 hover:ring-ink/10"
       )}
       aria-pressed={optimisticLiked}
     >
@@ -75,7 +75,7 @@ export function LikeButton({ targetType, targetId, liked, count, size = "md", on
         transition={{ type: "spring", stiffness: 500, damping: 14 }}
         className="relative inline-flex"
       >
-        <Heart size={iconSize} className={optimisticLiked ? "fill-gold" : ""} />
+        <Heart size={iconSize} className={optimisticLiked ? "fill-accent" : ""} />
         <AnimatePresence>
           {optimisticLiked && (
             <motion.span
@@ -84,7 +84,7 @@ export function LikeButton({ targetType, targetId, liked, count, size = "md", on
               animate={{ scale: 2.4, opacity: 0 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.6 }}
-              className="absolute inset-0 rounded-full bg-gold/40 blur-md pointer-events-none"
+              className="absolute inset-0 rounded-full bg-brand/40 blur-md pointer-events-none"
             />
           )}
         </AnimatePresence>

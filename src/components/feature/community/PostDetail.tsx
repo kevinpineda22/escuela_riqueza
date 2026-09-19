@@ -192,7 +192,7 @@ export function PostDetail({ postId, currentUserId, isAdmin, onBack, onDeleted }
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <Loader2 className="animate-spin text-gold" size={32} />
+        <Loader2 className="animate-spin text-accent" size={32} />
       </div>
     );
   }
@@ -200,8 +200,8 @@ export function PostDetail({ postId, currentUserId, isAdmin, onBack, onDeleted }
   if (!post) {
     return (
       <div className="py-20 text-center">
-        <p className="text-textMuted">No se encontró la publicación.</p>
-        <button onClick={onBack} className="mt-4 text-gold hover:underline">
+        <p className="text-foreground-muted">No se encontró la publicación.</p>
+        <button onClick={onBack} className="mt-4 text-accent hover:underline">
           Volver al foro
         </button>
       </div>
@@ -223,7 +223,7 @@ export function PostDetail({ postId, currentUserId, isAdmin, onBack, onDeleted }
       <button
         type="button"
         onClick={onBack}
-        className="group inline-flex items-center gap-2 text-sm text-textMuted transition-colors hover:text-gold"
+        className="group inline-flex items-center gap-2 text-sm text-foreground-muted transition-colors hover:text-accent"
       >
         <ArrowLeft size={16} className="transition-transform group-hover:-translate-x-1" />
         Volver al foro
@@ -233,16 +233,16 @@ export function PostDetail({ postId, currentUserId, isAdmin, onBack, onDeleted }
       <motion.article
         layout
         className={cn(
-          "relative overflow-hidden rounded-3xl border bg-darker/60 transition-all",
+          "relative overflow-hidden rounded-3xl border bg-surface-page/60 light:bg-surface-panel light:shadow-panel transition-all",
           post.is_pinned
-            ? "border-gold/40 shadow-[0_12px_48px_-20px_rgba(204,164,59,0.55)]"
-            : "border-white/10"
+            ? "border-brand/40 shadow-[0_12px_48px_-20px_rgba(204,164,59,0.55)]"
+            : "border-line-subtle"
         )}
       >
         {post.is_pinned && (
-          <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-gold to-transparent" />
+          <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-brand to-transparent" />
         )}
-        <div className="pointer-events-none absolute -top-32 -right-20 h-64 w-64 rounded-full bg-gold/10 blur-3xl" />
+        <div className="pointer-events-none absolute -top-32 -right-20 h-64 w-64 rounded-full bg-brand/10 blur-3xl" />
 
         <div className="relative p-6 sm:p-8">
           <header className="mb-5 flex items-start gap-4">
@@ -251,8 +251,8 @@ export function PostDetail({ postId, currentUserId, isAdmin, onBack, onDeleted }
                 className={cn(
                   "relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-full text-lg font-bold ring-2 transition-all",
                   isPostAuthorAdmin
-                    ? "bg-gradient-to-br from-gold/30 to-gold/10 text-gold ring-gold/50"
-                    : "bg-gradient-to-br from-white/15 to-white/5 text-white/90 ring-white/15"
+                    ? "bg-gradient-to-br from-brand/30 to-brand/10 text-accent ring-focus/50"
+                    : "bg-gradient-to-br from-white/15 to-white/5 text-fg-90 ring-ink/15 light:from-surface-subtle light:to-surface-panel"
                 )}
               >
                 {post.author?.avatar_url ? (
@@ -262,21 +262,21 @@ export function PostDetail({ postId, currentUserId, isAdmin, onBack, onDeleted }
                 )}
               </div>
               {isPostAuthorAdmin && (
-                <div className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-gold ring-2 ring-darker">
-                  <Shield size={10} className="text-darker" strokeWidth={3} />
+                <div className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-brand ring-2 ring-darker">
+                  <Shield size={10} className="text-on-brand" strokeWidth={3} />
                 </div>
               )}
             </div>
 
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
-                <span className="font-semibold text-white">{authorName(post.author)}</span>
+                <span className="font-semibold text-foreground-strong">{authorName(post.author)}</span>
                 {isPostAuthorAdmin && (
-                  <span className="rounded-full bg-gold/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gold ring-1 ring-gold/30">
+                  <span className="rounded-full bg-brand/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-accent ring-1 ring-focus/30">
                     Admin
                   </span>
                 )}
-                <span className="text-xs text-textMuted">· {formatRelative(post.created_at)}</span>
+                <span className="text-xs text-foreground-muted">· {formatRelative(post.created_at)}</span>
               </div>
               <div className="mt-1.5 flex flex-wrap items-center gap-2">
                 <span
@@ -289,7 +289,7 @@ export function PostDetail({ postId, currentUserId, isAdmin, onBack, onDeleted }
                   {cat.label}
                 </span>
                 {post.is_pinned && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-[10px] font-bold uppercase text-gold ring-1 ring-gold/30">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-brand/15 px-2 py-0.5 text-[10px] font-bold uppercase text-accent ring-1 ring-focus/30">
                     <Pin size={10} /> Fijado
                   </span>
                 )}
@@ -305,8 +305,8 @@ export function PostDetail({ postId, currentUserId, isAdmin, onBack, onDeleted }
                     className={cn(
                       "inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs transition-colors",
                       post.is_pinned
-                        ? "bg-gold/15 text-gold ring-1 ring-gold/30 hover:bg-gold/20"
-                        : "text-textMuted hover:bg-white/5 hover:text-gold"
+                        ? "bg-brand/15 text-accent ring-1 ring-focus/30 hover:bg-brand/20"
+                        : "text-foreground-muted hover:bg-ink/5 hover:text-accent"
                     )}
                   >
                     {post.is_pinned ? <PinOff size={14} /> : <Pin size={14} />}
@@ -317,7 +317,7 @@ export function PostDetail({ postId, currentUserId, isAdmin, onBack, onDeleted }
                   <button
                     type="button"
                     onClick={handleDeletePost}
-                    className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300"
+                    className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs text-danger transition-colors hover:bg-red-500/10 hover:text-red-300 light:hover:text-danger"
                   >
                     <Trash2 size={14} />
                     <span className="hidden sm:inline">Eliminar</span>
@@ -327,15 +327,15 @@ export function PostDetail({ postId, currentUserId, isAdmin, onBack, onDeleted }
             )}
           </header>
 
-          <h2 className="mb-4 text-2xl font-extrabold leading-tight text-white sm:text-3xl">
+          <h2 className="mb-4 text-2xl font-extrabold leading-tight text-foreground-strong sm:text-3xl">
             {post.title}
           </h2>
-          <div className="whitespace-pre-wrap text-[15px] leading-relaxed text-textMain sm:text-base">
+          <div className="whitespace-pre-wrap text-[15px] leading-relaxed text-foreground sm:text-base">
             {post.body}
           </div>
 
           {post.image_url && (
-            <div className="mt-5 overflow-hidden rounded-2xl border border-white/10 bg-black">
+            <div className="mt-5 overflow-hidden rounded-2xl border border-line-subtle bg-black">
               <img
                 src={post.image_url}
                 alt="Imagen adjunta"
@@ -344,14 +344,14 @@ export function PostDetail({ postId, currentUserId, isAdmin, onBack, onDeleted }
             </div>
           )}
 
-          <div className="mt-5 flex items-center gap-1 border-t border-white/5 pt-4">
+          <div className="mt-5 flex items-center gap-1 border-t border-ink/5 pt-4">
             <LikeButton
               targetType="post"
               targetId={post.id}
               liked={post.liked_by_me ?? false}
               count={post.like_count}
             />
-            <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-textMuted">
+            <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-foreground-muted">
               <MessageSquare size={15} />
               <span className="font-semibold tabular-nums">{comments.length}</span>
               <span className="hidden sm:inline">
@@ -364,18 +364,18 @@ export function PostDetail({ postId, currentUserId, isAdmin, onBack, onDeleted }
 
       {/* Comments */}
       <section>
-        <h3 className="mb-4 flex items-center gap-2 text-lg font-bold text-white">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gold/15 text-gold ring-1 ring-gold/30">
+        <h3 className="mb-4 flex items-center gap-2 text-lg font-bold text-foreground-strong">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand/15 text-accent ring-1 ring-focus/30">
             <MessageSquare size={14} />
           </span>
           Comentarios
-          <span className="text-sm font-semibold text-textMuted">({comments.length})</span>
+          <span className="text-sm font-semibold text-foreground-muted">({comments.length})</span>
         </h3>
 
         {/* Composer */}
         <form
           onSubmit={handleSubmit}
-          className="mb-6 overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.04] to-white/[0.01] transition-colors focus-within:border-gold/40"
+          className="mb-6 overflow-hidden rounded-2xl border border-line-subtle bg-gradient-to-br from-white/[0.04] to-white/[0.01] light:bg-none light:bg-surface-panel transition-colors focus-within:border-brand/40"
         >
           <AnimatePresence>
             {replyTo && (
@@ -385,15 +385,15 @@ export function PostDetail({ postId, currentUserId, isAdmin, onBack, onDeleted }
                 exit={{ opacity: 0, height: 0 }}
                 className="overflow-hidden"
               >
-                <div className="flex items-center justify-between gap-3 border-b border-gold/20 bg-gold/[0.08] px-4 py-2.5 text-xs">
-                  <span className="inline-flex items-center gap-2 text-textMuted">
-                    <CornerDownRight size={13} className="text-gold" />
-                    Respondiendo a <strong className="text-gold">{authorName(replyTo.author)}</strong>
+                <div className="flex items-center justify-between gap-3 border-b border-brand/20 bg-gold/[0.08] px-4 py-2.5 text-xs">
+                  <span className="inline-flex items-center gap-2 text-foreground-muted">
+                    <CornerDownRight size={13} className="text-accent" />
+                    Respondiendo a <strong className="text-accent">{authorName(replyTo.author)}</strong>
                   </span>
                   <button
                     type="button"
                     onClick={() => setReplyTo(null)}
-                    className="text-textMuted transition-colors hover:text-white"
+                    className="text-foreground-muted transition-colors hover:text-foreground-strong"
                   >
                     Cancelar
                   </button>
@@ -408,15 +408,15 @@ export function PostDetail({ postId, currentUserId, isAdmin, onBack, onDeleted }
             maxLength={5000}
             rows={3}
             placeholder={replyTo ? "Escribe tu respuesta…" : "Comparte tu opinión con la comunidad…"}
-            className="w-full resize-y bg-transparent px-4 py-3 text-white placeholder:text-textMuted focus:outline-none"
+            className="w-full resize-y bg-transparent px-4 py-3 text-foreground-strong placeholder:text-foreground-muted focus:outline-none"
           />
-          <div className="flex items-center justify-between border-t border-white/5 bg-black/20 px-4 py-2.5">
-            <span className="text-[10px] text-textMuted/70 tabular-nums">{body.length} / 5.000</span>
+          <div className="flex items-center justify-between border-t border-ink/5 bg-black/20 light:bg-surface-subtle px-4 py-2.5">
+            <span className="text-[10px] text-foreground-muted/70 tabular-nums">{body.length} / 5.000</span>
             <motion.button
               type="submit"
               whileTap={{ scale: 0.95 }}
               disabled={submitting || body.trim().length === 0}
-              className="inline-flex items-center gap-2 rounded-xl bg-gold px-4 py-2 text-sm font-bold text-darker transition-colors hover:bg-goldHover disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2 text-sm font-bold text-on-brand transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
               {submitting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
               {replyTo ? "Responder" : "Comentar"}
@@ -426,9 +426,9 @@ export function PostDetail({ postId, currentUserId, isAdmin, onBack, onDeleted }
 
         {/* Threaded list */}
         {tree.roots.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-white/10 py-12 text-center">
-            <MessageSquare size={28} className="mx-auto mb-3 text-textMuted/40" />
-            <p className="text-sm text-textMuted">Aún no hay comentarios. Sé el primero.</p>
+          <div className="rounded-2xl border border-dashed border-line-subtle py-12 text-center">
+            <MessageSquare size={28} className="mx-auto mb-3 text-foreground-muted/40" />
+            <p className="text-sm text-foreground-muted">Aún no hay comentarios. Sé el primero.</p>
           </div>
         ) : (
           <motion.div layout className="space-y-3">
@@ -469,7 +469,7 @@ function CommentNode({ comment, replies, currentUserId, isAdmin, onReply, onDele
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -4 }}
       transition={{ type: "spring", stiffness: 280, damping: 28 }}
-      className="rounded-2xl border border-white/10 bg-white/[0.025] p-4 transition-colors hover:border-white/20"
+      className="rounded-2xl border border-line-subtle bg-ink/[0.025] light:bg-surface-panel p-4 transition-colors hover:border-ink/20"
     >
       <CommentBody
         comment={comment}
@@ -480,7 +480,7 @@ function CommentNode({ comment, replies, currentUserId, isAdmin, onReply, onDele
       />
       {replies.length > 0 && (
         <div className="relative mt-4 space-y-3 pl-5 sm:pl-7">
-          <div className="absolute left-1.5 top-0 bottom-2 w-px bg-gradient-to-b from-gold/30 via-white/10 to-transparent" />
+          <div className="absolute left-1.5 top-0 bottom-2 w-px bg-gradient-to-b from-brand/30 via-white/10 to-transparent" />
           <AnimatePresence initial={false}>
             {replies.map((r) => (
               <motion.div
@@ -491,7 +491,7 @@ function CommentNode({ comment, replies, currentUserId, isAdmin, onReply, onDele
                 exit={{ opacity: 0, x: -8 }}
                 className="relative"
               >
-                <span className="absolute -left-3.5 top-4 h-px w-3 bg-white/15" />
+                <span className="absolute -left-3.5 top-4 h-px w-3 bg-ink/15" />
                 <CommentBody
                   comment={r}
                   currentUserId={currentUserId}
@@ -530,8 +530,8 @@ function CommentBody({ comment, currentUserId, isAdmin, onReply, onDelete, isRep
             "flex items-center justify-center overflow-hidden rounded-full text-xs font-bold ring-1 transition-all",
             isReply ? "h-8 w-8" : "h-10 w-10",
             authorIsAdmin
-              ? "bg-gradient-to-br from-gold/25 to-gold/5 text-gold ring-gold/40"
-              : "bg-gradient-to-br from-white/15 to-white/5 text-white/90 ring-white/15"
+              ? "bg-gradient-to-br from-brand/25 to-brand/5 text-accent ring-focus/40"
+              : "bg-gradient-to-br from-white/15 to-white/5 text-fg-90 ring-ink/15"
           )}
         >
           {comment.author?.avatar_url ? (
@@ -541,22 +541,22 @@ function CommentBody({ comment, currentUserId, isAdmin, onReply, onDelete, isRep
           )}
         </div>
         {authorIsAdmin && (
-          <div className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-gold ring-2 ring-darker">
-            <Shield size={8} className="text-darker" strokeWidth={3} />
+          <div className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-brand ring-2 ring-darker">
+            <Shield size={8} className="text-on-brand" strokeWidth={3} />
           </div>
         )}
       </div>
       <div className="min-w-0 flex-1">
         <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
-          <span className="font-semibold text-white">{authorName(comment.author)}</span>
+          <span className="font-semibold text-foreground-strong">{authorName(comment.author)}</span>
           {authorIsAdmin && (
-            <span className="rounded-full bg-gold/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-gold ring-1 ring-gold/30">
+            <span className="rounded-full bg-brand/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-accent ring-1 ring-focus/30">
               Admin
             </span>
           )}
-          <span className="text-textMuted">· {formatRelative(comment.created_at)}</span>
+          <span className="text-foreground-muted">· {formatRelative(comment.created_at)}</span>
         </div>
-        <p className="whitespace-pre-wrap text-[14px] leading-relaxed text-textMain">{comment.body}</p>
+        <p className="whitespace-pre-wrap text-[14px] leading-relaxed text-foreground">{comment.body}</p>
         <div className="mt-2 flex items-center gap-1">
           <LikeButton
             targetType="comment"
@@ -569,7 +569,7 @@ function CommentBody({ comment, currentUserId, isAdmin, onReply, onDelete, isRep
             <button
               type="button"
               onClick={() => onReply(comment)}
-              className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium text-textMuted transition-colors hover:bg-white/10 hover:text-white"
+              className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium text-foreground-muted transition-colors hover:bg-ink/10 hover:text-foreground-strong"
             >
               <CornerDownRight size={12} /> Responder
             </button>
@@ -578,7 +578,7 @@ function CommentBody({ comment, currentUserId, isAdmin, onReply, onDelete, isRep
             <button
               type="button"
               onClick={() => onDelete(comment.id)}
-              className="ml-auto inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs text-red-400 opacity-0 transition-all hover:bg-red-500/10 hover:text-red-300 group-hover/comment:opacity-100"
+              className="ml-auto inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs text-danger opacity-0 transition-all hover:bg-red-500/10 hover:text-red-300 light:hover:text-danger group-hover/comment:opacity-100"
               aria-label="Eliminar comentario"
             >
               <Trash2 size={12} />

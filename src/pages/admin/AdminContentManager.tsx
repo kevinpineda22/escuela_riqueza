@@ -238,10 +238,10 @@ const AdminContentManager = () => {
   if (loading) {
     return (
       <div className="space-y-4 pb-12">
-        <div className="h-20 bg-white/[0.02] border border-white/5 rounded-2xl animate-pulse" />
+        <div className="h-20 bg-ink/[0.02] border border-ink/5 rounded-2xl animate-pulse" />
         <div className="grid lg:grid-cols-[320px_1fr] gap-4">
-          <div className="h-96 bg-white/[0.02] border border-white/5 rounded-2xl animate-pulse" />
-          <div className="h-96 bg-white/[0.02] border border-white/5 rounded-2xl animate-pulse" />
+          <div className="h-96 bg-ink/[0.02] border border-ink/5 rounded-2xl animate-pulse" />
+          <div className="h-96 bg-ink/[0.02] border border-ink/5 rounded-2xl animate-pulse" />
         </div>
       </div>
     );
@@ -251,12 +251,12 @@ const AdminContentManager = () => {
     <div className="pb-12 space-y-5">
       <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-1">
         <div>
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gold/10 border border-gold/20 text-[10px] font-bold uppercase tracking-wider text-gold mb-2">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-brand/10 border border-brand/20 text-[10px] font-bold uppercase tracking-wider text-accent mb-2">
             <BookOpen size={11} /> Gestor de Contenido
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Catálogo</h1>
-          <p className="text-sm text-textMuted mt-1">
-            Administrá los módulos, lecciones y acceso por plan.
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground-strong tracking-tight">Catálogo</h1>
+          <p className="text-sm text-foreground-muted mt-1">
+            Administra los módulos, lecciones y acceso por plan.
           </p>
         </div>
 
@@ -338,27 +338,27 @@ interface StatPillProps {
 }
 
 const StatPill = ({ icon, label, value, accent = false }: StatPillProps) => (
-  <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${accent ? "bg-gold/5 border-gold/20" : "bg-white/[0.02] border-white/5"}`}>
-    <span className={accent ? "text-gold" : "text-white/40"}>{icon}</span>
+  <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${accent ? "bg-brand/5 border-brand/20" : "bg-ink/[0.02] border-ink/5"}`}>
+    <span className={accent ? "text-accent" : "text-fg-40"}>{icon}</span>
     <div className="text-xs leading-tight">
-      <div className="text-textMuted">{label}</div>
-      <div className="text-white font-bold tabular-nums">{value}</div>
+      <div className="text-foreground-muted">{label}</div>
+      <div className="text-foreground-strong font-bold tabular-nums">{value}</div>
     </div>
   </div>
 );
 
 const EmptyDetail = ({ onCreate }: { onCreate: () => void }) => (
-  <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-16 bg-darker/40 border border-white/5 rounded-2xl">
-    <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-4">
-      <LayoutGrid size={26} className="text-white/30" />
+  <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-16 bg-surface-page/40 border border-ink/5 rounded-2xl">
+    <div className="w-14 h-14 rounded-2xl bg-ink/5 border border-line-subtle flex items-center justify-center mb-4">
+      <LayoutGrid size={26} className="text-fg-30" />
     </div>
-    <h3 className="text-lg font-bold text-white mb-1.5">Seleccioná un módulo</h3>
-    <p className="text-sm text-textMuted max-w-sm mb-5">
-      Elegí un módulo de la lista o creá uno nuevo para empezar a gestionar el contenido.
+    <h3 className="text-lg font-bold text-foreground-strong mb-1.5">Selecciona un módulo</h3>
+    <p className="text-sm text-foreground-muted max-w-sm mb-5">
+      Elige un módulo de la lista o crea uno nuevo para empezar a gestionar el contenido.
     </p>
     <button
       onClick={onCreate}
-      className="inline-flex items-center gap-1.5 px-4 py-2 bg-gold hover:bg-goldHover text-black text-sm font-semibold rounded-lg transition-colors"
+      className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand hover:bg-brand-hover text-black text-sm font-semibold rounded-lg transition-colors"
     >
       Crear nuevo módulo
     </button>

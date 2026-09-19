@@ -92,18 +92,18 @@ export function PostImageUploader({ value, onChange, disabled }: PostImageUpload
   return (
     <div className="space-y-3">
       {displayUrl ? (
-        <div className="relative rounded-xl border border-white/10 bg-darker overflow-hidden group">
+        <div className="relative rounded-xl border border-line-subtle bg-surface-page overflow-hidden group">
           <img src={displayUrl} alt="Adjunto" className={cn("w-full h-auto max-h-[300px] object-cover transition-opacity", uploading && "opacity-50")} />
           {uploading ? (
             <div className="absolute inset-0 flex items-center justify-center">
-               <Loader2 className="text-gold animate-spin" size={32} />
+               <Loader2 className="text-accent animate-spin" size={32} />
             </div>
           ) : (
             <button
               type="button"
               onClick={handleRemove}
               disabled={disabled}
-              className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 text-white hover:bg-red-500/80 hover:text-white transition-colors backdrop-blur-md opacity-0 group-hover:opacity-100"
+              className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 text-media-foreground hover:bg-red-500/80 hover:text-media-foreground transition-colors backdrop-blur-md opacity-0 group-hover:opacity-100"
             >
               <X size={16} />
             </button>
@@ -114,7 +114,7 @@ export function PostImageUploader({ value, onChange, disabled }: PostImageUpload
           type="button"
           onClick={handlePick}
           disabled={disabled || uploading}
-          className="w-full py-4 border-2 border-dashed border-white/10 hover:border-gold/30 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] text-textMuted hover:text-gold flex flex-col items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full py-4 border-2 border-dashed border-line-subtle hover:border-brand/30 rounded-xl bg-ink/[0.02] hover:bg-ink/[0.04] light:bg-surface-panel light:hover:bg-surface-subtle text-foreground-muted hover:text-accent flex flex-col items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <ImagePlus size={24} />
           <span className="text-sm font-medium">Adjuntar imagen (Opcional)</span>
@@ -123,7 +123,7 @@ export function PostImageUploader({ value, onChange, disabled }: PostImageUpload
       )}
 
       {error && (
-        <div className="flex items-start gap-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300">
+        <div className="flex items-start gap-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300 light:text-danger">
           <AlertCircle size={14} className="shrink-0 mt-0.5" />
           <p className="text-xs leading-tight">{error}</p>
         </div>

@@ -2,7 +2,7 @@ import { renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { useThemedLogo } from "@/hooks/useThemedLogo";
 import { usePreferencesStore } from "@/stores/preferences.store";
-import { BRAND_LOGO, BRAND_LOGO_LIGHT } from "@/lib/brand";
+import { BRAND_LOGO, BRAND_LOGO_LIGHT, OFFICIAL_LOGO_URLS } from "@/lib/brand";
 
 const CUSTOM_LOGO = "https://imagedelivery.net/otro-hash/otro-id/public";
 
@@ -16,6 +16,14 @@ describe("useThemedLogo", () => {
     const { result } = renderHook(() => useThemedLogo(BRAND_LOGO));
 
     expect(result.current).toEqual({ src: BRAND_LOGO_LIGHT, needsPlate: false });
+  });
+
+  it("toda copia conocida del logo oficial (p. ej. la subida desde Ajustes) usa la variante clara", () => {
+    usePreferencesStore.setState({ themePreference: "light" });
+    for (const official of OFFICIAL_LOGO_URLS) {
+      const { result } = renderHook(() => useThemedLogo(official));
+      expect(result.current).toEqual({ src: BRAND_LOGO_LIGHT, needsPlate: false });
+    }
   });
 
   it("en oscuro, el logo oficial queda igual", () => {

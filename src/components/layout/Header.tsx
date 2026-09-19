@@ -219,7 +219,7 @@ const Header = () => {
                 </Link>
 
                 {user ? (
-                  <div className="flex items-center gap-3 px-3 py-3 bg-ink/[0.03] rounded-2xl border border-ink/5">
+                  <div className="flex items-center gap-3 px-3 py-3 bg-ink/[0.03] rounded-2xl border border-ink/5 light:bg-surface-panel light:shadow-panel">
                     <div className="w-11 h-11 rounded-full bg-brand/10 border border-brand/30 flex items-center justify-center overflow-hidden shrink-0">
                       {user.avatarUrl ? (
                         <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
@@ -334,7 +334,7 @@ const Header = () => {
                     <Link
                       to="/login"
                       onClick={closeMenu}
-                      className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold text-fg-80 bg-ink/[0.04] hover:bg-ink/[0.08] border border-line-subtle transition-all"
+                      className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold text-fg-80 bg-ink/[0.04] hover:bg-ink/[0.08] border border-line-subtle transition-all light:bg-surface-panel light:shadow-sm light:hover:bg-surface-subtle"
                     >
                       <LogIn size={14} /> Ingresar
                     </Link>

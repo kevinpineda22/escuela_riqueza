@@ -33,8 +33,8 @@ const SecondaryButton = ({
     aria-label={ariaLabel}
     className={cn(
       "w-10 h-10 rounded-full flex items-center justify-center shrink-0",
-      "text-white/70 hover:text-white hover:bg-white/8 active:bg-white/12",
-      "transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/60",
+      "text-fg-70 hover:text-foreground-strong hover:bg-ink/8 active:bg-ink/12",
+      "transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60",
       className,
     )}
   >
@@ -153,19 +153,20 @@ const GlobalPodcastPlayer = () => {
       animate={{ y: 0 }}
       transition={{ type: "spring", stiffness: 260, damping: 30 }}
       className={cn(
-        "fixed bottom-0 left-0 w-full z-[100] bg-darker/95 backdrop-blur-xl border-t shadow-[0_-10px_30px_rgba(0,0,0,0.5)]",
+        "fixed bottom-0 left-0 w-full z-[100] bg-surface-page/95 backdrop-blur-xl border-t shadow-[0_-10px_30px_rgba(0,0,0,0.5)]",
+        "light:bg-surface-panel/95 light:shadow-[0_-12px_30px_-12px_rgba(60,45,15,0.25)]",
         // Respetar el home indicator del iPhone: sin esto los controles quedan
         // debajo de la barra del sistema.
         "pb-[env(safe-area-inset-bottom)]",
-        hasEnded ? "border-green-500/30" : "border-white/10"
+        hasEnded ? "border-green-500/30" : "border-line-subtle"
       )}
     >
       {/* Progress bar — top edge (mobile primary scrubber) */}
-      <div className="absolute top-0 left-0 w-full h-1 bg-white/5 cursor-pointer">
+      <div className="absolute top-0 left-0 w-full h-1 bg-ink/5 light:bg-ink/10 cursor-pointer">
         <div
           className={cn(
             "h-full transition-all duration-100 relative",
-            hasEnded ? "bg-green-500" : "bg-gold"
+            hasEnded ? "bg-green-500" : "bg-brand"
           )}
           style={{ width: `${hasEnded ? 100 : progress}%` }}
         />
@@ -183,13 +184,13 @@ const GlobalPodcastPlayer = () => {
         <div className="flex items-center gap-3 min-w-0">
           <div className={cn(
             "w-11 h-11 md:w-14 md:h-14 rounded-xl border flex items-center justify-center shrink-0 shadow-lg relative overflow-hidden transition-colors",
-            hasEnded ? "bg-green-500/10 border-green-500/40" : "bg-gold/10 border-gold/30"
+            hasEnded ? "bg-green-500/10 border-green-500/40" : "bg-brand/10 border-brand/30"
           )}>
             {hasEnded ? (
-              <Check className="text-green-500 w-5 h-5 md:w-7 md:h-7" />
+              <Check className="text-green-500 light:text-success w-5 h-5 md:w-7 md:h-7" />
             ) : (
               <>
-                <Headphones className="text-gold w-5 h-5 md:w-7 md:h-7" />
+                <Headphones className="text-accent w-5 h-5 md:w-7 md:h-7" />
                 {isPlaying && (
                   // Ecualizador real: barras que cambian de alto. Antes usaban `pulse`,
                   // que solo hace fade y no se leía como audio sonando.
@@ -197,7 +198,7 @@ const GlobalPodcastPlayer = () => {
                     {[0, 0.15, 0.3].map((delay, i) => (
                       <motion.span
                         key={i}
-                        className="w-0.5 bg-gold rounded-full"
+                        className="w-0.5 bg-brand rounded-full"
                         animate={{ height: ["30%", "100%", "45%", "80%", "30%"] }}
                         transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut", delay }}
                         style={{ height: "30%" }}
@@ -209,15 +210,15 @@ const GlobalPodcastPlayer = () => {
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <h4 className="text-white font-bold text-sm md:text-base truncate leading-tight">
+            <h4 className="text-foreground-strong font-bold text-sm md:text-base truncate leading-tight">
               {track.title}
             </h4>
             {hasEnded ? (
-              <p className="text-green-400 text-[11px] md:text-xs truncate font-semibold mt-0.5 flex items-center gap-1">
+              <p className="text-green-400 light:text-success text-[11px] md:text-xs truncate font-semibold mt-0.5 flex items-center gap-1">
                 <Check size={12} className="shrink-0" /> Lección completada
               </p>
             ) : (
-              <p className="text-textMuted text-[11px] md:text-xs truncate uppercase tracking-wider mt-0.5">
+              <p className="text-foreground-muted text-[11px] md:text-xs truncate uppercase tracking-wider mt-0.5">
                 {track.moduleTitle}
               </p>
             )}
@@ -229,7 +230,7 @@ const GlobalPodcastPlayer = () => {
               onClick={handleClose}
               title="Cerrar reproductor"
               ariaLabel="Cerrar reproductor"
-              className="hover:text-red-400 hover:bg-red-400/10"
+              className="hover:text-danger hover:bg-red-400/10"
             >
               <X size={18} />
             </SecondaryButton>
@@ -254,10 +255,10 @@ const GlobalPodcastPlayer = () => {
               className={cn(
                 "w-12 h-12 rounded-full flex items-center justify-center shrink-0",
                 "hover:scale-105 active:scale-95",
-                "transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/60",
+                "transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60",
                 hasEnded
-                  ? "bg-green-500 text-darker shadow-[0_0_18px_rgba(34,197,94,0.35)]"
-                  : "bg-white text-darker shadow-[0_0_18px_rgba(255,255,255,0.18)]"
+                  ? "bg-green-500 text-on-brand shadow-[0_0_18px_rgba(34,197,94,0.35)]"
+                  : "bg-white text-on-brand shadow-[0_0_18px_rgba(255,255,255,0.18)] light:bg-brand light:shadow-[0_6px_16px_-6px_rgba(204,164,59,0.6)]"
               )}
             >
               {hasEnded
@@ -278,11 +279,11 @@ const GlobalPodcastPlayer = () => {
           </div>
 
           {/* Desktop scrubber + time */}
-          <div className="hidden md:flex items-center gap-3 w-full mt-2 text-[11px] font-medium text-white/50 tabular-nums">
+          <div className="hidden md:flex items-center gap-3 w-full mt-2 text-[11px] font-medium text-fg-50 tabular-nums">
             <span className="w-10 text-right">{formatTime(currentTime)}</span>
-            <div className="flex-1 h-1 rounded-full bg-white/10 relative group">
+            <div className="flex-1 h-1 rounded-full bg-ink/10 relative group">
               <div
-                className="absolute top-0 left-0 h-full bg-white/80 rounded-full group-hover:bg-gold transition-colors"
+                className="absolute top-0 left-0 h-full bg-ink/80 rounded-full group-hover:bg-brand transition-colors"
                 style={{ width: `${progress}%` }}
               />
               <input
@@ -311,21 +312,21 @@ const GlobalPodcastPlayer = () => {
             value={volume}
             onChange={(e) => setVolume(Number(e.target.value))}
             aria-label="Volumen"
-            className="w-20 accent-gold bg-white/15 h-1 rounded-full cursor-pointer appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full"
+            className="w-20 accent-gold bg-ink/15 h-1 rounded-full cursor-pointer appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-white light:[&::-webkit-slider-thumb]:bg-accent [&::-webkit-slider-thumb]:rounded-full"
           />
-          <div className="w-px h-7 bg-white/10 mx-1" />
+          <div className="w-px h-7 bg-ink/10 mx-1" />
           <SecondaryButton
             onClick={handleClose}
             title="Cerrar reproductor"
             ariaLabel="Cerrar reproductor"
-            className="hover:text-red-400 hover:bg-red-400/10"
+            className="hover:text-danger hover:bg-red-400/10"
           >
             <X size={18} />
           </SecondaryButton>
         </div>
 
         {/* Mobile time row */}
-        <div className="md:hidden flex items-center justify-between text-[10px] font-medium text-white/50 tabular-nums px-1 -mt-1">
+        <div className="md:hidden flex items-center justify-between text-[10px] font-medium text-fg-50 tabular-nums px-1 -mt-1">
           <span>{formatTime(currentTime)}</span>
           <span>{formatTime(duration)}</span>
         </div>

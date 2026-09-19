@@ -23,7 +23,7 @@ const EditModeToggle = () => {
       toast.success(`Guardado (${ok} ${ok === 1 ? "texto" : "textos"})`);
     } else {
       toast.error(
-        `Se guardaron ${ok}, fallaron ${failed.length}. Revisá tu conexión o permisos e intentá de nuevo.`,
+        `Se guardaron ${ok}, fallaron ${failed.length}. Revisa tu conexión o permisos e inténtalo de nuevo.`,
       );
     }
   };
@@ -38,7 +38,7 @@ const EditModeToggle = () => {
   const handleToggle = () => {
     if (isEditMode && hasPending) {
       const discard = window.confirm(
-        `Tenés ${pendingCount} cambio(s) sin guardar. ¿Salir y descartarlos?`,
+        `Tienes ${pendingCount} cambio(s) sin guardar. ¿Salir y descartarlos?`,
       );
       if (!discard) return;
     }
@@ -75,7 +75,7 @@ const EditModeToggle = () => {
                 )}
               </p>
               <p className="text-[11px] text-foreground-muted leading-tight truncate">
-                Tocá cualquier texto con lápiz para editarlo. Nada se guarda hasta que confirmes.
+                Toca cualquier texto con lápiz para editarlo. Nada se guarda hasta que confirmes.
               </p>
             </div>
             {hasPending && (
@@ -92,7 +92,7 @@ const EditModeToggle = () => {
                   onClick={handleDiscardAll}
                   disabled={saving}
                   title="Descartar todos los cambios"
-                  className="flex items-center gap-1.5 px-3 py-2 bg-ink/5 hover:bg-ink/10 text-fg-70 hover:text-foreground-strong text-xs font-bold rounded-xl transition-all border border-line-subtle disabled:opacity-60 shrink-0"
+                  className="flex items-center gap-1.5 px-3 py-2 bg-ink/5 hover:bg-ink/10 text-fg-70 hover:text-foreground-strong text-xs font-bold rounded-xl transition-all border border-line-subtle disabled:opacity-60 shrink-0 light:bg-surface-panel light:shadow-sm light:hover:bg-surface-subtle"
                 >
                   <Undo2 size={14} />
                   <span className="hidden md:inline">Descartar</span>
@@ -101,7 +101,7 @@ const EditModeToggle = () => {
             )}
             <button
               onClick={handleToggle}
-              className="flex items-center gap-1.5 px-3 py-2 bg-ink/5 hover:bg-ink/10 text-fg-80 hover:text-foreground-strong text-xs font-bold rounded-xl transition-all border border-line-subtle shrink-0"
+              className="flex items-center gap-1.5 px-3 py-2 bg-ink/5 hover:bg-ink/10 text-fg-80 hover:text-foreground-strong text-xs font-bold rounded-xl transition-all border border-line-subtle shrink-0 light:bg-surface-panel light:shadow-sm light:hover:bg-surface-subtle"
             >
               <X size={14} />
               <span className="hidden sm:inline">Salir</span>

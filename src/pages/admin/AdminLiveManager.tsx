@@ -187,7 +187,7 @@ const AdminLiveManager = () => {
         toast.dismiss(`dl-${videoUid}`);
         window.open(data.url, "_blank");
       } else if (data.status === "error") {
-        toast.error("Cloudflare no pudo generar el MP4", { description: "Volvé a intentar en unos minutos.", id: `dl-${videoUid}`, duration: 5000 });
+        toast.error("Cloudflare no pudo generar el MP4", { description: "Vuelve a intentarlo en unos minutos.", id: `dl-${videoUid}`, duration: 5000 });
       } else {
         // 'inprogress' (o recién habilitada): Cloudflare está generando el MP4.
         toast.loading(`Cloudflare está generando el MP4... ${Math.round(data.percentComplete)}%`, { id: `dl-${videoUid}`, duration: 6000 });
@@ -220,7 +220,7 @@ const AdminLiveManager = () => {
   // Archiva la grabación en R2 (copia desde Stream + borra de Stream) para ahorrar costos.
   const handleArchive = async (live: LiveEvent) => {
     if (!live.recording_stream_uid) {
-      toast.error("Primero vinculá la grabación (Obtener grabación) antes de archivar");
+      toast.error("Primero vincula la grabación (Obtener grabación) antes de archivar");
       return;
     }
     setArchivingId(live.id);
@@ -238,7 +238,7 @@ const AdminLiveManager = () => {
     } else if (result.status === "processing") {
       toast.info(`Cloudflare todavía está generando el MP4... ${Math.round(result.percent)}%`, {
         id: `arch-${live.id}`,
-        description: "Reintentá en unos minutos.",
+        description: "Vuelve a intentarlo en unos minutos.",
         duration: 6000,
       });
     } else if (result.status === "unarchivable") {
@@ -270,7 +270,7 @@ const AdminLiveManager = () => {
     try {
       const result = await fetchRecording(live.stream_live_input_id, { startsAt: live.starts_at });
       if (!result.recording_uid) {
-        toast.error(result.message || "Cloudflare todavía no generó la grabación. Reintentá en unos minutos.", { id: `link-${live.id}` });
+        toast.error(result.message || "Cloudflare todavía no generó la grabación. Vuelve a intentarlo en unos minutos.", { id: `link-${live.id}` });
         return;
       }
 
@@ -282,7 +282,7 @@ const AdminLiveManager = () => {
       }
 
       await applyRecording(live, result.recording_uid);
-      toast.success("Grabación vinculada", { id: `link-${live.id}`, description: "Ya podés verla y descargarla acá." });
+      toast.success("Grabación vinculada", { id: `link-${live.id}`, description: "Ya puedes verla y descargarla aquí." });
     } catch (err) {
       console.error(err);
       toast.error("Error al vincular la grabación", { id: `link-${live.id}` });
@@ -512,14 +512,14 @@ const AdminLiveManager = () => {
       <div className="animate-pulse space-y-6">
         <div className="flex justify-between items-start mb-8">
           <div className="space-y-3">
-            <div className="h-8 w-64 bg-white/10 rounded-lg" />
-            <div className="h-4 w-48 bg-white/5 rounded-lg" />
+            <div className="h-8 w-64 bg-ink/10 rounded-lg" />
+            <div className="h-4 w-48 bg-ink/5 rounded-lg" />
           </div>
-          <div className="h-10 w-28 bg-white/10 rounded-xl" />
+          <div className="h-10 w-28 bg-ink/10 rounded-xl" />
         </div>
-        <div className="h-12 bg-white/5 rounded-xl" />
-        <div className="h-64 bg-white/5 rounded-2xl" />
-        <div className="h-48 bg-white/5 rounded-2xl" />
+        <div className="h-12 bg-ink/5 rounded-xl" />
+        <div className="h-64 bg-ink/5 rounded-2xl" />
+        <div className="h-48 bg-ink/5 rounded-2xl" />
       </div>
     </div>
   );
@@ -530,19 +530,19 @@ const AdminLiveManager = () => {
     <div className="max-w-5xl mx-auto pb-20">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-3">
-            <Radio className="text-red-500" /> Gestor de En Vivo
+          <h1 className="text-3xl font-extrabold text-foreground-strong tracking-tight flex items-center gap-3">
+            <Radio className="text-red-500 light:text-danger" /> Gestor de En Vivo
           </h1>
-          <p className="text-textMuted mt-1">Crea, programa y controla tus transmisiones en vivo para usuarios VIP.</p>
+          <p className="text-foreground-muted mt-1">Crea, programa y controla tus transmisiones en vivo para usuarios VIP.</p>
         </div>
         <div className="flex gap-2 w-full md:w-auto">
           <button onClick={handleCreateNew} disabled={isSaving}
-            className="flex-1 md:flex-none bg-white/10 hover:bg-white/20 text-white px-3 sm:px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-bold transition-colors">
+            className="flex-1 md:flex-none bg-ink/10 hover:bg-ink/20 text-foreground-strong px-3 sm:px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-bold transition-colors">
             <Plus size={18} /> <span className="whitespace-nowrap">Nueva Sala</span>
           </button>
           {activeLive && (
             <button onClick={handleSave} disabled={isSaving}
-              className="flex-1 md:flex-none bg-gold hover:bg-goldHover text-darker font-bold px-3 sm:px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50">
+              className="flex-1 md:flex-none bg-brand hover:bg-brand-hover text-on-brand font-bold px-3 sm:px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50">
               <Save size={18} /> <span className="whitespace-nowrap">{isSaving ? "Guardando..." : "Guardar"}</span>
             </button>
           )}
@@ -550,17 +550,17 @@ const AdminLiveManager = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6 border-b border-white/10 pb-4 overflow-x-auto custom-scrollbar -mx-1 px-1">
+      <div className="flex gap-2 mb-6 border-b border-line-subtle pb-4 overflow-x-auto custom-scrollbar -mx-1 px-1">
         <button onClick={() => setActiveTab("editor")}
-          className={cn("px-3 sm:px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all whitespace-nowrap shrink-0 flex items-center gap-2", activeTab === "editor" ? "bg-white/10 text-white" : "text-textMuted hover:text-white")}>
+          className={cn("px-3 sm:px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all whitespace-nowrap shrink-0 flex items-center gap-2", activeTab === "editor" ? "bg-ink/10 text-foreground-strong" : "text-foreground-muted hover:text-foreground-strong")}>
           <Settings2 size={16} />Editor
         </button>
         <button onClick={() => setActiveTab("rooms")}
-          className={cn("px-3 sm:px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all whitespace-nowrap shrink-0 flex items-center gap-2", activeTab === "rooms" ? "bg-white/10 text-white" : "text-textMuted hover:text-white")}>
+          className={cn("px-3 sm:px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all whitespace-nowrap shrink-0 flex items-center gap-2", activeTab === "rooms" ? "bg-ink/10 text-foreground-strong" : "text-foreground-muted hover:text-foreground-strong")}>
           <Radio size={16} />Salas ({lives.length})
         </button>
         <button onClick={() => setActiveTab("ended")}
-          className={cn("px-3 sm:px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all whitespace-nowrap shrink-0 flex items-center gap-2", activeTab === "ended" ? "bg-white/10 text-white" : "text-textMuted hover:text-white")}>
+          className={cn("px-3 sm:px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all whitespace-nowrap shrink-0 flex items-center gap-2", activeTab === "ended" ? "bg-ink/10 text-foreground-strong" : "text-foreground-muted hover:text-foreground-strong")}>
           <Video size={16} />Finalizados ({endedLives.length})
         </button>
       </div>
@@ -568,42 +568,42 @@ const AdminLiveManager = () => {
       {activeTab === "editor" && activeLive && (
         <div className="space-y-6">
           {/* Información del Evento */}
-          <div className="bg-darker border border-white/10 rounded-2xl p-6">
-            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-              <Settings2 size={18} className="text-gold" /> Información del Evento
+          <div className="bg-surface-page border border-line-subtle rounded-2xl p-6">
+            <h3 className="text-lg font-bold text-foreground-strong mb-4 flex items-center gap-2">
+              <Settings2 size={18} className="text-accent" /> Información del Evento
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-textMuted">Título del evento</label>
+                <label className="text-sm font-semibold text-foreground-muted">Título del evento</label>
                 <input type="text" value={formData.title || ""}
                   onChange={e => setFormData({ ...formData, title: e.target.value })}
-                  className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-gold" />
+                  className="w-full bg-black/50 border border-line-subtle rounded-xl px-4 py-3 text-foreground-strong focus:outline-none focus:border-accent light:bg-surface-input light:border-line-control/50 light:placeholder:text-foreground-placeholder" />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-textMuted flex items-center gap-2">
+                <label className="text-sm font-semibold text-foreground-muted flex items-center gap-2">
                   Programado para
-                  <span className="text-[10px] text-gold/60 font-mono bg-gold/10 px-1.5 py-0.5 rounded">{tzAbbr} · {userTimezone}</span>
+                  <span className="text-[10px] text-accent/60 font-mono bg-brand/10 px-1.5 py-0.5 rounded">{tzAbbr} · {userTimezone}</span>
                 </label>
                 <input type="datetime-local" value={isoToLocalDatetime(formData.starts_at)}
                   onChange={e => setFormData({ ...formData, starts_at: e.target.value ? new Date(e.target.value).toISOString() : "" })}
-                  className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-gold [color-scheme:dark]" />
+                  className="w-full bg-black/50 border border-line-subtle rounded-xl px-4 py-3 text-foreground-strong focus:outline-none focus:border-accent light:bg-surface-input light:border-line-control/50 light:placeholder:text-foreground-placeholder" />
                 {formData.starts_at && (
-                  <p className="text-[10px] text-textMuted/40 flex items-center gap-1">
+                  <p className="text-[10px] text-foreground-muted/40 flex items-center gap-1">
                     <Clock size={10} /> Guardado en UTC:{' '}
                     {new Date(formData.starts_at).toISOString().replace("T", " ").slice(0, 19)}Z
                   </p>
                 )}
               </div>
               <div className="md:col-span-2 space-y-2">
-                <label className="text-sm font-semibold text-textMuted">Descripción</label>
+                <label className="text-sm font-semibold text-foreground-muted">Descripción</label>
                 <textarea value={formData.description || ""}
                   onChange={e => setFormData({ ...formData, description: e.target.value })}
                   rows={2}
-                  className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-gold resize-none" />
+                  className="w-full bg-black/50 border border-line-subtle rounded-xl px-4 py-3 text-foreground-strong focus:outline-none focus:border-accent resize-none light:bg-surface-input light:border-line-control/50 light:placeholder:text-foreground-placeholder" />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-textMuted">Planes con acceso</label>
-                <div className="flex flex-wrap items-center gap-2 bg-black/50 border border-white/10 rounded-xl px-4 py-3 min-h-[50px]">
+                <label className="text-sm font-semibold text-foreground-muted">Planes con acceso</label>
+                <div className="flex flex-wrap items-center gap-2 bg-black/50 border border-line-subtle rounded-xl px-4 py-3 min-h-[50px] light:bg-surface-panel">
                   {["free", "individual", "vip"].map(plan => {
                     const isSelected = formData.allowed_plans?.includes(plan as "free" | "individual" | "vip");
                     return (
@@ -619,10 +619,10 @@ const AdminLiveManager = () => {
                         className={cn(
                           "px-4 py-2 rounded-lg text-sm font-bold transition-all border",
                           isSelected
-                            ? plan === "free" ? "bg-green-500/15 text-green-400 border-green-500/30 shadow-[0_0_10px_rgba(34,197,94,0.1)]"
-                              : plan === "individual" ? "bg-blue-500/15 text-blue-400 border-blue-500/30 shadow-[0_0_10px_rgba(59,130,246,0.1)]"
-                              : "bg-purple-500/15 text-purple-400 border-purple-500/30 shadow-[0_0_10px_rgba(168,85,247,0.1)]"
-                            : "bg-white/5 text-white/40 border-white/10 hover:border-white/30 hover:text-white/70"
+                            ? plan === "free" ? "bg-green-500/15 text-green-400 light:text-success border-green-500/30 shadow-[0_0_10px_rgba(34,197,94,0.1)]"
+                              : plan === "individual" ? "bg-blue-500/15 text-blue-400 light:text-info border-blue-500/30 shadow-[0_0_10px_rgba(59,130,246,0.1)]"
+                              : "bg-purple-500/15 text-violet border-purple-500/30 shadow-[0_0_10px_rgba(168,85,247,0.1)]"
+                            : "bg-ink/5 text-fg-40 border-line-subtle hover:border-ink/30 hover:text-fg-70"
                         )}
                       >
                         {plan === "free" ? "Gratuito" : plan === "individual" ? "Individual" : "VIP"}
@@ -630,29 +630,29 @@ const AdminLiveManager = () => {
                     );
                   })}
                 </div>
-                <p className="text-[10px] text-textMuted/50 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-gold/50" />
-                  El plan más alto seleccionado se usa como <code className="text-gold">required_plan</code> automáticamente.
+                <p className="text-[10px] text-foreground-muted/50 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-brand/50" />
+                  El plan más alto seleccionado se usa como <code className="text-accent">required_plan</code> automáticamente.
                 </p>
               </div>
             </div>
           </div>
 
           {/* Cloudflare Stream ID */}
-          <div className="bg-darker border border-white/10 rounded-2xl p-6">
-            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-              <Monitor size={18} className="text-gold" /> Configuración de Transmisión (OBS)
+          <div className="bg-surface-page border border-line-subtle rounded-2xl p-6">
+            <h3 className="text-lg font-bold text-foreground-strong mb-4 flex items-center gap-2">
+              <Monitor size={18} className="text-accent" /> Configuración de Transmisión (OBS)
             </h3>
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-textMuted flex items-center justify-between">
+              <label className="text-sm font-semibold text-foreground-muted flex items-center justify-between">
                 Cloudflare Live Input ID
                 {!customInputId && formData.stream_live_input_id === PRESET_INPUT_IDS[0]?.value && (
-                  <span className="text-[10px] bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-0.5 rounded-full font-mono">
+                  <span className="text-[10px] bg-green-500/10 text-green-400 light:text-success border border-green-500/20 px-2 py-0.5 rounded-full font-mono">
                     ✓ Predeterminado
                   </span>
                 )}
                 {customInputId && (
-                  <span className="text-[10px] bg-gold/10 text-gold border border-gold/20 px-2 py-0.5 rounded-full font-mono">
+                  <span className="text-[10px] bg-brand/10 text-accent border border-brand/20 px-2 py-0.5 rounded-full font-mono">
                     Personalizado
                   </span>
                 )}
@@ -667,131 +667,131 @@ const AdminLiveManager = () => {
                     setFormData({ ...formData, stream_live_input_id: e.target.value });
                   }
                 }}
-                className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-gold font-mono text-sm appearance-none cursor-pointer">
+                className="w-full bg-black/50 border border-line-subtle rounded-xl px-4 py-3 text-foreground-strong focus:outline-none focus:border-accent font-mono text-sm appearance-none cursor-pointer light:bg-surface-input light:border-line-control/50 light:placeholder:text-foreground-placeholder">
                 {PRESET_INPUT_IDS.map(p => (
-                  <option key={p.value} value={p.value} className="bg-black text-white">{p.label}</option>
+                  <option key={p.value} value={p.value} className="bg-black text-foreground-strong light:bg-surface-panel">{p.label}</option>
                 ))}
-                <option value="__custom__" className="bg-black text-white">— Personalizado —</option>
+                <option value="__custom__" className="bg-black text-foreground-strong light:bg-surface-panel">— Personalizado —</option>
               </select>
               {customInputId && (
                 <input type="text" placeholder="Ej: 595f2bfac6285d604cf136e049c37b08"
                   value={formData.stream_live_input_id || ""}
                   onChange={e => setFormData({ ...formData, stream_live_input_id: e.target.value })}
-                  className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-gold font-mono text-sm mt-2" />
+                  className="w-full bg-black/50 border border-line-subtle rounded-xl px-4 py-3 text-foreground-strong focus:outline-none focus:border-accent font-mono text-sm mt-2 light:bg-surface-input light:border-line-control/50 light:placeholder:text-foreground-placeholder" />
               )}
-              <p className="text-[10px] text-textMuted/50 flex items-center gap-1">
+              <p className="text-[10px] text-foreground-muted/50 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-green-500/50" /> 
                 El Input ID principal está preconfigurado. Usá "Personalizado" solo si creaste otro Live Input en Cloudflare.
               </p>
             </div>
 
-            <div className="space-y-2 mt-4 pt-4 border-t border-white/10">
-              <label className="text-sm font-semibold text-textMuted">Grabación del directo (Cloudflare Stream UID)</label>
+            <div className="space-y-2 mt-4 pt-4 border-t border-line-subtle">
+              <label className="text-sm font-semibold text-foreground-muted">Grabación del directo (Cloudflare Stream UID)</label>
               <div className="flex gap-2">
                 <input type="text" placeholder="Automático después de finalizar"
                   value={formData.recording_stream_uid || ""}
                   onChange={e => setFormData({ ...formData, recording_stream_uid: e.target.value })}
-                  className="flex-1 bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-gold font-mono text-sm" />
+                  className="flex-1 bg-black/50 border border-line-subtle rounded-xl px-4 py-3 text-foreground-strong focus:outline-none focus:border-accent font-mono text-sm light:bg-surface-input light:border-line-control/50 light:placeholder:text-foreground-placeholder" />
                 <button onClick={async () => {
-                  if (!activeLive?.stream_live_input_id) { toast.error("Primero configurá el Live Input ID"); return; }
+                  if (!activeLive?.stream_live_input_id) { toast.error("Primero configura el Live Input ID"); return; }
                   toast.info("Buscando grabación en Cloudflare...");
                   const result = await fetchRecording(activeLive.stream_live_input_id, { startsAt: activeLive.starts_at });
                   if (result.recording_uid) {
                     setFormData(prev => ({ ...prev, recording_stream_uid: result.recording_uid }));
                     toast.success("Grabación encontrada y vinculada");
                   } else {
-                    toast.error(result.message || "Cloudflare aún no ha generado la grabación. Intentá de nuevo en unos minutos.");
+                    toast.error(result.message || "Cloudflare aún no ha generado la grabación. Inténtalo de nuevo en unos minutos.");
                   }
                 }}
-                  className="bg-white/10 hover:bg-white/20 text-white px-3 py-3 rounded-xl flex items-center gap-1.5 text-xs font-bold transition-colors shrink-0 whitespace-nowrap">
+                  className="bg-ink/10 hover:bg-ink/20 text-foreground-strong px-3 py-3 rounded-xl flex items-center gap-1.5 text-xs font-bold transition-colors shrink-0 whitespace-nowrap">
                   <Video size={14} /> Obtener grabación
                 </button>
                 {formData.recording_stream_uid && (
                   <button type="button" onClick={() => handleDownloadRecording(formData.recording_stream_uid!)}
-                    className="bg-gold/10 hover:bg-gold/20 border border-gold/20 text-gold px-3 py-3 rounded-xl flex items-center gap-1.5 text-xs font-bold transition-colors shrink-0">
+                    className="bg-brand/10 hover:bg-brand/20 border border-brand/20 text-accent px-3 py-3 rounded-xl flex items-center gap-1.5 text-xs font-bold transition-colors shrink-0">
                     <Download size={14} /> Descargar
                   </button>
                 )}
               </div>
-              <p className="text-[10px] text-textMuted/50">Al finalizar el directo, hacé clic en "Obtener grabación" para vincularla automáticamente. Sin necesidad de ir a Cloudflare.</p>
+              <p className="text-[10px] text-foreground-muted/50">Al finalizar el directo, haz clic en "Obtener grabación" para vincularla automáticamente. Sin necesidad de ir a Cloudflare.</p>
             </div>
 
             <details className="mt-4 group">
-              <summary className="text-sm text-gold font-semibold cursor-pointer hover:text-goldHover transition-colors flex items-center gap-2">
+              <summary className="text-sm text-accent font-semibold cursor-pointer hover:text-accent-hover transition-colors flex items-center gap-2">
                 <Clock size={14} /> ¿Cómo configurar OBS Studio?
               </summary>
-              <div className="mt-4 p-4 bg-black/40 border border-white/10 rounded-xl space-y-3 text-sm text-white/80">
-                <p className="flex items-start gap-2 text-amber-300/90">
+              <div className="mt-4 p-4 bg-black/40 border border-line-subtle rounded-xl space-y-3 text-sm text-fg-80 light:bg-surface-panel">
+                <p className="flex items-start gap-2 text-amber-300/90 light:text-warning">
                   <span>⚠️</span>
-                  <span>Lo MÁS importante para que el vivo no se corte: transmití por <strong>cable de red (ethernet)</strong>, nunca por WiFi, y usá un bitrate que tu subida aguante. Un corte de conexión = el vivo se congela y la grabación se fragmenta en videos sueltos.</span>
+                  <span>Lo MÁS importante para que el vivo no se corte: transmite por <strong>cable de red (ethernet)</strong>, nunca por WiFi, y usa un bitrate que tu subida soporte. Un corte de conexión = el vivo se congela y la grabación se fragmenta en videos sueltos.</span>
                 </p>
 
                 <p>1. En OBS: <strong>Configuración → Transmisión</strong></p>
-                <div className="pl-4 space-y-1 text-textMuted">
+                <div className="pl-4 space-y-1 text-foreground-muted">
                   <p>• Servicio: <strong>Personalizado (Custom)</strong></p>
-                  <p>• Servidor: <span className="text-gold font-mono text-xs">rtmps://live.cloudflare.com:443/live/</span>
+                  <p>• Servidor: <span className="text-accent font-mono text-xs">rtmps://live.cloudflare.com:443/live/</span>
                     <button onClick={() => copyToClipboard("rtmps://live.cloudflare.com:443/live/", "Servidor RTMPS")}
-                      className="inline ml-2 text-gold hover:text-goldHover"><Copy size={14} className="inline" /></button>
+                      className="inline ml-2 text-accent hover:text-accent-hover"><Copy size={14} className="inline" /></button>
                   </p>
                   <p>• Clave de transmisión: <strong>el Live Input ID de arriba</strong></p>
                 </div>
 
                 <p>2. <strong>Configuración → Salida</strong> → Modo de salida: <strong>Avanzado</strong></p>
-                <div className="pl-4 space-y-1 text-textMuted">
-                  <p>• Codificador: <strong>x264</strong> (o NVENC H.264 si tenés GPU Nvidia)</p>
+                <div className="pl-4 space-y-1 text-foreground-muted">
+                  <p>• Codificador: <strong>x264</strong> (o NVENC H.264 si tienes GPU Nvidia)</p>
                   <p>• Control de tasa: <strong>CBR</strong></p>
                   <p>• Intervalo de keyframe: <strong>2</strong> (obligatorio — en <strong>Auto</strong> la grabación falla al codificar)</p>
                   <p>• Preajuste de uso de CPU: <strong>veryfast</strong> · Perfil: <strong>main</strong></p>
                 </div>
 
-                <p>3. Bitrate según tu subida REAL (medila antes en <span className="text-gold">fast.com</span>):</p>
-                <div className="pl-4 space-y-1 text-textMuted">
+                <p>3. Bitrate según tu subida REAL (medila antes en <span className="text-accent">fast.com</span>):</p>
+                <div className="pl-4 space-y-1 text-foreground-muted">
                   <p>• Subida &lt; 5 Mbps → <strong>2.500 Kbps</strong> a 720p30</p>
                   <p>• Subida 5-10 Mbps → <strong>4.000 Kbps</strong> a 1080p30</p>
                   <p>• Subida &gt; 10 Mbps estable → <strong>6.000 Kbps</strong> a 1080p30</p>
-                  <p className="text-amber-300/70">Regla de oro: el bitrate no debe pasar el <strong>50%</strong> de tu subida real. Ante la duda, bajalo: fluido y estable &gt; alta calidad que se corta.</p>
+                  <p className="text-amber-300/70 light:text-warning">Regla de oro: el bitrate no debe pasar el <strong>50%</strong> de tu subida real. Ante la duda, bajalo: fluido y estable &gt; alta calidad que se corta.</p>
                 </div>
 
                 <p>4. <strong>Configuración → Video</strong></p>
-                <div className="pl-4 space-y-1 text-textMuted">
+                <div className="pl-4 space-y-1 text-foreground-muted">
                   <p>• Resolución de salida: <strong>1920x1080</strong> (o 1280x720 si tu subida es baja)</p>
                   <p>• FPS: <strong>30</strong> (nunca 60 para un vivo largo)</p>
                 </div>
 
-                <p>5. (Opcional) Menor latencia: en el Live Input de Cloudflare activá <strong>Low-Latency HLS</strong> (~3-5s). No actives WebRTC salvo que lo necesites — suma inestabilidad.</p>
+                <p>5. (Opcional) Menor latencia: en el Live Input de Cloudflare activa <strong>Low-Latency HLS</strong> (~3-5s). No actives WebRTC salvo que lo necesites — suma inestabilidad.</p>
 
-                <p>6. En OBS <strong>Iniciar transmisión</strong>, esperá a verte estable unos segundos, y recién ahí activá <strong>"Forzar EN VIVO"</strong> abajo.</p>
+                <p>6. En OBS <strong>Iniciar transmisión</strong>, espera a que la señal esté estable unos segundos y solo entonces activa <strong>"Forzar EN VIVO"</strong> abajo.</p>
 
-                <p className="text-white/50 text-[11px] pt-1">Durante el vivo mirá el recuadro de estado de OBS (abajo a la derecha): <strong>verde</strong> = conexión sana. Si titila <strong>amarillo/rojo</strong> estás perdiendo frames → bajá el bitrate.</p>
+                <p className="text-fg-50 text-[11px] pt-1">Durante el vivo revisa el recuadro de estado de OBS (abajo a la derecha): <strong>verde</strong> = conexión sana. Si parpadea en <strong>amarillo/rojo</strong> estás perdiendo frames → baja el bitrate.</p>
               </div>
             </details>
           </div>
 
           {/* Background Image */}
-          <div className="bg-darker border border-white/10 rounded-2xl p-6">
-            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-              <ImageIcon size={18} className="text-gold" /> Fondo de Sala de Espera
+          <div className="bg-surface-page border border-line-subtle rounded-2xl p-6">
+            <h3 className="text-lg font-bold text-foreground-strong mb-4 flex items-center gap-2">
+              <ImageIcon size={18} className="text-accent" /> Fondo de Sala de Espera
             </h3>
             <div className="flex flex-col md:flex-row gap-6">
               <div className="flex-1 space-y-2">
-                <label className="text-sm font-semibold text-textMuted">URL de la imagen</label>
+                <label className="text-sm font-semibold text-foreground-muted">URL de la imagen</label>
                 <input type="text" value={formData.background_image_url || ""}
                   onChange={e => setFormData({ ...formData, background_image_url: e.target.value })}
                   placeholder="https://..."
-                  className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-gold text-sm" />
+                  className="w-full bg-black/50 border border-line-subtle rounded-xl px-4 py-3 text-foreground-strong focus:outline-none focus:border-accent text-sm light:bg-surface-input light:border-line-control/50 light:placeholder:text-foreground-placeholder" />
                 <div className="relative">
                   <div
-                    onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add("border-gold"); }}
-                    onDragLeave={e => { e.currentTarget.classList.remove("border-gold"); }}
+                    onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add("border-accent"); }}
+                    onDragLeave={e => { e.currentTarget.classList.remove("border-accent"); }}
                     onDrop={async e => {
                       e.preventDefault();
-                      e.currentTarget.classList.remove("border-gold");
+                      e.currentTarget.classList.remove("border-accent");
                       const file = e.dataTransfer.files?.[0];
                       if (!file) return;
                       if (!file.type.startsWith("image/")) { toast.error("Solo imágenes"); return; }
                       await uploadBackground(file);
                     }}
-                    className="mt-2 border-2 border-dashed border-white/10 rounded-xl p-6 text-center cursor-pointer hover:border-gold/50 transition-colors"
+                    className="mt-2 border-2 border-dashed border-line-subtle rounded-xl p-6 text-center cursor-pointer hover:border-brand/50 transition-colors"
                   >
                     <input
                       type="file"
@@ -806,34 +806,35 @@ const AdminLiveManager = () => {
                       }}
                     />
                     <label htmlFor="bg-upload" className="cursor-pointer block">
-                      <Upload size={24} className="mx-auto text-textMuted mb-2" />
-                      <p className="text-sm text-textMuted">Arrastra una imagen o <span className="text-gold font-semibold">haz clic</span> para subir</p>
-                      <p className="text-[10px] text-textMuted/50 mt-1">Recomendado: 1920×1080, max 5MB</p>
+                      <Upload size={24} className="mx-auto text-foreground-muted mb-2" />
+                      <p className="text-sm text-foreground-muted">Arrastra una imagen o <span className="text-accent font-semibold">haz clic</span> para subir</p>
+                      <p className="text-[10px] text-foreground-muted/50 mt-1">Recomendado: 1920×1080, max 5MB</p>
                     </label>
                   </div>
                 </div>
               </div>
-              <div className="w-full md:w-64 h-48 rounded-xl border border-white/20 overflow-hidden bg-black shrink-0 relative flex items-center justify-center">
+              {/* Isla oscura: vista previa de imagen, la etiqueta va sobre la foto. */}
+              <div data-theme="dark" className="w-full md:w-64 h-48 rounded-xl border border-ink/20 overflow-hidden bg-black shrink-0 relative flex items-center justify-center">
                 {formData.background_image_url ? (
                   <img src={formData.background_image_url} alt="Preview" className="absolute inset-0 w-full h-full object-cover opacity-60" />
                 ) : (
-                  <ImageIcon size={32} className="text-white/20" />
+                  <ImageIcon size={32} className="text-fg-20" />
                 )}
                 <div className="absolute bottom-2 left-2 z-10">
-                  <span className="text-[10px] font-bold bg-black/80 px-2 py-1 rounded-lg text-white/80 backdrop-blur-md border border-white/10">Vista Previa</span>
+                  <span className="text-[10px] font-bold bg-black/80 px-2 py-1 rounded-lg text-fg-80 backdrop-blur-md border border-line-subtle">Vista Previa</span>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Control de Transmisión */}
-          <div className={cn("border rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4 transition-colors", isLive ? "bg-red-500/10 border-red-500/30" : formData.is_paused ? "bg-yellow-500/10 border-yellow-500/30" : obsConnected ? "bg-red-500/5 border-red-500/20" : "bg-darker border-white/10")}>
+          <div className={cn("border rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4 transition-colors", isLive ? "bg-red-500/10 border-red-500/30" : formData.is_paused ? "bg-yellow-500/10 border-yellow-500/30" : obsConnected ? "bg-red-500/5 border-red-500/20" : "bg-surface-page border-line-subtle")}>
               <div>
-                <h3 className={cn("text-lg font-bold flex items-center gap-2", isLive ? "text-red-400" : formData.is_paused ? "text-yellow-500" : "text-white")}>
+                <h3 className={cn("text-lg font-bold flex items-center gap-2", isLive ? "text-danger" : formData.is_paused ? "text-yellow-500 light:text-warning" : "text-foreground-strong")}>
                   Control de Transmisión {isLive && "(¡EN VIVO!)"} {formData.is_paused && "(PAUSADO)"}
-                  {obsConnected && !isLive && !formData.is_paused && <span className="text-[10px] bg-red-500/20 text-red-500 border border-red-500/50 px-2 py-0.5 rounded-full animate-pulse uppercase">OBS Detectado</span>}
+                  {obsConnected && !isLive && !formData.is_paused && <span className="text-[10px] bg-red-500/20 text-red-500 light:text-danger border border-red-500/50 px-2 py-0.5 rounded-full animate-pulse uppercase">OBS Detectado</span>}
                 </h3>
-                <p className="text-sm text-textMuted max-w-md mt-1">
+                <p className="text-sm text-foreground-muted max-w-md mt-1">
                   {isLive
                     ? "La transmisión está activa. Los usuarios VIP pueden ver el evento en vivo."
                     : formData.is_paused
@@ -841,7 +842,7 @@ const AdminLiveManager = () => {
                     : "Activa la sala para que los usuarios vean la transmisión."}
                 </p>
               {formData.starts_at && !isLive && (
-                <p className="text-xs text-gold mt-2 flex items-center gap-1">
+                <p className="text-xs text-accent mt-2 flex items-center gap-1">
                   <Calendar size={12} /> Programado: {new Date(formData.starts_at).toLocaleString("es-CO")}
                 </p>
               )}
@@ -872,7 +873,7 @@ const AdminLiveManager = () => {
                     }
                   } catch (err) { console.error(err); toast.error("Error"); }
                 }}
-                  className="flex-1 sm:flex-none bg-red-800/50 hover:bg-red-800 text-red-400 font-bold px-4 sm:px-6 py-3 rounded-xl flex items-center justify-center gap-2 whitespace-nowrap transition-colors border border-red-800/30">
+                  className="flex-1 sm:flex-none bg-red-800/50 hover:bg-red-800 text-danger light:bg-red-700 light:hover:bg-red-800 light:text-white font-bold px-4 sm:px-6 py-3 rounded-xl flex items-center justify-center gap-2 whitespace-nowrap transition-colors border border-red-800/30">
                   <StopCircle size={20} /> Finalizar
                 </button>
               </div>
@@ -892,16 +893,16 @@ const AdminLiveManager = () => {
       )}
 
       {activeTab === "editor" && !activeLive && (
-        <div className="text-center py-20 text-textMuted bg-darker rounded-2xl border border-white/5 relative overflow-hidden group">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-gold/5 rounded-full blur-3xl group-hover:bg-gold/10 transition-colors" />
+        <div className="text-center py-20 text-foreground-muted bg-surface-page rounded-2xl border border-ink/5 relative overflow-hidden group">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-brand/5 rounded-full blur-3xl group-hover:bg-brand/10 transition-colors" />
           <div className="relative z-10">
-            <Radio size={48} className="mx-auto mb-4 opacity-30 text-white/30" />
-            <p className="text-lg font-semibold text-white/70">No hay salas activas</p>
+            <Radio size={48} className="mx-auto mb-4 opacity-30 text-fg-30" />
+            <p className="text-lg font-semibold text-fg-70">No hay salas activas</p>
             <p className="text-sm mt-2 max-w-sm mx-auto">
-              Seleccioná una sala de la pestaña <strong className="text-white/50">Salas</strong> o creá una nueva para empezar.
+              Selecciona una sala de la pestaña <strong className="text-fg-50">Salas</strong> o crea una nueva para empezar.
             </p>
             <button onClick={handleCreateNew} disabled={isSaving}
-              className="mt-6 bg-gold hover:bg-goldHover text-darker px-6 py-3 rounded-xl font-bold inline-flex items-center gap-2 transition-all shadow-lg shadow-gold/20">
+              className="mt-6 bg-brand hover:bg-brand-hover text-on-brand px-6 py-3 rounded-xl font-bold inline-flex items-center gap-2 transition-all shadow-lg shadow-brand/20">
               <Plus size={18} /> Crear primera sala
             </button>
           </div>
@@ -910,62 +911,62 @@ const AdminLiveManager = () => {
 
       {activeTab === "rooms" && (
         <div className="space-y-3">
-          <div className="flex items-start gap-3 p-4 bg-white/[0.03] border border-white/10 rounded-xl">
-            <div className="shrink-0 w-9 h-9 rounded-lg bg-gold/10 border border-gold/20 flex items-center justify-center">
-              <Info size={16} className="text-gold" />
+          <div className="flex items-start gap-3 p-4 bg-ink/[0.03] border border-line-subtle rounded-xl light:bg-surface-panel light:shadow-panel">
+            <div className="shrink-0 w-9 h-9 rounded-lg bg-brand/10 border border-brand/20 flex items-center justify-center">
+              <Info size={16} className="text-accent" />
             </div>
             <div className="min-w-0 flex-1 space-y-1.5">
-              <p className="text-sm font-semibold text-white">Solo una sala puede estar activa a la vez</p>
-              <ul className="text-sm text-textMuted space-y-1 leading-relaxed">
+              <p className="text-sm font-semibold text-foreground-strong">Solo una sala puede estar activa a la vez</p>
+              <ul className="text-sm text-foreground-muted space-y-1 leading-relaxed">
                 <li className="flex gap-2">
-                  <span className="text-gold/60 shrink-0">•</span>
-                  <span>La sala <span className="text-green-400 font-semibold">Activa</span> es la que ven los usuarios en su dashboard y en <code className="text-gold bg-black/40 px-1.5 py-0.5 rounded text-xs">/vip-live</code>.</span>
+                  <span className="text-accent/60 shrink-0">•</span>
+                  <span>La sala <span className="text-green-400 light:text-success font-semibold">Activa</span> es la que ven los usuarios en su dashboard y en <code className="text-accent bg-black/40 px-1.5 py-0.5 rounded text-xs light:bg-surface-panel">/vip-live</code>.</span>
                 </li>
                 <li className="flex gap-2">
-                  <span className="text-gold/60 shrink-0">•</span>
-                  <span>Hacé clic en el botón <span className="text-white font-semibold">Activa/Inactiva</span> de cada sala para cambiar cuál se publica.</span>
+                  <span className="text-accent/60 shrink-0">•</span>
+                  <span>Haz clic en el botón <span className="text-foreground-strong font-semibold">Activa/Inactiva</span> de cada sala para cambiar cuál se publica.</span>
                 </li>
                 <li className="flex gap-2">
-                  <span className="text-gold/60 shrink-0">•</span>
+                  <span className="text-accent/60 shrink-0">•</span>
                   <span>Activar una sala desactiva automáticamente la anterior.</span>
                 </li>
               </ul>
             </div>
           </div>
           {lives.length === 0 ? (
-            <div className="text-center py-12 text-textMuted bg-darker rounded-xl border border-white/5">
+            <div className="text-center py-12 text-foreground-muted bg-surface-page rounded-xl border border-ink/5">
               No hay salas creadas
             </div>
           ) : (
             lives.map(live => (
               <div key={live.id}
-                className={cn("bg-black/50 border rounded-xl p-3 sm:p-4 flex flex-col gap-3 group transition-all", activeLive?.id === live.id ? "border-gold/40 bg-gold/5" : "border-white/10")}>
+                className={cn("bg-black/50 border rounded-xl p-3 sm:p-4 flex flex-col gap-3 group transition-all light:bg-surface-panel", activeLive?.id === live.id ? "border-brand/40 bg-brand/5" : "border-line-subtle")}>
               <div
-                className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 cursor-pointer hover:bg-white/[0.03] -m-1 p-1 rounded-lg"
+                className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 cursor-pointer hover:bg-ink/[0.03] -m-1 p-1 rounded-lg"
                 onClick={() => selectRoom(live)}>
                 <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0 flex-1">
                   <div className={cn("w-3 h-3 rounded-full shrink-0 mt-1.5 sm:mt-0",
                     live.status === "live" && !live.is_paused ? "bg-red-500 animate-pulse shadow-[0_0_10px_red]" :
                     live.is_paused ? "bg-yellow-500 animate-pulse" :
-                    live.starts_at ? "bg-gold/50" : "bg-gray-600")} />
+                    live.starts_at ? "bg-brand/50" : "bg-gray-600")} />
                   {live.is_active && (
-                    <span className="text-[8px] font-bold uppercase tracking-wider bg-green-500/15 text-green-400 border border-green-500/30 px-1.5 py-0.5 rounded-full shrink-0 mt-1 sm:mt-0">
+                    <span className="text-[8px] font-bold uppercase tracking-wider bg-green-500/15 text-green-400 light:text-success border border-green-500/30 px-1.5 py-0.5 rounded-full shrink-0 mt-1 sm:mt-0">
                       Activa
                     </span>
                   )}
                   <div className="min-w-0 flex-1">
-                    <h4 className="text-white font-bold text-sm sm:text-base truncate">{live.title || "Sin título"}</h4>
+                    <h4 className="text-foreground-strong font-bold text-sm sm:text-base truncate">{live.title || "Sin título"}</h4>
                     <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-1 items-center">
                       {live.starts_at && (
-                        <span className="text-[10px] text-white/40 flex items-center gap-1">
+                        <span className="text-[10px] text-fg-40 flex items-center gap-1">
                           <Calendar size={10} /> {new Date(live.starts_at).toLocaleDateString("es-CO", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                         </span>
                       )}
                       {live.allowed_plans?.map(plan => (
-                        <span key={plan} className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-white/10 text-white/60">{plan}</span>
+                        <span key={plan} className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-ink/10 text-fg-60">{plan}</span>
                       ))}
-                      {live.status === "live" && !live.is_paused && <span className="text-[10px] text-red-400 font-bold">EN VIVO</span>}
-                      {live.is_paused && <span className="text-[10px] text-yellow-400 font-bold">PAUSADO</span>}
+                      {live.status === "live" && !live.is_paused && <span className="text-[10px] text-danger font-bold">EN VIVO</span>}
+                      {live.is_paused && <span className="text-[10px] text-yellow-400 light:text-warning font-bold">PAUSADO</span>}
                     </div>
                   </div>
                 </div>
@@ -1005,26 +1006,26 @@ const AdminLiveManager = () => {
                     className={cn(
                       "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border",
                       live.is_active
-                        ? "bg-green-500/15 text-green-400 border-green-500/30 shadow-[0_0_10px_rgba(34,197,94,0.1)]"
-                        : "bg-white/5 text-white/40 border-white/10 hover:border-white/30 hover:text-white/70"
+                        ? "bg-green-500/15 text-green-400 light:text-success border-green-500/30 shadow-[0_0_10px_rgba(34,197,94,0.1)]"
+                        : "bg-ink/5 text-fg-40 border-line-subtle hover:border-ink/30 hover:text-fg-70"
                     )}
                     title={live.is_active ? "Desactivar sala" : "Activar sala"}
                   >
-                    <span className={cn("w-2 h-2 rounded-full", live.is_active ? "bg-green-400 shadow-[0_0_6px_rgba(34,197,94,0.5)]" : "bg-white/20")} />
+                    <span className={cn("w-2 h-2 rounded-full", live.is_active ? "bg-green-400 shadow-[0_0_6px_rgba(34,197,94,0.5)]" : "bg-ink/20")} />
                     {live.is_active ? "Activa" : "Inactiva"}
                   </button>
                   <button onClick={e => { e.stopPropagation(); handleDelete(live.id); }}
-                    className="p-2 text-red-500/50 hover:text-red-400 bg-red-500/5 rounded-lg hover:bg-red-500/20 transition-colors">
+                    className="p-2 text-red-500/50 light:text-danger hover:text-danger bg-red-500/5 rounded-lg hover:bg-red-500/20 transition-colors">
                     <Trash2 size={16} />
                   </button>
                 </div>
               </div>
 
               {/* Link público — cualquiera con la URL ve el en vivo sin registrarse */}
-              <div className="flex flex-col gap-2 pt-3 border-t border-white/5">
+              <div className="flex flex-col gap-2 pt-3 border-t border-ink/5">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-xs font-bold text-white/70 flex items-center gap-1.5">
-                    <Link2 size={13} className="text-gold" /> Link público
+                  <span className="text-xs font-bold text-fg-70 flex items-center gap-1.5">
+                    <Link2 size={13} className="text-accent" /> Link público
                   </span>
                   <button
                     onClick={async e => {
@@ -1044,11 +1045,11 @@ const AdminLiveManager = () => {
                     className={cn(
                       "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border disabled:opacity-50",
                       live.is_public
-                        ? "bg-gold/15 text-gold border-gold/30"
-                        : "bg-white/5 text-white/40 border-white/10 hover:border-white/30 hover:text-white/70"
+                        ? "bg-brand/15 text-accent border-brand/30"
+                        : "bg-ink/5 text-fg-40 border-line-subtle hover:border-ink/30 hover:text-fg-70"
                     )}
                   >
-                    <span className={cn("w-2 h-2 rounded-full", live.is_public ? "bg-gold shadow-[0_0_6px_rgba(204,164,59,0.6)]" : "bg-white/20")} />
+                    <span className={cn("w-2 h-2 rounded-full", live.is_public ? "bg-brand shadow-[0_0_6px_rgba(204,164,59,0.6)]" : "bg-ink/20")} />
                     {live.is_public ? "Público" : "Privado"}
                   </button>
                 </div>
@@ -1059,7 +1060,7 @@ const AdminLiveManager = () => {
                         readOnly
                         value={buildPublicLiveUrl(live.share_token)}
                         onClick={e => (e.target as HTMLInputElement).select()}
-                        className="flex-1 min-w-0 bg-black/40 border border-white/10 text-white/80 rounded-lg px-3 py-1.5 text-xs font-mono truncate"
+                        className="flex-1 min-w-0 bg-black/40 border border-line-subtle text-fg-80 rounded-lg px-3 py-1.5 text-xs font-mono truncate light:bg-surface-panel"
                       />
                       <button
                         onClick={e => {
@@ -1067,12 +1068,12 @@ const AdminLiveManager = () => {
                           navigator.clipboard.writeText(buildPublicLiveUrl(live.share_token!));
                           toast.success("Link copiado");
                         }}
-                        className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-gold/15 text-gold border border-gold/30 hover:bg-gold/25 transition-colors"
+                        className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-brand/15 text-accent border border-brand/30 hover:bg-brand/25 transition-colors"
                       >
                         <Copy size={13} /> Copiar
                       </button>
                     </div>
-                    <p className="text-[10px] text-yellow-500/80 leading-relaxed">
+                    <p className="text-[10px] text-yellow-500/80 light:text-warning leading-relaxed">
                       Cualquier persona con este link puede ver el en vivo sin registrarse.
                     </p>
                   </div>
@@ -1087,15 +1088,15 @@ const AdminLiveManager = () => {
       {activeTab === "ended" && (
         <div className="space-y-4">
           {endedLives.length === 0 ? (
-            <div className="text-center py-12 text-textMuted bg-darker rounded-xl border border-white/5">
+            <div className="text-center py-12 text-foreground-muted bg-surface-page rounded-xl border border-ink/5">
               <Video size={40} className="mx-auto mb-4 opacity-30" />
-              <p className="text-lg font-semibold text-white/70">No hay transmisiones finalizadas</p>
+              <p className="text-lg font-semibold text-fg-70">No hay transmisiones finalizadas</p>
               <p className="text-sm mt-1">Las grabaciones aparecerán aquí después de finalizar un en vivo.</p>
             </div>
           ) : (
             endedLives.map(live => (
               <div key={live.id}
-                className="bg-darker border border-white/10 rounded-2xl p-4 sm:p-6 space-y-4">
+                className="bg-surface-page border border-line-subtle rounded-2xl p-4 sm:p-6 space-y-4">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4">
                   <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0 flex-1">
                     <div className="w-3 h-3 rounded-full bg-gray-600 shrink-0 mt-2 sm:mt-0" />
@@ -1112,14 +1113,14 @@ const AdminLiveManager = () => {
                             }}
                             maxLength={200}
                             aria-label="Nombre de la grabación"
-                            className="min-w-0 flex-1 bg-black/40 border border-gold/30 focus:border-gold outline-none rounded-lg px-3 py-1.5 text-white font-bold text-base sm:text-lg"
+                            className="min-w-0 flex-1 bg-black/40 border border-brand/30 focus:border-accent outline-none rounded-lg px-3 py-1.5 text-foreground-strong font-bold text-base sm:text-lg light:bg-surface-input light:border-line-control/50 light:placeholder:text-foreground-placeholder"
                           />
                           <button
                             type="button"
                             onClick={() => handleRename(live)}
                             disabled={savingRename}
                             aria-label="Guardar nombre"
-                            className="p-2 rounded-lg bg-gold/10 hover:bg-gold/20 border border-gold/25 text-gold transition-colors disabled:opacity-50 shrink-0"
+                            className="p-2 rounded-lg bg-brand/10 hover:bg-brand/20 border border-brand/25 text-accent transition-colors disabled:opacity-50 shrink-0"
                           >
                             <Check size={16} />
                           </button>
@@ -1128,45 +1129,45 @@ const AdminLiveManager = () => {
                             onClick={cancelRename}
                             disabled={savingRename}
                             aria-label="Cancelar"
-                            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white/60 transition-colors disabled:opacity-50 shrink-0"
+                            className="p-2 rounded-lg bg-ink/5 hover:bg-ink/10 border border-line-subtle text-fg-60 transition-colors disabled:opacity-50 shrink-0"
                           >
                             <X size={16} />
                           </button>
                         </div>
                       ) : (
                         <div className="flex items-center gap-2 min-w-0">
-                          <h4 className="text-white font-bold text-base sm:text-lg truncate">{live.title || "Sin título"}</h4>
+                          <h4 className="text-foreground-strong font-bold text-base sm:text-lg truncate">{live.title || "Sin título"}</h4>
                           <button
                             type="button"
                             onClick={e => { e.stopPropagation(); startRename(live); }}
                             aria-label="Renombrar grabación"
                             title="Renombrar grabación"
-                            className="p-1.5 rounded-lg text-white/40 hover:text-gold hover:bg-gold/10 transition-colors shrink-0"
+                            className="p-1.5 rounded-lg text-fg-40 hover:text-accent hover:bg-brand/10 transition-colors shrink-0"
                           >
                             <Pencil size={14} />
                           </button>
                         </div>
                       )}
-                      <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-1 items-center text-xs text-textMuted">
+                      <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-1 items-center text-xs text-foreground-muted">
                         {live.starts_at && (
                           <span className="flex items-center gap-1">
                             <Calendar size={12} /> {new Date(live.starts_at).toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}
                           </span>
                         )}
-                        <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-black/40 text-white/40">Finalizado</span>
+                        <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-black/40 text-fg-40 light:bg-surface-panel">Finalizado</span>
                       </div>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2 shrink-0">
                     {live.recording_storage === "r2" && live.recording_r2_key ? (
                       <button type="button" onClick={() => handleDownloadR2(live.id)}
-                        className="flex-1 sm:flex-none bg-gold/10 hover:bg-gold/20 border border-gold/20 text-gold px-3 sm:px-4 py-2 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-bold transition-colors whitespace-nowrap">
+                        className="flex-1 sm:flex-none bg-brand/10 hover:bg-brand/20 border border-brand/20 text-accent px-3 sm:px-4 py-2 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-bold transition-colors whitespace-nowrap">
                         <Download size={16} /> <span className="hidden sm:inline">Descargar grabación</span><span className="sm:hidden">Descargar</span>
                       </button>
                     ) : live.recording_stream_uid ? (
                       <>
                         <button type="button" onClick={() => handleDownloadRecording(live.recording_stream_uid!)}
-                          className="flex-1 sm:flex-none bg-gold/10 hover:bg-gold/20 border border-gold/20 text-gold px-3 sm:px-4 py-2 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-bold transition-colors whitespace-nowrap">
+                          className="flex-1 sm:flex-none bg-brand/10 hover:bg-brand/20 border border-brand/20 text-accent px-3 sm:px-4 py-2 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-bold transition-colors whitespace-nowrap">
                           <Download size={16} /> <span className="hidden sm:inline">Descargar grabación</span><span className="sm:hidden">Descargar</span>
                         </button>
                         {/* `archived_at` cargado con storage 'stream' = ya se intentó y Stream no
@@ -1174,7 +1175,7 @@ const AdminLiveManager = () => {
                         {!isKeptInStream(live) && (
                           <button type="button" onClick={() => handleArchive(live)} disabled={archivingId === live.id}
                             title="Copia la grabación a R2 y la borra de Stream para dejar de pagar storage"
-                            className="flex-1 sm:flex-none bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 text-emerald-400 px-3 sm:px-4 py-2 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-bold transition-colors whitespace-nowrap disabled:opacity-50">
+                            className="flex-1 sm:flex-none bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 text-success px-3 sm:px-4 py-2 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-bold transition-colors whitespace-nowrap disabled:opacity-50">
                             <Archive size={16} /> <span className="hidden sm:inline">{archivingId === live.id ? "Archivando..." : "Archivar en R2"}</span><span className="sm:hidden">Archivar</span>
                           </button>
                         )}
@@ -1192,12 +1193,12 @@ const AdminLiveManager = () => {
                         setActiveTab("editor");
                         toast.success(`"${live.title || "Sala"}" movida a salas activas`);
                       } catch { toast.error("Error al reactivar"); }
-                    }} className="flex-1 sm:flex-none bg-white/10 hover:bg-white/20 text-white px-3 sm:px-4 py-2 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-bold transition-colors whitespace-nowrap">
+                    }} className="flex-1 sm:flex-none bg-ink/10 hover:bg-ink/20 text-foreground-strong px-3 sm:px-4 py-2 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-bold transition-colors whitespace-nowrap">
                       <PlayCircle size={16} /> Reactivar
                     </button>
                     <button onClick={e => { e.stopPropagation(); handleDelete(live.id); }}
                       aria-label="Eliminar"
-                      className="p-2 text-red-500/70 hover:text-red-400 bg-red-500/5 rounded-lg hover:bg-red-500/20 transition-colors shrink-0">
+                      className="p-2 text-red-500/70 light:text-danger hover:text-danger bg-red-500/5 rounded-lg hover:bg-red-500/20 transition-colors shrink-0">
                       <Trash2 size={16} />
                     </button>
                   </div>
@@ -1205,18 +1206,18 @@ const AdminLiveManager = () => {
                 {(live.recording_storage === "r2" && live.recording_r2_key) || live.recording_stream_uid ? (
                   <div className="space-y-2">
                     <RecordingPlayer live={live} />
-                    <div className="flex items-center gap-2 text-[10px] text-textMuted/60">
+                    <div className="flex items-center gap-2 text-[10px] text-foreground-muted/60">
                       {live.recording_storage === "r2" ? (
-                        <span className="inline-flex items-center gap-1 text-emerald-400/80">
+                        <span className="inline-flex items-center gap-1 text-emerald-400/80 light:text-success">
                           <Archive size={11} /> Archivada en R2 (sin costo recurrente)
                         </span>
                       ) : isKeptInStream(live) ? (
-                        <span className="inline-flex items-center gap-1 text-amber-400/70">
-                          <Info size={11} /> Supera las 4 h — se archiva por el carril largo en segundo plano; si en unas horas sigue acá, revisá la Action en GitHub
+                        <span className="inline-flex items-center gap-1 text-amber-400/70 light:text-warning">
+                          <Info size={11} /> Supera las 4 h — se archiva por el carril largo en segundo plano; si en unas horas sigue aquí, revisa la Action en GitHub
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-amber-400/70">
-                          <Video size={11} /> En Cloudflare Stream — archivá en R2 para dejar de pagar storage
+                        <span className="inline-flex items-center gap-1 text-amber-400/70 light:text-warning">
+                          <Video size={11} /> En Cloudflare Stream — archívala en R2 para dejar de pagar almacenamiento
                         </span>
                       )}
                       {live.recording_duration_seconds != null && (
@@ -1229,7 +1230,7 @@ const AdminLiveManager = () => {
                           type="button"
                           onClick={() => handleLinkRecording(live)}
                           disabled={linkingId === live.id}
-                          className="ml-auto shrink-0 text-[10px] text-white/40 hover:text-gold underline underline-offset-2 transition-colors disabled:opacity-50"
+                          className="ml-auto shrink-0 text-[10px] text-fg-40 hover:text-accent underline underline-offset-2 transition-colors disabled:opacity-50"
                         >
                           {linkingId === live.id ? "Buscando..." : "Cambiar grabación"}
                         </button>
@@ -1237,11 +1238,11 @@ const AdminLiveManager = () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="aspect-video bg-black/40 rounded-xl flex flex-col items-center justify-center gap-4 border border-dashed border-white/10">
+                  <div className="aspect-video bg-black/40 light:bg-surface-subtle rounded-xl flex flex-col items-center justify-center gap-4 border border-dashed border-line-subtle">
                     <div className="text-center">
-                      <Video size={32} className="mx-auto text-white/20 mb-2" />
-                      <p className="text-sm text-textMuted">Sin grabación disponible</p>
-                      <p className="text-[10px] text-textMuted/50 mt-1">
+                      <Video size={32} className="mx-auto text-fg-20 mb-2" />
+                      <p className="text-sm text-foreground-muted">Sin grabación disponible</p>
+                      <p className="text-[10px] text-foreground-muted/50 mt-1">
                         {live.stream_live_input_id
                           ? "Cloudflare puede tardar unos minutos en procesarla tras finalizar."
                           : "Este evento no tiene un Live Input configurado."}
@@ -1252,7 +1253,7 @@ const AdminLiveManager = () => {
                         type="button"
                         onClick={() => handleLinkRecording(live)}
                         disabled={linkingId === live.id}
-                        className="bg-gold/10 hover:bg-gold/20 border border-gold/30 text-gold px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-bold transition-colors disabled:opacity-50"
+                        className="bg-brand/10 hover:bg-brand/20 border border-brand/30 text-accent px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-bold transition-colors disabled:opacity-50"
                       >
                         <Video size={16} /> {linkingId === live.id ? "Buscando..." : "Vincular grabación"}
                       </button>
@@ -1268,10 +1269,10 @@ const AdminLiveManager = () => {
       {/* Selector de grabación — aparece cuando el Live Input tiene más de una
           transmisión. La primera es la más larga: casi siempre es el vivo real. */}
       <Dialog open={!!recordingPicker} onOpenChange={open => { if (!open) setRecordingPicker(null); }}>
-        <DialogContent className="bg-darker border-white/10 sm:max-w-lg">
+        <DialogContent className="bg-surface-page border-line-subtle sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-white">Elegí la grabación</DialogTitle>
-            <DialogDescription className="text-textMuted">
+            <DialogTitle className="text-foreground-strong">Elige la grabación</DialogTitle>
+            <DialogDescription className="text-foreground-muted">
               Este Live Input tiene {recordingPicker?.recordings.length} transmisiones grabadas.
               Cada corte y reconexión de OBS genera una. La más larga suele ser el vivo real.
             </DialogDescription>
@@ -1291,38 +1292,38 @@ const AdminLiveManager = () => {
                   className={cn(
                     "w-full text-left p-3 rounded-xl border transition-colors disabled:opacity-50",
                     i === 0
-                      ? "border-gold/40 bg-gold/5 hover:bg-gold/10"
-                      : "border-white/10 bg-white/[0.02] hover:bg-white/5"
+                      ? "border-brand/40 bg-brand/5 hover:bg-brand/10"
+                      : "border-line-subtle bg-ink/[0.02] hover:bg-ink/5 light:bg-surface-panel light:hover:bg-surface-subtle"
                   )}
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <span className="text-white font-bold text-sm tabular-nums">
+                    <span className="text-foreground-strong font-bold text-sm tabular-nums">
                       {minutes}:{seconds.toString().padStart(2, "0")} min
                     </span>
                     <span className="flex items-center gap-2 shrink-0">
                       {i === 0 && (
-                        <span className="text-[9px] uppercase tracking-wider text-gold bg-gold/10 border border-gold/20 px-2 py-0.5 rounded-full">
+                        <span className="text-[9px] uppercase tracking-wider text-accent bg-brand/10 border border-brand/20 px-2 py-0.5 rounded-full">
                           Sugerida
                         </span>
                       )}
                       {isCurrent && (
-                        <span className="text-[9px] uppercase tracking-wider text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                        <span className="text-[9px] uppercase tracking-wider text-success bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
                           Vinculada
                         </span>
                       )}
                       {pickingUid === rec.uid && (
-                        <span className="text-[10px] text-textMuted">Vinculando...</span>
+                        <span className="text-[10px] text-foreground-muted">Vinculando...</span>
                       )}
                     </span>
                   </div>
-                  <p className="text-[11px] text-textMuted mt-1">
+                  <p className="text-[11px] text-foreground-muted mt-1">
                     {rec.created
                       ? new Date(rec.created).toLocaleString("es-CO", {
                           day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
                         })
                       : "Sin fecha"}
                   </p>
-                  <p className="text-[10px] text-textMuted/50 font-mono truncate mt-0.5">{rec.uid}</p>
+                  <p className="text-[10px] text-foreground-muted/50 font-mono truncate mt-0.5">{rec.uid}</p>
                 </button>
               );
             })}
