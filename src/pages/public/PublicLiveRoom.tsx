@@ -129,20 +129,35 @@ const PublicLiveRoom = () => {
     if (!token) return;
     let isActive = true;
 
+    // Un poll fallido (4G inestable, timeout de Supabase bajo carga) NO expulsa
+    // al espectador: conservamos la última sala conocida y seguimos intentando.
+    // Solo mostramos "no disponible" cuando la RPC responde OK sin fila dos
+    // veces seguidas (link desactivado por el admin), nunca por un error.
+    let consecutiveMisses = 0;
+    let consecutiveErrors = 0;
+
     const load = async () => {
       try {
         const result = await getPublicLive(token);
         if (!isActive) return;
+        consecutiveErrors = 0;
         if (!result) {
-          setNotFound(true);
+          consecutiveMisses += 1;
+          if (consecutiveMisses >= 2) setNotFound(true);
         } else {
+          consecutiveMisses = 0;
+          setNotFound(false);
           setLive(result);
         }
+        setLoading(false);
       } catch (err) {
         console.error("[PublicLiveRoom] error fetching public live:", err);
-        if (isActive) setNotFound(true);
-      } finally {
-        if (isActive) setLoading(false);
+        if (!isActive) return;
+        consecutiveErrors += 1;
+        // Sin sala cargada y muchos errores seguidos: soltamos el spinner para
+        // que el usuario vea la pantalla de "no disponible" con su botón, pero
+        // el polling sigue vivo y la recupera sola si la red vuelve.
+        if (consecutiveErrors >= 5) setLoading(false);
       }
     };
 
@@ -204,17 +219,26 @@ const PublicLiveRoom = () => {
   }
 
   if (notFound || !live) {
+    // `notFound`: la RPC respondió sin fila (link desactivado). `!live` sin
+    // notFound: nunca pudimos cargar por errores de red — ofrecer reintento.
+    const isConnectionIssue = !notFound;
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-6">
         <div className="text-center max-w-md">
           <Radio size={48} className="mx-auto text-white/20 mb-6" />
-          <h2 className="text-2xl font-bold text-white mb-2">Este en vivo no está disponible</h2>
-          <p className="text-textMuted mb-6">El link puede haber expirado o el en vivo ya no es público.</p>
+          <h2 className="text-2xl font-bold text-white mb-2">
+            {isConnectionIssue ? "No pudimos conectar con el en vivo" : "Este en vivo no está disponible"}
+          </h2>
+          <p className="text-textMuted mb-6">
+            {isConnectionIssue
+              ? "Revisá tu conexión. Seguimos intentando en segundo plano."
+              : "El link puede haber expirado o el en vivo ya no es público."}
+          </p>
           <button
-            onClick={() => navigate("/")}
+            onClick={() => (isConnectionIssue ? window.location.reload() : navigate("/"))}
             className="px-6 py-3 rounded-full bg-gold hover:bg-goldHover text-darker font-black tracking-wide transition-colors"
           >
-            Ir al inicio
+            {isConnectionIssue ? "Reintentar" : "Ir al inicio"}
           </button>
         </div>
       </div>
