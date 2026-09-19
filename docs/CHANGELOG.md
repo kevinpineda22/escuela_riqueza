@@ -20,6 +20,11 @@
   - Tests: `LiveHLSPlayer.test.tsx` 6 → 10. Revisión adversarial con contexto fresco encontró 3 bugs en la primera implementación (poison de `userPausedRef`, reset de backoff por fragmento, timer sin limpiar) — corregidos antes de commitear.
 - **Webhook (H2/H3)**: verificado que en Cloudflare → Notifications no existe ninguna notificación de Stream Live Input. El endpoint `/api/stream/cloudflare-webhook` nunca recibió eventos de OBS; toda la sincronización real fue polling. Se corrige después de H7 (ver plan).
 
+### Link público de live
+- Admin puede marcar una sala como pública desde `AdminLiveManager` y compartir `/live/<token>` — cualquiera lo abre sin login: mismo player, countdown/pausa/finalizado, chat de solo lectura y contador de viewers (anónimos incluidos).
+- **SQL a aplicar**: `sql/migrate-lives-public-link.sql` (agrega `is_public`/`share_token` a `lives` y las funciones `get_public_live` / `get_public_live_messages`).
+- **Modelo de seguridad**: anon nunca tiene SELECT directo sobre `lives` ni `live_messages`. El acceso público pasa únicamente por dos funciones `SECURITY DEFINER` gateadas por `share_token` + `is_public = true`. Anon no puede escribir mensajes (la sala pública no expone insert).
+
 ## 2026-09-11
 
 ### Login — la red móvil ya no tumba una sesión válida

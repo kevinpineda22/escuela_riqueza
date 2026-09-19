@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { Radio, Image as ImageIcon, Settings2, Save, Plus, Trash2, PlayCircle, StopCircle, Calendar, Clock, Monitor, Copy, Upload, Download, Video, Info, Archive, Pencil, Check, X } from "lucide-react";
+import { Radio, Image as ImageIcon, Settings2, Save, Plus, Trash2, PlayCircle, StopCircle, Calendar, Clock, Monitor, Copy, Upload, Download, Video, Info, Archive, Pencil, Check, X, Link2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { fetchLives, fetchEndedLives, fetchRecording, createLive, updateLive, deleteLive, setActiveLive as apiSetActiveLive, deactivateAllLives, checkLiveInputStatus, archiveRecording, fetchRecordingUrl, type LiveEvent, type StreamRecording } from "@/lib/api/stream/lives";
+import { fetchLives, fetchEndedLives, fetchRecording, createLive, updateLive, deleteLive, setActiveLive as apiSetActiveLive, deactivateAllLives, checkLiveInputStatus, archiveRecording, fetchRecordingUrl, setLivePublic, buildPublicLiveUrl, type LiveEvent, type StreamRecording } from "@/lib/api/stream/lives";
 import { supabase } from "@/lib/supabase";
 import { authedFetch } from "@/lib/api/client";
 import { toast } from "@/components/ui/toaster";
@@ -55,6 +55,7 @@ const AdminLiveManager = () => {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [savingRename, setSavingRename] = useState(false);
+  const [togglingPublicId, setTogglingPublicId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<Partial<LiveEvent>>({
     title: "",
@@ -938,7 +939,9 @@ const AdminLiveManager = () => {
           ) : (
             lives.map(live => (
               <div key={live.id}
-                className={cn("bg-black/50 border rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 group transition-all cursor-pointer hover:bg-white/[0.03]", activeLive?.id === live.id ? "border-gold/40 bg-gold/5" : "border-white/10")}
+                className={cn("bg-black/50 border rounded-xl p-3 sm:p-4 flex flex-col gap-3 group transition-all", activeLive?.id === live.id ? "border-gold/40 bg-gold/5" : "border-white/10")}>
+              <div
+                className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 cursor-pointer hover:bg-white/[0.03] -m-1 p-1 rounded-lg"
                 onClick={() => selectRoom(live)}>
                 <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0 flex-1">
                   <div className={cn("w-3 h-3 rounded-full shrink-0 mt-1.5 sm:mt-0",
@@ -1015,6 +1018,66 @@ const AdminLiveManager = () => {
                     <Trash2 size={16} />
                   </button>
                 </div>
+              </div>
+
+              {/* Link público — cualquiera con la URL ve el en vivo sin registrarse */}
+              <div className="flex flex-col gap-2 pt-3 border-t border-white/5">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs font-bold text-white/70 flex items-center gap-1.5">
+                    <Link2 size={13} className="text-gold" /> Link público
+                  </span>
+                  <button
+                    onClick={async e => {
+                      e.stopPropagation();
+                      setTogglingPublicId(live.id);
+                      try {
+                        const updated = await setLivePublic(live.id, !live.is_public, live.share_token);
+                        setLives(prev => prev.map(l => l.id === updated.id ? updated : l));
+                        toast.success(updated.is_public ? "Link público activado" : "Link público desactivado");
+                      } catch {
+                        toast.error("Error al actualizar el link público");
+                      } finally {
+                        setTogglingPublicId(null);
+                      }
+                    }}
+                    disabled={togglingPublicId === live.id}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border disabled:opacity-50",
+                      live.is_public
+                        ? "bg-gold/15 text-gold border-gold/30"
+                        : "bg-white/5 text-white/40 border-white/10 hover:border-white/30 hover:text-white/70"
+                    )}
+                  >
+                    <span className={cn("w-2 h-2 rounded-full", live.is_public ? "bg-gold shadow-[0_0_6px_rgba(204,164,59,0.6)]" : "bg-white/20")} />
+                    {live.is_public ? "Público" : "Privado"}
+                  </button>
+                </div>
+                {live.is_public && live.share_token && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <input
+                        readOnly
+                        value={buildPublicLiveUrl(live.share_token)}
+                        onClick={e => (e.target as HTMLInputElement).select()}
+                        className="flex-1 min-w-0 bg-black/40 border border-white/10 text-white/80 rounded-lg px-3 py-1.5 text-xs font-mono truncate"
+                      />
+                      <button
+                        onClick={e => {
+                          e.stopPropagation();
+                          navigator.clipboard.writeText(buildPublicLiveUrl(live.share_token!));
+                          toast.success("Link copiado");
+                        }}
+                        className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-gold/15 text-gold border border-gold/30 hover:bg-gold/25 transition-colors"
+                      >
+                        <Copy size={13} /> Copiar
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-yellow-500/80 leading-relaxed">
+                      Cualquier persona con este link puede ver el en vivo sin registrarse.
+                    </p>
+                  </div>
+                )}
+              </div>
               </div>
             ))
           )}

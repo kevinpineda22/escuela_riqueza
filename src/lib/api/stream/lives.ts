@@ -24,6 +24,8 @@ export interface LiveEvent {
   background_image_url: string | null;
   allowed_plans: string[];
   created_at: string;
+  is_public: boolean;
+  share_token: string | null;
 }
 
 function sanitize(live: Record<string, unknown>): Record<string, unknown> {
@@ -213,6 +215,69 @@ export async function fetchRecording(
     console.error("Error fetching recording:", err);
     return { recording_uid: null, message: "Error de conexión con el servidor" };
   }
+}
+
+/** Genera un token de 32 chars hex para el link público (sin guiones, URL-safe). */
+function generateShareToken(): string {
+  return crypto.randomUUID().replace(/-/g, "");
+}
+
+/**
+ * Activa/desactiva el link público de una sala.
+ * Al activar: si la sala ya tiene `share_token`, se conserva (el link no cambia
+ * al reactivar). Al desactivar: se mantiene el token guardado, solo se apaga
+ * `is_public`, así el admin puede reactivar sin generar un link nuevo.
+ */
+export async function setLivePublic(id: string, isPublic: boolean, currentToken?: string | null): Promise<LiveEvent> {
+  const updates: Partial<LiveEvent> = { is_public: isPublic };
+  if (isPublic && !currentToken) {
+    updates.share_token = generateShareToken();
+  }
+
+  const { data, error } = await supabase
+    .from("lives")
+    .update(updates)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("[setLivePublic] Supabase error:", error);
+    throw error;
+  }
+  return data as LiveEvent;
+}
+
+/** Arma la URL pública compartible a partir del token de la sala. */
+export function buildPublicLiveUrl(token: string): string {
+  return `${window.location.origin}/live/${token}`;
+}
+
+export async function getPublicLive(token: string): Promise<LiveEvent | null> {
+  const { data, error } = await supabase.rpc("get_public_live", { p_token: token });
+  if (error) {
+    console.error("[getPublicLive] Supabase error:", error);
+    throw error;
+  }
+  if (Array.isArray(data) && data.length > 0) return data[0] as LiveEvent;
+  return null;
+}
+
+export interface PublicChatMessage {
+  id: string;
+  user_id: string;
+  message: string;
+  created_at: string;
+  user_name: string;
+}
+
+export async function getPublicLiveMessages(token: string, limit = 100): Promise<PublicChatMessage[]> {
+  const { data, error } = await supabase.rpc("get_public_live_messages", { p_token: token, p_limit: limit });
+  if (error) {
+    console.error("[getPublicLiveMessages] Supabase error:", error);
+    throw error;
+  }
+  return (data || []) as PublicChatMessage[];
 }
 
 export async function deleteLive(id: string): Promise<void> {
