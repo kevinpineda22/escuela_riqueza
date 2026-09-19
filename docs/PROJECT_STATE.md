@@ -115,6 +115,38 @@
 
 ---
 
+---
+
+## 4.1 Modo claro — estado por fase
+
+> Spec completa: `docs/MODO_CLARO_ESPECIFICACION.md`. Este bloque es el estado real, no el plan.
+
+| Fase | Entrega | Estado |
+|---|---|---|
+| 1. Fundaciones | Tokens semánticos, `useTheme`, `ThemeSync`, primer paint sin destello | ✅ commit `87ca9fc` |
+| 2. Compartidos | Primitivos UI, Header/Footer, Toaster, `AppearanceToggle` | ✅ commit `87ca9fc` |
+| 3. Públicas | Actos de landing, auth, páginas estáticas | ✅ commit `87ca9fc` |
+| 4. Alumnos y multimedia | Dashboard, comunidad, chat, envoltorios de video/podcast | ✅ en working tree, **sin commitear** |
+| 5. Administración | Páginas admin, CRUD visual, uploads, charts | ✅ en working tree, **sin commitear** |
+| 6. Cierre | Matriz de QA visual + activación del selector | ❌ **pendiente** |
+
+**Qué bloquea la fase 6** — `src/lib/theme.ts`:
+
+```ts
+export const APPEARANCE_SELECTOR_ENABLED = import.meta.env.DEV;
+```
+
+El selector de apariencia solo existe en desarrollo. Quitar ese gate publica el modo claro a los usuarios reales, y la puerta de salida de la spec exige revisión visual humana previa (contraste sobre fondos compuestos, shimmer, gradientes, logos transparentes). **No se activó porque la plataforma está en vivo** — decisión del 2026-09-19.
+
+**Verificación automática al 2026-09-19** (no reemplaza la revisión visual):
+
+- `npm run typecheck` → limpio.
+- `npx vitest run` → 18 archivos, 137 tests.
+- `node scripts/theme-audit.mjs $(git ls-files 'src/**/*.tsx' 'src/**/*.ts')` → 61 hallazgos, todos dentro de islas oscuras declaradas (`data-theme="dark"`) o scrims sobre foto de avatar. Antes de restaurar las fases 4-5 eran 143.
+- Paleta legacy (`bg-dark`, `text-textMain`, …): 3 usos, los 3 intencionales (`light:bg-darker` = placa oscura detrás del logo en claro).
+
+**Para retomar**: las fases 4 y 5 están respaldadas además en `git stash` (`stash@{0}: On johan: fase6-admin-backup`). Aplica limpio con 3-way sobre `d598db0`.
+
 ## 5. Plan de fases de estilo
 
 **✅ Fase 1 — Foundation (transversal)**
