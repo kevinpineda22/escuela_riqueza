@@ -9,6 +9,8 @@ import { useIsDesktop } from "@/hooks/useMediaQuery";
 import LiveHLSPlayer, { type LiveHLSPlayerHandle, type QualityLevel } from "@/components/feature/LiveHLSPlayer";
 import LivePlayerControls from "@/components/feature/LivePlayerControls";
 import PublicLiveChat from "@/components/feature/PublicLiveChat";
+import LiveChat from "@/components/feature/LiveChat";
+import { useAuthStore } from "@/stores/auth.store";
 
 const CF_CUSTOMER_CODE = (import.meta.env.VITE_CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN || "").match(/customer-([^.]+)/)?.[1] || "";
 
@@ -39,6 +41,7 @@ function getOrCreateAnonId(): string {
 const PublicLiveRoom = () => {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
+  const sessionUser = useAuthStore((state) => state.user);
   const [live, setLive] = useState<LiveEvent | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -250,6 +253,14 @@ const PublicLiveRoom = () => {
       </div>
     );
   }
+
+  // Con sesión iniciada (llegó por el link y se logueó para participar) se usa
+  // el chat completo, que ya sabe escribir; sin sesión, el de solo lectura.
+  const chatNode = !token ? null : sessionUser ? (
+    <LiveChat liveId={live.id} />
+  ) : (
+    <PublicLiveChat token={token} loginPath={loginPath} />
+  );
 
   const mobileVideoHeightClass = "h-[50dvh] shrink-0";
 
@@ -555,11 +566,11 @@ const PublicLiveRoom = () => {
             isChatVisibleDesktop ? "w-80 lg:w-[400px] opacity-100" : "w-0 opacity-0"
           )}
         >
-          {token && <PublicLiveChat token={token} loginPath={loginPath} />}
+          {chatNode}
         </div>
       ) : (
         <div className="flex-1 min-h-0 bg-surface-page border-t border-brand/30 shadow-[0_-20px_40px_-15px_rgba(0,0,0,0.7)] light:shadow-[0_-16px_32px_-18px_rgba(60,45,15,0.3)]">
-          {token && <PublicLiveChat token={token} loginPath={loginPath} />}
+          {chatNode}
         </div>
       )}
     </div>
