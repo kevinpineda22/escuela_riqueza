@@ -16,6 +16,11 @@ export interface LiveHLSPlayerHandle {
   exitFullscreen: () => Promise<void>;
   setQualityLevel: (index: number) => void;
   getQualityLevels: () => QualityLevel[];
+  // Intención EXPLÍCITA del usuario (play/pause toggle). El consumidor debe
+  // llamarlo desde la acción real del usuario — el player ya NO infiere esto
+  // del evento nativo 'pause' (una pausa por backgrounding de la pestaña,
+  // interrupción del SO, o `ended` dispara 'pause' igual que un click).
+  setUserPaused: (paused: boolean) => void;
 }
 
 interface LiveHLSPlayerProps {
@@ -27,12 +32,19 @@ interface LiveHLSPlayerProps {
   // edge con buffer 20s, fluidez asegurada. "low": ~3s del edge con buffer 10s,
   // baja latencia pero requiere red estable.
   latencyMode?: LiveLatencyMode;
+  // Pausa de sala (admin marcó `is_paused`). El player se mantiene montado
+  // pero pausa el <video>; al reanudar solo retoma si el usuario no había
+  // pausado manualmente antes.
+  roomPaused?: boolean;
   className?: string;
   onPlay?: () => void;
   onPause?: () => void;
   onWaiting?: () => void;
   onPlaying?: () => void;
   onError?: (err: string) => void;
+  // Se agotaron los reintentos de recarga automática — la UI debe mostrar un
+  // estado de error con reintento manual (remount vía `key`).
+  onFatalError?: () => void;
   onLevelsChange?: (levels: QualityLevel[], currentLevel: number) => void;
 }
 
@@ -44,12 +56,14 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       muted,
       autoPlay = true,
       latencyMode = "smooth",
+      roomPaused = false,
       className,
       onPlay,
       onPause,
       onWaiting,
       onPlaying,
       onError,
+      onFatalError,
       onLevelsChange,
     },
     ref,
@@ -58,6 +72,13 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
     const hlsRef = useRef<Hls | null>(null);
     // Lock para que la recuperación por evento y el watchdog no recarguen a la vez.
     const reloadingRef = useRef(false);
+    // Intención EXPLÍCITA del usuario: solo la cambia `setUserPaused` (invocado
+    // por el toggle play/pause de la sala), NUNCA el evento nativo 'pause' —
+    // ese evento también dispara por backgrounding de la pestaña, interrupción
+    // del SO o `ended`, y confundirlo con un pause manual dejaba al alumno
+    // trabado en un frame congelado sin recuperación posible. Gatea el
+    // autoplay tras reconexión y el resume tras una pausa de sala.
+    const userPausedRef = useRef(false);
     const [levels, setLevels] = useState<QualityLevel[]>([]);
 
     useImperativeHandle(ref, () => ({
@@ -103,10 +124,15 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       },
       setQualityLevel: (index: number) => {
         if (hlsRef.current) {
-          hlsRef.current.currentLevel = index;
+          // `nextLevel` cambia en el próximo fragmento, sin vaciar el buffer
+          // actual. `currentLevel` fuerza un flush inmediato (latigazo visible).
+          hlsRef.current.nextLevel = index;
         }
       },
       getQualityLevels: () => levels,
+      setUserPaused: (paused: boolean) => {
+        userPausedRef.current = paused;
+      },
     }));
 
     useEffect(() => {
@@ -132,6 +158,10 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       let mediaErrorRetries = 0;
       let didSeekToLiveEdge = false;
       let stallTimer: number | null = null;
+      let pendingReloadTimeout: number | null = null;
+      let reloadCooldownTimeout: number | null = null;
+      let handlePlaybackRecovered: (() => void) | null = null;
+      let clearStableTimer: (() => void) | null = null;
 
       if (Hls.isSupported()) {
         hls = new Hls({
@@ -177,7 +207,9 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           }));
 
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          if (autoPlay) {
+          // Este handler corre también tras cada recarga por recuperación
+          // (H8). Si el usuario pausó a propósito, no lo reactivamos.
+          if (autoPlay && !userPausedRef.current) {
             video.play().catch(() => {
               // Autoplay con sonido bloqueado por el browser — el overlay "Activar sonido" lo resuelve
             });
@@ -232,9 +264,14 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
         // 413 sostenido en un vivo), vuelve a fallar con los mismos datos y el
         // player queda "cargando" hasta que el usuario da F5. Esto es ese F5, pero
         // interno: manifest fresco, tokens frescos, y de vuelta al borde en vivo.
-        const reloadFromScratch = (reason: string) => {
-          if (!hls || reloadingRef.current) return;
-          reloadingRef.current = true;
+        // Backoff exponencial + tope total de recargas. Antes se reintentaba
+        // sin límite (con solo una ventana de 4s anti-cascada): un fallo
+        // persistente entraba en loop de recargas infinito.
+        const MAX_RELOAD_ATTEMPTS = 6;
+        let reloadAttempts = 0;
+
+        const executeReload = (reason: string) => {
+          if (!hls) return;
           console.warn(`[LiveHLSPlayer] recargando el manifest (${reason})`);
           didSeekToLiveEdge = false;
           try {
@@ -242,12 +279,59 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
             hls.loadSource(manifestUrl);
             hls.startLoad(-1);
           } finally {
-            // Ventana corta para que un error en cascada no dispare recargas en loop.
-            window.setTimeout(() => { reloadingRef.current = false; }, 4000);
+            // Ventana corta para que la propia recarga no dispare otro trigger en cascada.
+            reloadCooldownTimeout = window.setTimeout(() => {
+              reloadCooldownTimeout = null;
+              reloadingRef.current = false;
+            }, 1000);
           }
         };
 
+        const reloadFromScratch = (reason: string) => {
+          if (!hls || reloadingRef.current) return;
+          if (reloadAttempts >= MAX_RELOAD_ATTEMPTS) {
+            console.error(`[LiveHLSPlayer] se alcanzó el máximo de ${MAX_RELOAD_ATTEMPTS} reintentos, abandonando`);
+            onFatalError?.();
+            return;
+          }
+          reloadingRef.current = true;
+          const attempt = reloadAttempts;
+          reloadAttempts++;
+          const delay = Math.min(8000, 1000 * 2 ** attempt);
+          pendingReloadTimeout = window.setTimeout(() => {
+            pendingReloadTimeout = null;
+            executeReload(reason);
+          }, delay);
+        };
+
+        // Solo reseteamos el contador de reintentos tras reproducción ESTABLE
+        // sostenida (15s sin 'waiting'/'stalled'/error desde el último
+        // 'playing') — resetear en cada 'playing' individual permitía que una
+        // conexión intermitente (play/stall/play/stall...) nunca escalara el
+        // backoff ni disparara onFatalError.
+        const STABLE_PLAYBACK_MS = 15000;
+        let stableTimeoutId: number | null = null;
+        clearStableTimer = () => {
+          if (stableTimeoutId !== null) {
+            window.clearTimeout(stableTimeoutId);
+            stableTimeoutId = null;
+          }
+        };
+        handlePlaybackRecovered = () => {
+          clearStableTimer!();
+          stableTimeoutId = window.setTimeout(() => {
+            stableTimeoutId = null;
+            reloadAttempts = 0;
+          }, STABLE_PLAYBACK_MS);
+        };
+        video.addEventListener("playing", handlePlaybackRecovered);
+        video.addEventListener("waiting", clearStableTimer);
+        video.addEventListener("stalled", clearStableTimer);
+
         hls.on(Hls.Events.ERROR, (_, data) => {
+          // Cualquier error interrumpe la ventana de estabilidad — no cuenta
+          // como recuperación sostenida.
+          clearStableTimer?.();
           // Los no-fatales también dejan rastro: sin esto el 413 de los segmentos
           // era invisible hasta que el player ya estaba clavado.
           if (!data.fatal) {
@@ -299,7 +383,9 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           video.addEventListener(
             "loadedmetadata",
             () => {
-              video.play().catch(() => {});
+              if (!userPausedRef.current) {
+                video.play().catch(() => {});
+              }
             },
             { once: true },
           );
@@ -310,6 +396,14 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
 
       return () => {
         if (stallTimer !== null) window.clearInterval(stallTimer);
+        if (pendingReloadTimeout !== null) window.clearTimeout(pendingReloadTimeout);
+        if (reloadCooldownTimeout !== null) window.clearTimeout(reloadCooldownTimeout);
+        clearStableTimer?.();
+        if (handlePlaybackRecovered) video.removeEventListener("playing", handlePlaybackRecovered);
+        if (clearStableTimer) {
+          video.removeEventListener("waiting", clearStableTimer);
+          video.removeEventListener("stalled", clearStableTimer);
+        }
         reloadingRef.current = false;
         if (hls) {
           hls.destroy();
@@ -319,6 +413,44 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [liveInputId, customerCode, latencyMode]);
 
+    // H7: pausa de sala. Se mantiene el <video> montado; solo se pausa/reanuda
+    // el elemento. Al reanudar, respeta la intención del usuario: si pausó a
+    // propósito antes de la pausa de sala, no lo reactivamos por él.
+    // `isFirstRunRef` evita que este efecto dispare un `play()` en el montaje
+    // inicial (donde `roomPaused` arranca en `false` y el <video> arranca
+    // pausado por defecto) — ese arranque ya lo maneja MANIFEST_PARSED/autoPlay.
+    const isFirstRoomPausedRunRef = useRef(true);
+    useEffect(() => {
+      const video = videoRef.current;
+      if (!video) return;
+      if (isFirstRoomPausedRunRef.current) {
+        isFirstRoomPausedRunRef.current = false;
+        if (roomPaused && !video.paused) {
+          video.pause();
+        }
+      } else if (roomPaused) {
+        if (!video.paused) video.pause();
+      } else if (!userPausedRef.current && video.paused) {
+        video.play().catch(() => {});
+      }
+
+      // La pestaña backgrounded en mobile Safari/Chrome pausa el <video>
+      // "solo": ni pausa de sala ni pausa del usuario. Al volver a foco,
+      // reintentamos play() si nada legítimo lo tiene pausado.
+      const handleVisibility = () => {
+        if (
+          document.visibilityState === "visible" &&
+          video.paused &&
+          !userPausedRef.current &&
+          !roomPaused
+        ) {
+          video.play().catch(() => {});
+        }
+      };
+      document.addEventListener("visibilitychange", handleVisibility);
+      return () => document.removeEventListener("visibilitychange", handleVisibility);
+    }, [roomPaused]);
+
     return (
       <video
         ref={videoRef}
@@ -327,7 +459,10 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
         autoPlay={autoPlay}
         preload="auto"
         className={className}
-        onPlay={onPlay}
+        onPlay={() => {
+          userPausedRef.current = false;
+          onPlay?.();
+        }}
         onPause={onPause}
         onWaiting={onWaiting}
         onPlaying={onPlaying}

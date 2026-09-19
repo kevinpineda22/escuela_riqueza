@@ -5,6 +5,21 @@
 
 ---
 
+## 2026-09-18
+
+### Lives — RLS cerrada y detección de OBS corregida (Paquete 0-1 del plan de estabilización)
+- **Contexto**: auditoría externa del sistema de lives contrastada contra el código. Plan completo con hallazgos H1–H14 en `docs/LIVE_STABILITY_PLAN.md`.
+- **Seguridad (H1)**: la policy `"Allow all for authenticated on lives"` (`FOR ALL ... USING (true)`) estaba desplegada en Supabase — cualquier alumno logueado podía editar o borrar lives. Reemplazada por `sql/migrate-lives-rls-admin.sql`: SELECT se conserva, INSERT/UPDATE/DELETE solo si `profiles.role = 'admin'`. Aplicada en producción.
+- **Detección de OBS (H4)** (`api/stream/live-input-status.ts`): evaluaba `status.connected`, campo que no existe. Cloudflare devuelve `status.current.state` (verificado con respuesta real de la cuenta). `connected` era siempre `false`.
+- **Reproductor (H5, H7, H8, H9, H10 — Paquete 3)**: `LiveHLSPlayer`, `LivePlayerControls`, `VIPLiveRoom`.
+  - Cambio de calidad con `nextLevel` (no vacía el buffer).
+  - "EN VIVO" y umbral de "atrasado" según modo de latencia (3 s low / 8 s normal, con piso 10/5 s en low).
+  - Pausa del admin ya NO desmonta el player: overlay encima, `<video>` pausado explícitamente, reanuda solo si el alumno no pausó a mano. La intención del alumno se setea desde el botón play/pause (`setUserPaused`), nunca inferida del evento `pause` nativo (Safari lo dispara al ir a background y dejaba el player congelado).
+  - Recargas con backoff 1/2/4/8 s, máximo 6 por montaje, reset solo tras 15 s estables. Al agotar: estado de error + "Reintentar" (remount).
+  - "Activar audio" espera `video.play()`; si el navegador rechaza, mantiene el aviso con hint de reintento.
+  - Tests: `LiveHLSPlayer.test.tsx` 6 → 10. Revisión adversarial con contexto fresco encontró 3 bugs en la primera implementación (poison de `userPausedRef`, reset de backoff por fragmento, timer sin limpiar) — corregidos antes de commitear.
+- **Webhook (H2/H3)**: verificado que en Cloudflare → Notifications no existe ninguna notificación de Stream Live Input. El endpoint `/api/stream/cloudflare-webhook` nunca recibió eventos de OBS; toda la sincronización real fue polling. Se corrige después de H7 (ver plan).
+
 ## 2026-09-11
 
 ### Login — la red móvil ya no tumba una sesión válida

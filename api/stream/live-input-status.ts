@@ -55,7 +55,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const data = await response.json();
     const input = data?.result;
-    const connected = input?.status?.connected === true;
+    // Cloudflare returns status as { current: { state, reason, ... }, history: [...] }
+    // (verified against a real account response, see docs/LIVE_STABILITY_PLAN.md H4).
+    const state: string | undefined = input?.status?.current?.state;
+    const connected = state === 'connected';
     const meta = input?.meta || {};
 
     return res.status(200).json({

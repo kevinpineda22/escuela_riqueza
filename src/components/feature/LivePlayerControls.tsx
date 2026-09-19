@@ -44,7 +44,11 @@ const LivePlayerControls = ({
   const [showBufferingSpinner, setShowBufferingSpinner] = useState(false);
   // Histéresis del pill "VOLVER A VIVO". LL-HLS hace que liveDelta oscile
   // naturalmente entre 2-7s por la llegada de chunks parciales. Sin histéresis,
-  // el pill flickearía constantemente. Aparece >8s, oculta solo si baja a <3s.
+  // el pill flickearía constantemente. Los umbrales son dinámicos según el
+  // `liveSyncOffset` del modo activo (ver más abajo, junto a `handleGoLive`):
+  // modo normal (offset 8) aparece >20s / oculta <12s; modo low (offset 3)
+  // tiene un piso absoluto (10s / 5s) para no caer dentro de la banda de
+  // jitter normal de 2-7s.
   const [isBehind, setIsBehind] = useState(false);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bufferTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -102,23 +106,28 @@ const LivePlayerControls = ({
     return () => clearInterval(interval);
   }, [isPlaying, playerRef]);
 
+  // Debe coincidir con `liveSyncDuration` del perfil activo en LiveHLSPlayer
+  // (3 para "low", 8 para "normal"/"smooth"). Un valor fijo hacía que el botón
+  // "EN VIVO" empeorara el retraso en modo `low`.
+  const liveSyncOffset = latencyMode === "low" ? 3 : 8;
+
   const handleGoLive = useCallback(() => {
     const video = playerRef.current?.video;
     if (!video || !video.seekable.length) return;
     try {
       const liveEdge = video.seekable.end(video.seekable.length - 1);
       if (!isFinite(liveEdge)) return;
-      // Volver al filo del vivo SIN romper el buffer: nos paramos a 8s del
-      // edge, coincidiendo con liveSyncDuration. Evita el latigazo de seek
-      // a una zona sin pre-cargar.
-      video.currentTime = Math.max(0, liveEdge - 8);
+      // Volver al filo del vivo SIN romper el buffer: nos paramos a
+      // `liveSyncOffset` del edge, coincidiendo con liveSyncDuration del modo
+      // activo. Evita el latigazo de seek a una zona sin pre-cargar.
+      video.currentTime = Math.max(0, liveEdge - liveSyncOffset);
       if (video.paused) {
         video.play().catch(() => {});
       }
     } catch (e) {
       console.warn("[LivePlayerControls] go live error:", e);
     }
-  }, [playerRef]);
+  }, [playerRef, liveSyncOffset]);
 
   useEffect(() => {
     const handle = () => {
@@ -191,13 +200,19 @@ const LivePlayerControls = ({
       ? "Auto"
       : levels.find((l) => l.index === currentLevel)?.label || "Auto";
 
-  // Histéresis dura: con liveSyncDuration:8 el delta natural oscila 6-12s,
-  // así que el pill solo aparece si pasa los 20s (atraso real visible) y
-  // desaparece cuando baja a <12s (zona normal del perfil "fluidez primero").
+  // Histéresis dura, relativa al `liveSyncOffset` del modo activo: con
+  // liveSyncDuration:8 el delta natural oscila 6-12s, así que el pill solo
+  // aparece si pasa los 20s (atraso real visible) y desaparece bajo 12s (zona
+  // normal) — sin cambios respecto al comportamiento previo. En modo `low`
+  // (offset 3) escalar proporcionalmente daría 7.5s / 4.5s, DENTRO de la
+  // banda de jitter normal de 2-7s documentada arriba — el pill flapearía.
+  // Por eso hay un piso absoluto: 10s / 5s.
+  const behindShowThreshold = Math.max(liveSyncOffset * 2.5, 10);
+  const behindHideThreshold = Math.max(liveSyncOffset * 1.5, 5);
   useEffect(() => {
-    if (isBehind && liveDelta < 12) setIsBehind(false);
-    else if (!isBehind && liveDelta > 20) setIsBehind(true);
-  }, [liveDelta, isBehind]);
+    if (isBehind && liveDelta < behindHideThreshold) setIsBehind(false);
+    else if (!isBehind && liveDelta > behindShowThreshold) setIsBehind(true);
+  }, [liveDelta, isBehind, behindHideThreshold, behindShowThreshold]);
 
   return (
     <>
