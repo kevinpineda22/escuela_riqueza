@@ -780,7 +780,7 @@ const VIPLiveRoom = () => {
                 <Users size={16} className="text-gold" />
               </div>
               Conectados
-              <span className="text-gold font-black">({viewers.length})</span>
+              <span className="text-gold font-black">({totalViewers})</span>
             </DialogTitle>
           </DialogHeader>
           <div className="max-h-[60vh] overflow-y-auto -mx-2 px-2 space-y-1">
@@ -829,6 +829,17 @@ const VIPLiveRoom = () => {
                     </div>
                   </div>
                 ))
+            )}
+            {totalViewers > viewers.length && (
+              <div className="flex items-center gap-3 p-2.5 rounded-xl border-t border-white/5 mt-1">
+                <div className="w-10 h-10 rounded-full bg-white/5 text-textMuted flex items-center justify-center ring-1 ring-white/10 shrink-0">
+                  <Users size={16} />
+                </div>
+                <p className="text-sm text-textMuted">
+                  <span className="font-bold text-white">{totalViewers - viewers.length}</span>{" "}
+                  {totalViewers - viewers.length === 1 ? "invitado" : "invitados"} por link público
+                </p>
+              </div>
             )}
           </div>
         </DialogContent>
