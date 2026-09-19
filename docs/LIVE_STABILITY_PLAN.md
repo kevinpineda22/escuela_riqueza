@@ -38,6 +38,7 @@ No construir dashboards de salud ni reestructurar la arquitectura antes de medir
 | H12 | Polling (3 s sala, 10 s Cloudflare) + Realtime sin protección contra respuestas antiguas. Una respuesta lenta puede pisar un estado más nuevo. | `src/pages/student/VIPLiveRoom.tsx` | 🟡 Bajo | Reportado por auditoría; confirmar. |
 | H13 | Camino nativo de Safari/iPhone (sin hls.js) no tiene la lógica de recuperación. | `src/components/feature/LiveHLSPlayer.tsx` | 🟡 Bajo | Reportado por auditoría; confirmar. |
 | H14 | En móvil, tocar el video para mostrar controles también alterna play/pause. | `src/components/feature/LivePlayerControls.tsx` | 🟡 Bajo | Reportado por auditoría; confirmar. |
+| H15 | Tras la pausa manual del alumno, cuando el admin pausa y reanuda la sala, el video del alumno arranca solo (debería quedar pausado). Cableado revisado: `handleTogglePlay` → `setUserPaused(true)` → efecto `roomPaused` chequea el flag. No se identificó quién dispara el `play()`. Dirección segura (el alumno ve el vivo), no bloquea. | `src/components/feature/LiveHLSPlayer.tsx` (efecto `roomPaused`) / `VIPLiveRoom.tsx` | 🟡 Bajo | Observado en live de prueba 2026-09-18 (Chrome desktop). Reproducir con consola abierta y log en `setUserPaused` / `onPlay`. |
 
 ---
 
@@ -76,6 +77,16 @@ No construir dashboards de salud ni reestructurar la arquitectura antes de medir
 - [x] Tests: `LiveHLSPlayer.test.tsx` 6 → 10 (nextLevel, backoff + cap, pausa manual vs pausa nativa, autoplay respetado). Sin tests para `LivePlayerControls` ni `VIPLiveRoom` (H7/H9/H10 sin cobertura automática — validar en el live de prueba).
 
 ### Paquete 4 — Medición (antes de decidir cualquier rediseño)
+
+**Live de prueba 2026-09-18 (preview `12a038c`, Chrome desktop, OBS real):**
+- Latencia: ~16 s modo fluidez, ~12 s baja latencia. Esperable para HLS estándar; no se persigue por ahora.
+- H7 pausa del admin: overlay encima, sin pantalla negra, reanuda solo. ✅
+- H5 cambio de calidad 480p → 1080p: fluido. ✅
+- H8 corte de OBS (stop 20 s + start): spinner, sin recarga de página, reconectó solo ~20 s después de reiniciar OBS. ✅ Durante el corte el badge sigue "EN VIVO" (webhook no conectado — Paquete 2).
+- H15 (nuevo): pausa manual del alumno no sobrevive a pausa/reanudación del admin. No bloquea.
+- Cosmético: durante la pausa de sala los controles inferiores siguen visibles con "● EN VIVO".
+- **No probado**: móvil (Chrome Android, Safari iPhone) — el preview exige login de Vercel. Probar en producción tras el merge.
+
 
 No hace falta un dashboard. Alcanza con registrar en consola o en un endpoint mínimo:
 
