@@ -44,6 +44,10 @@ const VIPLiveRoom = () => {
   const [isChatVisibleDesktop, setIsChatVisibleDesktop] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
   const [viewers, setViewers] = useState<ViewerInfo[]>([]);
+  // Total de presencias en el canal (registrados + anónimos del link público).
+  // `viewers` solo tiene registrados (con user_id) para la lista con nombres;
+  // el badge usa este total para coincidir con lo que ve la página pública.
+  const [totalViewers, setTotalViewers] = useState(0);
   const [showViewersList, setShowViewersList] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
@@ -225,6 +229,7 @@ const VIPLiveRoom = () => {
           if (v?.user_id) unique.set(v.user_id, v);
         });
         setViewers([...unique.values()]);
+        setTotalViewers(Object.keys(state).length);
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
@@ -415,14 +420,14 @@ const VIPLiveRoom = () => {
             )}
 
             {/* Viewers badge — quién está conectado al live ahora */}
-            {!isEnded && viewers.length > 0 && (
+            {!isEnded && totalViewers > 0 && (
               <button
                 onClick={() => setShowViewersList(true)}
-                aria-label={`${viewers.length} conectados`}
+                aria-label={`${totalViewers} conectados`}
                 className="flex items-center gap-1.5 sm:gap-2 bg-black/50 backdrop-blur-md border border-gold/20 text-white/85 hover:text-gold hover:border-gold/50 hover:bg-black/70 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl text-[10px] sm:text-xs font-black tracking-wide active:scale-95 transition-all"
               >
                 <Users size={12} className="text-gold" />
-                <span>{viewers.length}</span>
+                <span>{totalViewers}</span>
               </button>
             )}
           </div>
