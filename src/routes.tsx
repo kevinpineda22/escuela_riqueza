@@ -12,6 +12,7 @@ import TermsPage from "@/pages/public/TermsPage";
 import PrivacyPage from "@/pages/public/PrivacyPage";
 import ModulePreview from "@/pages/public/ModulePreview";
 import MaintenancePage from "@/pages/public/MaintenancePage";
+import PublicLiveRoom from "@/pages/public/PublicLiveRoom";
 import StudentDashboard from "@/pages/student/StudentDashboard";
 import VIPLiveRoom from "@/pages/student/VIPLiveRoom";
 import AdminMetrics from "@/pages/admin/AdminMetrics";
@@ -52,8 +53,9 @@ const PageTransition = ({ children }: { children: React.ReactNode }) => (
  * - `/login` para que el admin pueda entrar.
  * - `/admin/**` para que el admin pueda desactivar el modo mantenimiento.
  * - `/cuenta-verificada` para no romper links de confirmación de email.
+ * - `/live/:token` para que un link público compartido siga funcionando.
  */
-const MAINTENANCE_ALLOWED_PREFIXES = ["/login", "/admin", "/cuenta-verificada"];
+const MAINTENANCE_ALLOWED_PREFIXES = ["/login", "/admin", "/cuenta-verificada", "/live"];
 
 const isMaintenanceAllowedPath = (pathname: string) =>
   MAINTENANCE_ALLOWED_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
@@ -95,6 +97,9 @@ const AppRoutes = () => {
         <Route path="/terminos" element={<PageTransition><TermsPage /></PageTransition>} />
         <Route path="/privacidad" element={<PageTransition><PrivacyPage /></PageTransition>} />
         <Route path="/explorar/:intelligenceId" element={<PageTransition><ModulePreview /></PageTransition>} />
+
+        {/* Link público de live — sin login, gateado por share_token en la RPC */}
+        <Route path="/live/:token" element={<PageTransition><PublicLiveRoom /></PageTransition>} />
 
         {/* Estudiantes (cualquier plan logueado) */}
         <Route
