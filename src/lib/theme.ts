@@ -68,7 +68,9 @@ export function applyTheme(
   meta?.setAttribute("content", THEME_COLOR[theme]);
 }
 
-// El selector se publica recién cuando TODAS las rutas activas estén adaptadas
-// (fase 6 de docs/MODO_CLARO_ESPECIFICACION.md). Hasta entonces solo existe en
-// desarrollo: una pantalla clara a medias no se le muestra a nadie.
-export const APPEARANCE_SELECTOR_ENABLED = import.meta.env.DEV;
+// Selector publicado en la fase 6 de docs/MODO_CLARO_ESPECIFICACION.md.
+// Reversión ante una regresión en claro: volver esto a `import.meta.env.DEV`
+// SOLO oculta el selector; quien ya eligió claro seguiría en claro. Para
+// devolver a todos al oscuro validado sin borrar su preferencia, sumar además
+// data-theme-lock="dark" al <html> de index.html.
+export const APPEARANCE_SELECTOR_ENABLED = true;

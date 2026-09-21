@@ -126,26 +126,31 @@
 | 1. Fundaciones | Tokens semánticos, `useTheme`, `ThemeSync`, primer paint sin destello | ✅ commit `87ca9fc` |
 | 2. Compartidos | Primitivos UI, Header/Footer, Toaster, `AppearanceToggle` | ✅ commit `87ca9fc` |
 | 3. Públicas | Actos de landing, auth, páginas estáticas | ✅ commit `87ca9fc` |
-| 4. Alumnos y multimedia | Dashboard, comunidad, chat, envoltorios de video/podcast | ✅ en working tree, **sin commitear** |
-| 5. Administración | Páginas admin, CRUD visual, uploads, charts | ✅ en working tree, **sin commitear** |
-| 6. Cierre | Matriz de QA visual + activación del selector | ❌ **pendiente** |
+| 4. Alumnos y multimedia | Dashboard, comunidad, chat, envoltorios de video/podcast | ✅ commit `4573853` |
+| 5. Administración | Páginas admin, CRUD visual, uploads, charts | ✅ commit `4573853` |
+| 6. Cierre | Matriz de QA visual + activación del selector | ✅ selector activado 2026-09-21 (ver pendientes abajo) |
 
-**Qué bloquea la fase 6** — `src/lib/theme.ts`:
+El selector de apariencia está publicado: `APPEARANCE_SELECTOR_ENABLED = true` en `src/lib/theme.ts`. El tema por defecto sigue siendo oscuro; claro es opt-in.
 
-```ts
-export const APPEARANCE_SELECTOR_ENABLED = import.meta.env.DEV;
-```
+**Revisado en navegador (2026-09-19 y 2026-09-21)**, claro y oscuro:
+- Anónimo: landing completa, `/planes`, `/login`, 404; header a 320px sin choques entre logo, selector y accesos.
+- VIP: dashboard (todas las pestañas, lección, certificados) y `/vip-live`.
+- Admin: contenido, lives, métricas, usuarios, ajustes y sponsors.
+- Link público `/live/:token` en replay: queda dentro de la isla oscura del escenario.
+- Selector: menú sólido en claro; cambiar de tema con scroll a mitad de página conserva posición, foco y la misma ventana (sin recarga).
+- Toasts success/error/info/warning con descripción y acción, legibles en ambos temas.
+- Arranque: preferencia inexistente, JSON inválido y registro viejo sin tema ⇒ oscuro, conservando animaciones/latencia.
+- Oscuro idéntico: snapshot de colores calculados antes/después (`git stash`) en rutas públicas, dashboard, `/vip-live` y 6 rutas admin; solo diferencias equivalentes (oklab vs rgba) y los envoltorios nuevos del logo.
 
-El selector de apariencia solo existe en desarrollo. Quitar ese gate publica el modo claro a los usuarios reales, y la puerta de salida de la spec exige revisión visual humana previa (contraste sobre fondos compuestos, shimmer, gradientes, logos transparentes). **No se activó porque la plataforma está en vivo** — decisión del 2026-09-19.
+**No verificado** (queda abierto, no se da por aprobado):
+- Sesiones free e individual (solo se vieron VIP y admin).
+- Replay reproduciendo de verdad: en local `/api/stream/recording-url` da 502 (no corre la función de Vercel), así que solo se vio el estado de error.
+- Live en curso con la lista de conectados nueva (`LiveViewersDialog`): no había transmisión; el diálogo usa las mismas clases ya revisadas en la sala VIP.
+- Viewports 768/1024/1440 y móvil horizontal de forma sistemática; teclado móvil sobre chat.
 
-**Verificación automática al 2026-09-19** (no reemplaza la revisión visual):
+**Reversión:** `APPEARANCE_SELECTOR_ENABLED` de vuelta a `import.meta.env.DEV` solo oculta el selector. Para devolver a todos al oscuro sin borrar preferencias, sumar `data-theme-lock="dark"` al `<html>` de `index.html`.
 
-- `npm run typecheck` → limpio.
-- `npx vitest run` → 18 archivos, 137 tests.
-- `node scripts/theme-audit.mjs $(git ls-files 'src/**/*.tsx' 'src/**/*.ts')` → 61 hallazgos, todos dentro de islas oscuras declaradas (`data-theme="dark"`) o scrims sobre foto de avatar. Antes de restaurar las fases 4-5 eran 143.
-- Paleta legacy (`bg-dark`, `text-textMain`, …): 3 usos, los 3 intencionales (`light:bg-darker` = placa oscura detrás del logo en claro).
-
-**Para retomar**: las fases 4 y 5 están respaldadas además en `git stash` (`stash@{0}: On johan: fase6-admin-backup`). Aplica limpio con 3-way sobre `d598db0`.
+**Verificación automática (2026-09-21):** `npm run typecheck` limpio; `npx vitest run` → 19 archivos, 142 tests.
 
 ## 5. Plan de fases de estilo
 
