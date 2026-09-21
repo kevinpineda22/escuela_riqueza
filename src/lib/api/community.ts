@@ -56,7 +56,7 @@ const COMMENT_SELECT = `
   author:profiles!community_comments_author_id_fkey(id, full_name, avatar_url, role, plan)
 `;
 
-const WRITE_BLOCKED_MESSAGE = "Con el plan Individual o VIP podés publicar, comentar y reaccionar.";
+const WRITE_BLOCKED_MESSAGE = "Con el plan Individual o VIP puedes publicar, comentar y reaccionar.";
 
 /**
  * Defensa en profundidad: la RLS es el gate real, pero validamos también acá
@@ -77,7 +77,7 @@ async function assertCanWriteCommunity(): Promise<void> {
 
   const allowed = canWriteCommunity(profile.plan as Plan, profile.role as UserRole);
   if (!allowed) {
-    toast.error("Mejorá tu plan para participar", { description: WRITE_BLOCKED_MESSAGE });
+    toast.error("Mejora tu plan para participar", { description: WRITE_BLOCKED_MESSAGE });
     throw new Error("Tu plan actual no permite escribir en la comunidad");
   }
 }

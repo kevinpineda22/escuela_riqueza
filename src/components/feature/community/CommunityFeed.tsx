@@ -142,7 +142,7 @@ export function CommunityFeed({ currentUserId, isAdmin, canWrite }: CommunityFee
             <div>
               <h3 className="font-bold text-foreground-strong">Estás viendo la comunidad en modo lectura</h3>
               <p className="mt-0.5 text-sm text-foreground-muted">
-                Con el plan Individual o VIP podés publicar, comentar y reaccionar.
+                Con el plan Individual o VIP puedes publicar, comentar y reaccionar.
               </p>
             </div>
           </div>
