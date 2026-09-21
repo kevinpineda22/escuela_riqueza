@@ -237,7 +237,7 @@ Ver `env.example` (copiar a `.env.local` para desarrollo). Reglas:
 - Polling 3s como fallback de Realtime.
 - Chat en `Supabase Realtime` (canal `live:{liveId}`) — broadcast con tabla `live_messages` y RLS por suscripción.
 - Para baja latencia: OBS en CBR, keyframe 1s, 30fps. Para <1s real se requiere migrar OBS a WHIP (pendiente, ver CHANGELOG 2026-05-16).
-- **Link público**: el admin puede marcar una sala `is_public` (`AdminLiveManager`) y compartir `/live/<share_token>`. La ruta pública (`PublicLiveRoom`) no requiere login ni valida plan; el estado se obtiene solo por polling a `get_public_live` (RPC token-gated) y el chat es de solo lectura vía `get_public_live_messages`. Ver `sql/migrate-lives-public-link.sql`.
+- **Link público**: el admin puede marcar una sala `is_public` (`AdminLiveManager`) y compartir `/live/<share_token>`. La ruta pública (`PublicLiveRoom`) no requiere login ni valida plan; el estado se obtiene solo por polling a `get_public_live` (RPC token-gated) y el chat es de solo lectura vía `get_public_live_messages` (con sesión iniciada, chat completo). También permite ver la grabación una vez finalizado el en vivo (replay sin chat ni presencia; R2 vía `share_token` en `/api/stream/recording-url`, Stream vía iframe público). Ver `sql/migrate-lives-public-link.sql`.
 
 #### 7.4.1 Webhook de Cloudflare Stream (sync OBS ↔ panel)
 

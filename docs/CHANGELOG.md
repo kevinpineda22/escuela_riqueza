@@ -5,6 +5,17 @@
 
 ---
 
+## 2026-09-21
+
+### Link público de live — identidad, lista de conectados y replay
+- **Lista de conectados compartida**: el diálogo "Conectados" de `VIPLiveRoom` se extrajo a `src/components/feature/LiveViewersDialog.tsx` (props `open`, `onOpenChange`, `viewers`, `totalViewers`, `currentUserId`) y ahora también lo usa `PublicLiveRoom`. El tipo `ViewerInfo` se movió a `src/types/live.ts`.
+- **Identidad en el link público**: si quien entra por `/live/:token` tiene sesión iniciada, se trackea presencia con la MISMA key (`user.id`) y el MISMO payload `ViewerInfo` que `VIPLiveRoom` — aparece por su nombre en la lista de conectados de todos, y NO se duplica el conteo si esa persona también abre la sala VIP (comparten el canal `live_presence:${live.id}`). Sin sesión, se conserva el tracking anónimo (`anon-<uuid>`) sin cambios.
+- **Replay (VOD) en el link público**: cuando el live termina (`status === 'ended'`) y tiene grabación, `PublicLiveRoom` muestra la grabación en vez de la pantalla de "finalizado" — sin chat ni presencia. Prioriza R2 sobre Stream (mismo criterio que `RecordingPlayer` del panel admin).
+  - **Grabaciones en Cloudflare Stream**: se sirven vía iframe público `https://<customer-code>.cloudflarestream.com/<uid>/iframe`, sin token firmado (no requieren auth).
+  - **Grabaciones en R2**: `api/stream/recording-url.ts` ahora acepta dos formas de body — `{ live_id }` (autenticada, sin cambios de comportamiento) o `{ share_token }` (nueva, sin JWT): valida el token contra `get_public_live` (RPC `SECURITY DEFINER`, ya gateada por `is_public = true`), aplica `applyCors` + rate limit propio (`recording-url-public`, por IP) y firma la URL de R2 con la misma función (`signR2RecordingUrl`, extraída y testeada) que la rama autenticada. No se tocó la RPC `get_public_live` — ya es `SETOF public.lives`, todas las columnas de grabación pasan sin cambios.
+  - Copy del admin: la nota del link público en `AdminLiveManager` ahora aclara que también permite ver la grabación cuando el en vivo termina.
+- **Hotfixes previos (2026-09-19) documentados acá por no estar registrados antes**: la página pública ya no expulsa al espectador por un solo poll fallido a `get_public_live` (requiere 2 misses consecutivos sin fila, nunca por error de red); y con sesión iniciada en el link público se muestra el chat completo (`LiveChat`, con envío) en vez del de solo lectura.
+
 ## 2026-09-18
 
 ### Lives — RLS cerrada y detección de OBS corregida (Paquete 0-1 del plan de estabilización)

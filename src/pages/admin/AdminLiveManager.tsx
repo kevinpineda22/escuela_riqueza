@@ -1073,7 +1073,7 @@ const AdminLiveManager = () => {
                       </button>
                     </div>
                     <p className="text-[10px] text-yellow-500/80 leading-relaxed">
-                      Cualquier persona con este link puede ver el en vivo sin registrarse.
+                      Cualquier persona con este link puede ver el en vivo sin registrarse. También permite ver la grabación cuando el en vivo termine.
                     </p>
                   </div>
                 )}
