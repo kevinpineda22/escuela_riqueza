@@ -754,7 +754,7 @@ const VIPLiveRoom = () => {
             isChatVisibleDesktop ? "w-80 lg:w-[400px] opacity-100" : "w-0 opacity-0"
           )}
         >
-          <LiveChat liveId={live.id} onIncomingMessage={handleIncomingMessage} />
+          <LiveChat liveId={live.id} onIncomingMessage={handleIncomingMessage} showWelcome={live.status === "scheduled"} />
         </div>
       )}
 
@@ -762,7 +762,7 @@ const VIPLiveRoom = () => {
           Sin toggle, sin FAB. El fullscreen lo maneja el botón nativo del player. */}
       {!isDesktop && (
         <div className="flex-1 min-h-0 bg-surface-page border-t border-brand/30 shadow-[0_-20px_40px_-15px_rgba(0,0,0,0.7)] light:shadow-[0_-16px_32px_-18px_rgba(60,45,15,0.3)]">
-          <LiveChat liveId={live.id} onIncomingMessage={handleIncomingMessage} />
+          <LiveChat liveId={live.id} onIncomingMessage={handleIncomingMessage} showWelcome={live.status === "scheduled"} />
         </div>
       )}
 

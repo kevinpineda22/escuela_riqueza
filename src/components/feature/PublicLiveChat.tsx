@@ -10,6 +10,8 @@ import { mergeMessagesById } from "@/lib/chat/mergeMessagesById";
 interface PublicLiveChatProps {
   token: string;
   loginPath: string;
+  /** Mensaje de bienvenida fijado; solo tiene sentido antes de que arranque el vivo. */
+  showWelcome?: boolean;
 }
 
 const SYSTEM_MESSAGE: PublicChatMessage = {
@@ -30,7 +32,7 @@ const BOTTOM_THRESHOLD_PX = 80;
  * vía la función `get_public_live_messages` (token-gated, sin sesión) y
  * reemplaza el input por un CTA de login.
  */
-const PublicLiveChat = ({ token, loginPath }: PublicLiveChatProps) => {
+const PublicLiveChat = ({ token, loginPath, showWelcome = true }: PublicLiveChatProps) => {
   const [messages, setMessages] = useState<PublicChatMessage[]>([SYSTEM_MESSAGE]);
   const [loading, setLoading] = useState(true);
   const listRef = useRef<HTMLDivElement>(null);
@@ -107,7 +109,7 @@ const PublicLiveChat = ({ token, loginPath }: PublicLiveChatProps) => {
           </div>
         ) : (
           <AnimatePresence initial={false}>
-            {messages.map((msg) => (
+            {(showWelcome ? messages : messages.filter((m) => m.id !== SYSTEM_MESSAGE.id)).map((msg) => (
               <motion.div
                 key={msg.id}
                 initial={{ opacity: 0, x: -20, scale: 0.95 }}
