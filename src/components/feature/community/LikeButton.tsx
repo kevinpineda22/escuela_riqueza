@@ -33,8 +33,8 @@ export function LikeButton({ targetType, targetId, liked, count, size = "md", re
   const handleClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (readOnly) {
-      toast.error("Mejorá tu plan para participar", {
-        description: "Con el plan Individual o VIP podés publicar, comentar y reaccionar.",
+      toast.error("Mejora tu plan para participar", {
+        description: "Con el plan Individual o VIP puedes publicar, comentar y reaccionar.",
       });
       return;
     }
