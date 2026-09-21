@@ -1,16 +1,22 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
-import { Clock, Tv, Radio, Loader2, VideoOff, ArrowLeft, Volume2, Users } from "lucide-react";
+import { Clock, Tv, Radio, Loader2, VideoOff, ArrowLeft, Volume2, Users, Video } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
-import { getPublicLive, type LiveEvent } from "@/lib/api/stream/lives";
+import { getPublicLive, fetchPublicRecordingUrl, type LiveEvent } from "@/lib/api/stream/lives";
 import { useIsDesktop } from "@/hooks/useMediaQuery";
 import LiveHLSPlayer, { type LiveHLSPlayerHandle, type QualityLevel } from "@/components/feature/LiveHLSPlayer";
 import LivePlayerControls from "@/components/feature/LivePlayerControls";
 import PublicLiveChat from "@/components/feature/PublicLiveChat";
 import LiveChat from "@/components/feature/LiveChat";
+import LiveViewersDialog from "@/components/feature/LiveViewersDialog";
 import { useAuthStore } from "@/stores/auth.store";
+import type { ViewerInfo } from "@/types/live";
+
+const CF_RECORDING_CUSTOMER_CODE =
+  (import.meta.env.VITE_CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN || "").match(/customer-([^.]+)/)?.[1] || "";
+const CF_RECORDING_HOST = CF_RECORDING_CUSTOMER_CODE ? `customer-${CF_RECORDING_CUSTOMER_CODE}.cloudflarestream.com` : "";
 
 const CF_CUSTOMER_CODE = (import.meta.env.VITE_CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN || "").match(/customer-([^.]+)/)?.[1] || "";
 
@@ -33,10 +39,13 @@ function getOrCreateAnonId(): string {
 /**
  * Sala pública de un live: sin login, sin verificación de plan. Replica los
  * estados visuales de VIPLiveRoom (countdown, en vivo, pausa, finalizado,
- * error de reproductor) pero SIN la lista de conectados (solo el contador) y
- * SIN llamadas a /api/stream/* (requieren auth). El estado de la sala se
- * obtiene únicamente vía polling de `get_public_live` — Realtime en `lives`
- * no está garantizado para clientes anónimos.
+ * error de reproductor), incluida la lista de conectados (`LiveViewersDialog`,
+ * compartida con VIPLiveRoom) — con sesión iniciada, la identidad se trackea
+ * igual que en la sala VIP. El estado de la sala se obtiene únicamente vía
+ * polling de `get_public_live` — Realtime en `lives` no está garantizado para
+ * clientes anónimos. Finalizado el en vivo, si hay grabación se muestra el
+ * replay (sin chat ni presencia); la única llamada autenticada de `/api/stream/*`
+ * que existe para anónimos es `recording-url` vía `share_token` (sin JWT).
  */
 const PublicLiveRoom = () => {
   const { token } = useParams<{ token: string }>();
@@ -48,7 +57,11 @@ const PublicLiveRoom = () => {
   const [timeLeft, setTimeLeft] = useState({ hours: 0, minutes: 0, seconds: 0 });
   const [audioPromptDismissed, setAudioPromptDismissed] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
-  const [viewerCount, setViewerCount] = useState(0);
+  const [viewers, setViewers] = useState<ViewerInfo[]>([]);
+  // Total de presencias en el canal (registrados con sesión + anónimos). Igual
+  // criterio que VIPLiveRoom: `viewers` solo trae registrados (con user_id).
+  const [totalViewers, setTotalViewers] = useState(0);
+  const [showViewersList, setShowViewersList] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
   const [qualityLevels, setQualityLevels] = useState<QualityLevel[]>([]);
@@ -60,6 +73,8 @@ const PublicLiveRoom = () => {
   const isDesktop = useIsDesktop();
   const livePlayerRef = useRef<LiveHLSPlayerHandle | null>(null);
   const anonIdRef = useRef<string>(getOrCreateAnonId());
+  const [r2RecordingUrl, setR2RecordingUrl] = useState<string | null>(null);
+  const [r2RecordingLoading, setR2RecordingLoading] = useState(false);
 
   const isLive = live?.status === "live" && !live?.is_paused;
   const isEnded = live?.status === "ended";
@@ -67,6 +82,14 @@ const PublicLiveRoom = () => {
   const startsAt = live?.starts_at ? new Date(live.starts_at).getTime() : 0;
   const showIframe = live?.status === "live";
   const hasStreamId = Boolean(live?.stream_live_input_id);
+
+  // Replay: grabación disponible una vez finalizado el en vivo. Prioriza R2
+  // (igual criterio que `RecordingPlayer`, usado en el panel admin) sobre
+  // Stream — si hay `recording_r2_key`, la grabación ya fue archivada.
+  const isR2Recording = isEnded && live?.recording_storage === "r2" && Boolean(live?.recording_r2_key);
+  const isStreamRecording = isEnded && !isR2Recording && Boolean(live?.recording_stream_uid);
+  const hasRecording = isR2Recording || isStreamRecording;
+  const isReplay = isEnded && hasRecording;
 
   const loginPath = token ? `/login?returnTo=${encodeURIComponent(`/live/${token}`)}` : "/login";
 
@@ -192,24 +215,42 @@ const PublicLiveRoom = () => {
     return () => clearInterval(timer);
   }, [live?.id, live?.status, live?.starts_at, showIframe, isEnded, startsAt]);
 
-  // Presencia anónima: cuenta junto con los viewers logueados de la misma sala
-  // porque comparten el mismo canal `live_presence:${live.id}`.
+  // Presencia: con sesión iniciada se trackea IGUAL que VIPLiveRoom (misma key
+  // `user.id`, mismo payload `ViewerInfo`) para no duplicar el conteo si esa
+  // persona también abre la sala VIP — comparten el mismo canal
+  // `live_presence:${live.id}`. Sin sesión, se conserva el tracking anónimo
+  // (key `anon-<uuid>`, sin nombre). En modo replay (finalizado) no se trackea
+  // presencia — no hay "conectados" en una grabación.
   useEffect(() => {
-    if (!live?.id) return;
+    if (!live?.id || isEnded) return;
 
-    const anonKey = `anon-${anonIdRef.current}`;
-    const channel = supabase.channel(`live_presence:${live.id}`, {
-      config: { presence: { key: anonKey } },
-    });
+    const channel = sessionUser
+      ? supabase.channel(`live_presence:${live.id}`, { config: { presence: { key: sessionUser.id } } })
+      : supabase.channel(`live_presence:${live.id}`, { config: { presence: { key: `anon-${anonIdRef.current}` } } });
+
+    const myPresence: ViewerInfo | { name: string; anonymous: true; online_at: string } = sessionUser
+      ? {
+          user_id: sessionUser.id,
+          full_name: sessionUser.fullName || "Usuario",
+          avatar_url: sessionUser.avatarUrl,
+          plan: sessionUser.plan,
+          online_at: new Date().toISOString(),
+        }
+      : { name: "Invitado", anonymous: true, online_at: new Date().toISOString() };
 
     channel
       .on("presence", { event: "sync" }, () => {
-        const state = channel.presenceState();
-        setViewerCount(Object.keys(state).length);
+        const state = channel.presenceState<ViewerInfo>();
+        const unique = new Map<string, ViewerInfo>();
+        Object.values(state).flat().forEach((v) => {
+          if (v?.user_id) unique.set(v.user_id, v);
+        });
+        setViewers([...unique.values()]);
+        setTotalViewers(Object.keys(state).length);
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
-          await channel.track({ name: "Invitado", anonymous: true, online_at: new Date().toISOString() });
+          await channel.track(myPresence);
         }
       });
 
@@ -217,7 +258,23 @@ const PublicLiveRoom = () => {
       channel.untrack().catch(() => {});
       supabase.removeChannel(channel);
     };
-  }, [live?.id]);
+  }, [live?.id, isEnded, sessionUser?.id, sessionUser?.fullName, sessionUser?.avatarUrl, sessionUser?.plan]);
+
+  // Replay R2: pide la URL firmada de vida corta vía el link público
+  // (`share_token`, sin JWT) apenas se detecta que la grabación está en R2.
+  useEffect(() => {
+    if (!isR2Recording || !token) return;
+    let active = true;
+    setR2RecordingLoading(true);
+    fetchPublicRecordingUrl(token).then((url) => {
+      if (!active) return;
+      setR2RecordingUrl(url);
+      setR2RecordingLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [isR2Recording, token]);
 
   if (loading) {
     return (
@@ -256,7 +313,8 @@ const PublicLiveRoom = () => {
 
   // Con sesión iniciada (llegó por el link y se logueó para participar) se usa
   // el chat completo, que ya sabe escribir; sin sesión, el de solo lectura.
-  const chatNode = !token ? null : sessionUser ? (
+  // En replay (grabación) no hay chat ni presencia — layout simple: header + player.
+  const chatNode = !token || isReplay ? null : sessionUser ? (
     <LiveChat liveId={live.id} />
   ) : (
     <PublicLiveChat token={token} loginPath={loginPath} />
@@ -266,9 +324,9 @@ const PublicLiveRoom = () => {
 
   return (
     <div className="h-[100dvh] bg-black light:bg-surface-page text-foreground flex flex-col md:flex-row overflow-hidden font-sans">
-      {/* Isla oscura: escenario, intro, countdown y controles son iguales en ambos
+      {/* Isla oscura: escenario, intro, countdown, replay y controles son iguales en ambos
           temas (spec §3.4). El chat y la lista de conectados, afuera, sí se adaptan. */}
-      <div data-theme="dark" className={cn("flex flex-col relative", isDesktop ? "flex-1 md:h-screen" : mobileVideoHeightClass)}>
+      <div data-theme="dark" className={cn("flex flex-col relative", isReplay || isDesktop ? "flex-1 md:h-screen" : mobileVideoHeightClass)}>
         {/* Header */}
         <motion.div
           initial={{ y: -100 }}
@@ -298,7 +356,11 @@ const PublicLiveRoom = () => {
           </div>
 
           <div className="flex flex-col items-end gap-2 sm:gap-3 pointer-events-auto shrink-0">
-            {isEnded ? (
+            {isEnded && hasRecording ? (
+              <div className="flex items-center gap-1.5 sm:gap-2.5 bg-brand/15 backdrop-blur-md border border-brand/40 text-accent px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl text-[9px] sm:text-[10px] font-black tracking-widest">
+                <Video size={12} /> GRABACIÓN DEL EN VIVO
+              </div>
+            ) : isEnded ? (
               <div className="flex items-center gap-1.5 sm:gap-2.5 bg-gray-600/20 backdrop-blur-md border border-gray-600/50 text-foreground-muted px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl text-[9px] sm:text-[10px] font-black tracking-widest">
                 <VideoOff size={12} /> FINALIZADO
               </div>
@@ -326,11 +388,15 @@ const PublicLiveRoom = () => {
               </div>
             )}
 
-            {!isEnded && viewerCount > 0 && (
-              <div className="flex items-center gap-1.5 sm:gap-2 bg-black/50 backdrop-blur-md border border-brand/20 text-fg-85 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl text-[10px] sm:text-xs font-black tracking-wide">
+            {!isEnded && totalViewers > 0 && (
+              <button
+                onClick={() => setShowViewersList(true)}
+                aria-label={`${totalViewers} conectados`}
+                className="flex items-center gap-1.5 sm:gap-2 bg-black/50 backdrop-blur-md border border-brand/20 text-fg-85 hover:text-accent hover:border-brand/50 hover:bg-black/70 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl text-[10px] sm:text-xs font-black tracking-wide active:scale-95 transition-all"
+              >
                 <Users size={12} className="text-accent" />
-                <span>{viewerCount}</span>
-              </div>
+                <span>{totalViewers}</span>
+              </button>
             )}
           </div>
         </motion.div>
@@ -468,6 +534,35 @@ const PublicLiveRoom = () => {
                   </AnimatePresence>
                 </div>
               </motion.div>
+            ) : isEnded && hasRecording ? (
+              <motion.div key="replay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full h-full relative bg-black flex items-center justify-center p-4 sm:p-8">
+                {isR2Recording ? (
+                  r2RecordingLoading ? (
+                    <Loader2 className="w-8 h-8 animate-spin text-accent" />
+                  ) : r2RecordingUrl ? (
+                    <video src={r2RecordingUrl} controls autoPlay className="w-full h-full max-h-full rounded-2xl bg-black" />
+                  ) : (
+                    <div className="text-center p-8">
+                      <VideoOff size={64} className="mx-auto text-fg-20 mb-6" />
+                      <h2 className="text-2xl font-bold text-foreground-strong mb-2">No pudimos cargar la grabación</h2>
+                      <p className="text-foreground-muted max-w-md mx-auto">Prueba recargar la página en unos minutos.</p>
+                    </div>
+                  )
+                ) : CF_RECORDING_HOST ? (
+                  <iframe
+                    src={`https://${CF_RECORDING_HOST}/${live.recording_stream_uid}/iframe`}
+                    allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
+                    allowFullScreen
+                    className="w-full h-full rounded-2xl border-none bg-black"
+                    title={`Grabación: ${live.title}`}
+                  />
+                ) : (
+                  <div className="text-center p-8">
+                    <VideoOff size={64} className="mx-auto text-fg-20 mb-6" />
+                    <h2 className="text-2xl font-bold text-foreground-strong mb-2">No pudimos cargar la grabación</h2>
+                  </div>
+                )}
+              </motion.div>
             ) : isEnded ? (
               <motion.div key="ended" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full h-full flex items-center justify-center bg-black/80 relative">
                 <div className="text-center p-8 z-10">
@@ -548,7 +643,7 @@ const PublicLiveRoom = () => {
           </AnimatePresence>
         </div>
 
-        {isDesktop && (
+        {isDesktop && !isReplay && (
           <button
             onClick={() => setIsChatVisibleDesktop((v) => !v)}
             aria-label={isChatVisibleDesktop ? "Ocultar chat" : "Mostrar chat"}
@@ -559,7 +654,7 @@ const PublicLiveRoom = () => {
         )}
       </div>
 
-      {isDesktop ? (
+      {!isReplay && (isDesktop ? (
         <div
           className={cn(
             "md:h-screen bg-surface-page shrink-0 z-50 overflow-hidden transition-[width,opacity] duration-300 ease-in-out",
@@ -572,7 +667,15 @@ const PublicLiveRoom = () => {
         <div className="flex-1 min-h-0 bg-surface-page border-t border-brand/30 shadow-[0_-20px_40px_-15px_rgba(0,0,0,0.7)] light:shadow-[0_-16px_32px_-18px_rgba(60,45,15,0.3)]">
           {chatNode}
         </div>
-      )}
+      ))}
+
+      <LiveViewersDialog
+        open={showViewersList}
+        onOpenChange={setShowViewersList}
+        viewers={viewers}
+        totalViewers={totalViewers}
+        currentUserId={sessionUser?.id}
+      />
     </div>
   );
 };
