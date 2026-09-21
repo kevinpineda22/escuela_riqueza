@@ -7,6 +7,12 @@
 
 ## 2026-09-21
 
+### Comunidad — Free en modo lectura, Certificado oculto para Free
+- **Decisión de producto**: Free ya no queda excluido de "Comunidad VIP" — puede ver posts y comentarios (solo lectura), pero no publicar, comentar ni reaccionar. Free tampoco ve la pestaña "Certificado" (no puede completar módulos, no tiene insignias que mostrar).
+- **RLS** (`sql/migrate-community-free-readonly.sql`, aplicar manualmente en Supabase): nuevo helper `public.can_read_community(uid)` (true para `role='admin'` o `plan IN ('free','individual','vip')`) reemplaza `is_vip_or_admin` en las policies SELECT de `community_posts`, `community_comments` y `community_likes`. `is_vip_or_admin` sigue intacto como gate de escritura (INSERT/UPDATE/DELETE). El storage de imágenes (`community_images`) ya era público en SELECT, sin cambios ahí.
+- **Frontend**: `src/lib/plans.ts` (nuevo) centraliza `canReadCommunity`, `canWriteCommunity`, `canAccessCertificates` — admin siempre `true`, free lee comunidad pero no escribe ni ve certificados. `StudentDashboard.tsx` y `Header.tsx` ocultan "Certificado" para Free y muestran "Comunidad VIP" para todos los planes. `CommunityFeed`/`PostDetail`/`PostCard`/`LikeButton` reciben `canWrite`: ocultan composer, reply y like para Free y muestran una tarjeta CTA ("Estás viendo la comunidad en modo lectura" → `/planes`). `src/lib/api/community.ts` agrega `assertCanWriteCommunity()` como defensa en profundidad antes de cualquier escritura (RLS sigue siendo el gate real).
+- **Modelo de seguridad**: lectura = free/individual/vip/admin; escritura = individual/vip/admin. Ver `sql/migrate-community-free-readonly.sql` para el detalle de políticas.
+
 ### Live — botón Picture-in-Picture y mensaje de bienvenida solo antes de iniciar
 - **Segundo plano en Android**: Chrome pausa cualquier `<video>` de una pestaña oculta (política del navegador, no bug nuestro). Nuevo botón de ventana flotante en `LivePlayerControls` (`requestPictureInPicture` / `webkitSetPresentationMode` en iOS) que mantiene el video sonando al cambiar de app o bloquear el teléfono. Solo se muestra si el navegador lo soporta.
 - **Mensaje "Iniciamos en instantes"**: seguía fijado con el vivo ya iniciado. `LiveChat` y `PublicLiveChat` reciben `showWelcome`, que las salas pasan como `status === "scheduled"`.

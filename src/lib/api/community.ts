@@ -1,4 +1,7 @@
 import { supabase } from "@/lib/supabase";
+import { canWriteCommunity } from "@/lib/plans";
+import { toast } from "@/components/ui/toaster";
+import type { Plan, UserRole } from "@/types/user";
 
 export type CommunityCategory = "pregunta" | "discusion" | "recurso" | "otro";
 export type CommunitySort = "recent" | "popular";
@@ -52,6 +55,32 @@ const COMMENT_SELECT = `
   id, post_id, author_id, parent_id, body, like_count, created_at, updated_at,
   author:profiles!community_comments_author_id_fkey(id, full_name, avatar_url, role, plan)
 `;
+
+const WRITE_BLOCKED_MESSAGE = "Con el plan Individual o VIP podés publicar, comentar y reaccionar.";
+
+/**
+ * Defensa en profundidad: la RLS es el gate real, pero validamos también acá
+ * antes de intentar cualquier escritura, para dar feedback claro si algún
+ * afordance de UI quedó visible por error para un usuario Free.
+ */
+async function assertCanWriteCommunity(): Promise<void> {
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) throw new Error("No autenticado");
+
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .select("plan, role")
+    .eq("id", userData.user.id)
+    .single();
+
+  if (error || !profile) throw new Error("No se pudo verificar tu plan");
+
+  const allowed = canWriteCommunity(profile.plan as Plan, profile.role as UserRole);
+  if (!allowed) {
+    toast.error("Mejorá tu plan para participar", { description: WRITE_BLOCKED_MESSAGE });
+    throw new Error("Tu plan actual no permite escribir en la comunidad");
+  }
+}
 
 async function getMyLikes(targetType: LikeTarget, ids: string[]): Promise<Set<string>> {
   if (ids.length === 0) return new Set();
@@ -112,6 +141,7 @@ export async function createPost(input: {
   image_url?: string;
   is_pinned?: boolean;
 }): Promise<CommunityPost> {
+  await assertCanWriteCommunity();
   const { data: user } = await supabase.auth.getUser();
   if (!user.user) throw new Error("No autenticado");
 
@@ -133,11 +163,14 @@ export async function createPost(input: {
 }
 
 export async function deletePost(id: string): Promise<void> {
+  // Sin guard de plan: borrar contenido propio lo permite RLS (author_id = auth.uid()),
+  // y un usuario que bajó a Free debe poder eliminar lo que publicó.
   const { error } = await supabase.from("community_posts").delete().eq("id", id);
   if (error) throw error;
 }
 
 export async function togglePinPost(id: string, pinned: boolean): Promise<void> {
+  await assertCanWriteCommunity();
   const { error } = await supabase
     .from("community_posts")
     .update({ is_pinned: pinned })
@@ -167,6 +200,7 @@ export async function createComment(input: {
   body: string;
   parentId?: string | null;
 }): Promise<CommunityComment> {
+  await assertCanWriteCommunity();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) throw new Error("No autenticado");
 
@@ -186,11 +220,14 @@ export async function createComment(input: {
 }
 
 export async function deleteComment(id: string): Promise<void> {
+  // Sin guard de plan: borrar contenido propio lo permite RLS (author_id = auth.uid()),
+  // y un usuario que bajó a Free debe poder eliminar lo que publicó.
   const { error } = await supabase.from("community_comments").delete().eq("id", id);
   if (error) throw error;
 }
 
 export async function toggleLike(targetType: LikeTarget, targetId: string): Promise<boolean> {
+  await assertCanWriteCommunity();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) throw new Error("No autenticado");
   const userId = userData.user.id;

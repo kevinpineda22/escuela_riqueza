@@ -2,6 +2,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Heart } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { toast } from "@/components/ui/toaster";
 import { toggleLike, type LikeTarget } from "@/lib/api/community";
 
 interface LikeButtonProps {
@@ -10,10 +11,12 @@ interface LikeButtonProps {
   liked: boolean;
   count: number;
   size?: "sm" | "md";
+  /** true para Free: muestra el contador pero no permite reaccionar. */
+  readOnly?: boolean;
   onChange?: (liked: boolean, newCount: number) => void;
 }
 
-export function LikeButton({ targetType, targetId, liked, count, size = "md", onChange }: LikeButtonProps) {
+export function LikeButton({ targetType, targetId, liked, count, size = "md", readOnly = false, onChange }: LikeButtonProps) {
   const [optimisticLiked, setOptimisticLiked] = useState(liked);
   const [optimisticCount, setOptimisticCount] = useState(count);
   const [loading, setLoading] = useState(false);
@@ -29,6 +32,12 @@ export function LikeButton({ targetType, targetId, liked, count, size = "md", on
 
   const handleClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (readOnly) {
+      toast.error("Mejorá tu plan para participar", {
+        description: "Con el plan Individual o VIP podés publicar, comentar y reaccionar.",
+      });
+      return;
+    }
     if (loading) return;
     const newLiked = !optimisticLiked;
     const newCount = Math.max(0, optimisticCount + (newLiked ? 1 : -1));
@@ -58,10 +67,11 @@ export function LikeButton({ targetType, targetId, liked, count, size = "md", on
       type="button"
       onClick={handleClick}
       disabled={loading}
-      whileTap={{ scale: 0.92 }}
+      whileTap={readOnly ? undefined : { scale: 0.92 }}
       className={cn(
         "relative inline-flex items-center gap-1.5 rounded-full transition-all duration-300 disabled:opacity-50 overflow-visible",
         size === "sm" ? "px-2.5 py-1 text-xs" : "px-3 py-1.5 text-sm",
+        readOnly && "cursor-not-allowed",
         optimisticLiked
           ? "bg-gradient-to-r from-brand/20 to-brand/10 text-accent ring-1 ring-focus/40 shadow-[0_0_12px_rgba(204,164,59,0.25)]"
           : "bg-ink/[0.04] light:bg-surface-subtle text-foreground-muted hover:bg-ink/10 hover:text-foreground-strong ring-1 ring-ink/5 hover:ring-ink/10"

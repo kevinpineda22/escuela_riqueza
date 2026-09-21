@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowLeft, Loader2, MessageSquare, Pin, PinOff, Send, Shield, Trash2, CornerDownRight } from "lucide-react";
+import { ArrowLeft, Loader2, Lock, MessageSquare, Pin, PinOff, Send, Shield, Trash2, CornerDownRight } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
@@ -21,11 +22,13 @@ interface PostDetailProps {
   postId: string;
   currentUserId: string;
   isAdmin: boolean;
+  canWrite: boolean;
   onBack: () => void;
   onDeleted: () => void;
 }
 
-export function PostDetail({ postId, currentUserId, isAdmin, onBack, onDeleted }: PostDetailProps) {
+export function PostDetail({ postId, currentUserId, isAdmin, canWrite, onBack, onDeleted }: PostDetailProps) {
+  const navigate = useNavigate();
   const [post, setPost] = useState<CommunityPost | null>(null);
   const [comments, setComments] = useState<CommunityComment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -350,6 +353,7 @@ export function PostDetail({ postId, currentUserId, isAdmin, onBack, onDeleted }
               targetId={post.id}
               liked={post.liked_by_me ?? false}
               count={post.like_count}
+              readOnly={!canWrite}
             />
             <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-foreground-muted">
               <MessageSquare size={15} />
@@ -373,6 +377,28 @@ export function PostDetail({ postId, currentUserId, isAdmin, onBack, onDeleted }
         </h3>
 
         {/* Composer */}
+        {!canWrite ? (
+          <div className="mb-6 flex flex-col items-start gap-3 rounded-2xl border border-brand/30 bg-brand/[0.08] p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand/15 text-accent ring-1 ring-focus/30">
+                <Lock size={16} />
+              </span>
+              <div>
+                <h4 className="font-bold text-foreground-strong">Estás viendo la comunidad en modo lectura</h4>
+                <p className="mt-0.5 text-sm text-foreground-muted">
+                  Con el plan Individual o VIP podés publicar, comentar y reaccionar.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate("/planes")}
+              className="shrink-0 self-start rounded-xl bg-brand px-5 py-2.5 text-sm font-bold text-on-brand transition-colors hover:bg-brand-hover sm:self-auto"
+            >
+              Ver planes
+            </button>
+          </div>
+        ) : (
         <form
           onSubmit={handleSubmit}
           className="mb-6 overflow-hidden rounded-2xl border border-line-subtle bg-gradient-to-br from-white/[0.04] to-white/[0.01] light:bg-none light:bg-surface-panel transition-colors focus-within:border-brand/40"
@@ -423,6 +449,7 @@ export function PostDetail({ postId, currentUserId, isAdmin, onBack, onDeleted }
             </motion.button>
           </div>
         </form>
+        )}
 
         {/* Threaded list */}
         {tree.roots.length === 0 ? (
@@ -440,6 +467,7 @@ export function PostDetail({ postId, currentUserId, isAdmin, onBack, onDeleted }
                   replies={tree.childrenMap.get(c.id) ?? []}
                   currentUserId={currentUserId}
                   isAdmin={isAdmin}
+                  canWrite={canWrite}
                   onReply={startReply}
                   onDelete={handleDeleteComment}
                 />
@@ -457,11 +485,12 @@ interface CommentNodeProps {
   replies: CommunityComment[];
   currentUserId: string;
   isAdmin: boolean;
+  canWrite: boolean;
   onReply: (c: CommunityComment) => void;
   onDelete: (id: string) => void;
 }
 
-function CommentNode({ comment, replies, currentUserId, isAdmin, onReply, onDelete }: CommentNodeProps) {
+function CommentNode({ comment, replies, currentUserId, isAdmin, canWrite, onReply, onDelete }: CommentNodeProps) {
   return (
     <motion.div
       layout
@@ -475,6 +504,7 @@ function CommentNode({ comment, replies, currentUserId, isAdmin, onReply, onDele
         comment={comment}
         currentUserId={currentUserId}
         isAdmin={isAdmin}
+        canWrite={canWrite}
         onReply={onReply}
         onDelete={onDelete}
       />
@@ -496,6 +526,7 @@ function CommentNode({ comment, replies, currentUserId, isAdmin, onReply, onDele
                   comment={r}
                   currentUserId={currentUserId}
                   isAdmin={isAdmin}
+                  canWrite={canWrite}
                   onReply={onReply}
                   onDelete={onDelete}
                   isReply
@@ -513,12 +544,13 @@ interface CommentBodyProps {
   comment: CommunityComment;
   currentUserId: string;
   isAdmin: boolean;
+  canWrite: boolean;
   onReply: (c: CommunityComment) => void;
   onDelete: (id: string) => void;
   isReply?: boolean;
 }
 
-function CommentBody({ comment, currentUserId, isAdmin, onReply, onDelete, isReply }: CommentBodyProps) {
+function CommentBody({ comment, currentUserId, isAdmin, canWrite, onReply, onDelete, isReply }: CommentBodyProps) {
   const canDelete = isAdmin || comment.author_id === currentUserId;
   const authorIsAdmin = comment.author?.role === "admin";
 
@@ -564,8 +596,9 @@ function CommentBody({ comment, currentUserId, isAdmin, onReply, onDelete, isRep
             liked={comment.liked_by_me ?? false}
             count={comment.like_count}
             size="sm"
+            readOnly={!canWrite}
           />
-          {!isReply && (
+          {!isReply && canWrite && (
             <button
               type="button"
               onClick={() => onReply(comment)}

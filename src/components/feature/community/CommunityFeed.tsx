@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
-import { Flame, MessageSquare, Pin, Plus, Sparkles, Clock, Users } from "lucide-react";
+import { Flame, Lock, MessageSquare, Pin, Plus, Sparkles, Clock, Users } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
@@ -19,9 +20,11 @@ import { PostDetail } from "./PostDetail";
 interface CommunityFeedProps {
   currentUserId: string;
   isAdmin: boolean;
+  canWrite: boolean;
 }
 
-export function CommunityFeed({ currentUserId, isAdmin }: CommunityFeedProps) {
+export function CommunityFeed({ currentUserId, isAdmin, canWrite }: CommunityFeedProps) {
+  const navigate = useNavigate();
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [sort, setSort] = useState<CommunitySort>("recent");
@@ -111,6 +114,7 @@ export function CommunityFeed({ currentUserId, isAdmin }: CommunityFeedProps) {
         postId={selectedPostId}
         currentUserId={currentUserId}
         isAdmin={isAdmin}
+        canWrite={canWrite}
         onBack={() => {
           setSelectedPostId(null);
           load();
@@ -125,6 +129,33 @@ export function CommunityFeed({ currentUserId, isAdmin }: CommunityFeedProps) {
 
   return (
     <div className="space-y-6">
+      {!canWrite && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex flex-col items-start gap-3 rounded-2xl border border-brand/30 bg-brand/[0.08] p-5 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand/15 text-accent ring-1 ring-focus/30">
+              <Lock size={16} />
+            </span>
+            <div>
+              <h3 className="font-bold text-foreground-strong">Estás viendo la comunidad en modo lectura</h3>
+              <p className="mt-0.5 text-sm text-foreground-muted">
+                Con el plan Individual o VIP podés publicar, comentar y reaccionar.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate("/planes")}
+            className="shrink-0 self-start rounded-xl bg-brand px-5 py-2.5 text-sm font-bold text-on-brand transition-colors hover:bg-brand-hover sm:self-auto"
+          >
+            Ver planes
+          </button>
+        </motion.div>
+      )}
+
       {/* Hero header */}
       <motion.div
         initial={{ opacity: 0, y: -8 }}
@@ -151,6 +182,7 @@ export function CommunityFeed({ currentUserId, isAdmin }: CommunityFeedProps) {
             </p>
           </div>
 
+          {canWrite && (
           <motion.button
             type="button"
             whileHover={{ scale: 1.03 }}
@@ -161,6 +193,7 @@ export function CommunityFeed({ currentUserId, isAdmin }: CommunityFeedProps) {
             <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/40 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
             <Plus size={18} /> Nueva publicación
           </motion.button>
+          )}
         </div>
 
         {/* mini stats strip */}
@@ -252,13 +285,15 @@ export function CommunityFeed({ currentUserId, isAdmin }: CommunityFeedProps) {
           <p className="mx-auto mb-6 max-w-sm text-sm text-foreground-muted">
             Sé el primero en iniciar una conversación. Pregunta, comparte una idea o un recurso valioso.
           </p>
-          <button
-            type="button"
-            onClick={() => setDialogOpen(true)}
-            className="inline-flex items-center gap-2 rounded-xl bg-brand px-5 py-2.5 font-bold text-on-brand transition-colors hover:bg-brand-hover"
-          >
-            <Plus size={16} /> Crear la primera
-          </button>
+          {canWrite && (
+            <button
+              type="button"
+              onClick={() => setDialogOpen(true)}
+              className="inline-flex items-center gap-2 rounded-xl bg-brand px-5 py-2.5 font-bold text-on-brand transition-colors hover:bg-brand-hover"
+            >
+              <Plus size={16} /> Crear la primera
+            </button>
+          )}
         </motion.div>
       ) : (
         <motion.div layout className="space-y-3">
@@ -287,6 +322,7 @@ export function CommunityFeed({ currentUserId, isAdmin }: CommunityFeedProps) {
                       post={post}
                       canDelete={isAdmin || post.author_id === currentUserId}
                       isAdmin={isAdmin}
+                      canWrite={canWrite}
                       onOpen={() => setSelectedPostId(post.id)}
                       onDelete={() => handleDeleteFromCard(post)}
                       onPinChanged={(updated) =>
@@ -313,6 +349,7 @@ export function CommunityFeed({ currentUserId, isAdmin }: CommunityFeedProps) {
                       post={post}
                       canDelete={isAdmin || post.author_id === currentUserId}
                       isAdmin={isAdmin}
+                      canWrite={canWrite}
                       onOpen={() => setSelectedPostId(post.id)}
                       onDelete={() => handleDeleteFromCard(post)}
                       onPinChanged={(updated) =>
@@ -328,7 +365,7 @@ export function CommunityFeed({ currentUserId, isAdmin }: CommunityFeedProps) {
       )}
 
       <NewPostDialog
-        open={dialogOpen}
+        open={dialogOpen && canWrite}
         onOpenChange={setDialogOpen}
         isAdmin={isAdmin}
         onCreated={(post) => {

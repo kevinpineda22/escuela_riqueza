@@ -20,7 +20,7 @@
 | Rol | Acceso |
 |---|---|
 | `anon` | Landing, módulos free con publicidad cada 120s |
-| `free` | Módulos free sin publicidad reducida, comunidad limitada |
+| `free` | Módulos free, comunidad en solo lectura, sin certificados |
 | `individual` | Todo el catálogo, modo podcast, notas, certificados |
 | `vip` | Individual + lives 1:1 con Iván + grupales |
 | `admin` | Panel completo (Iván) — CRUD cursos, lives, usuarios, métricas |
