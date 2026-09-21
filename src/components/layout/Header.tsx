@@ -17,6 +17,7 @@ import {
 import { useAuthStore } from "@/stores/auth.store";
 import { supabase } from "@/lib/supabase";
 import { PLANS } from "@/types/user";
+import { canAccessCertificates } from "@/lib/plans";
 import AnimationToggle from "@/components/feature/AnimationToggle";
 import AppearanceToggle from "@/components/feature/AppearanceToggle";
 import BrandLogo from "@/components/layout/BrandLogo";
@@ -53,8 +54,8 @@ interface DashboardTab {
 const DASHBOARD_TABS: DashboardTab[] = [
   { id: "modulos", icon: PlayCircle, label: "Módulos" },
   { id: "notas", icon: Edit3, label: "Notas personales" },
-  { id: "certificados", icon: Award, label: "Certificado" },
-  { id: "comunidad", icon: UsersIcon, label: "Comunidad VIP", premiumOnly: true },
+  { id: "certificados", icon: Award, label: "Certificado", premiumOnly: true },
+  { id: "comunidad", icon: UsersIcon, label: "Comunidad VIP" },
   { id: "perfil", icon: UserIcon, label: "Mi Panel" },
 ];
 
@@ -78,8 +79,8 @@ const Header = () => {
   const closeMenu = () => setIsMobileMenuOpen(false);
   const isAdmin = user?.role === "admin";
   const inDashboard = pathname.startsWith("/dashboard");
-  const isPremium = user?.plan === PLANS.INDIVIDUAL || user?.plan === PLANS.VIP;
   const isVip = user?.plan === PLANS.VIP;
+  const canSeeCertificates = canAccessCertificates(user?.plan, user?.role);
   const currentTab = searchParams.get("tab") || "modulos";
 
   return (
@@ -276,7 +277,7 @@ const Header = () => {
                       Tu panel
                     </div>
                     {DASHBOARD_TABS.map((tab) => {
-                      if (tab.premiumOnly && !isPremium) return null;
+                      if (tab.premiumOnly && !canSeeCertificates) return null;
                       const isActive = currentTab === tab.id;
                       return (
                         <Link

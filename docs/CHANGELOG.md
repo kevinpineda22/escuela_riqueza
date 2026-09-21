@@ -7,6 +7,25 @@
 
 ## 2026-09-21
 
+### Comunidad — Free en modo lectura, Certificado oculto para Free
+- **Decisión de producto**: Free ya no queda excluido de "Comunidad VIP" — puede ver posts y comentarios (solo lectura), pero no publicar, comentar ni reaccionar. Free tampoco ve la pestaña "Certificado" (no puede completar módulos, no tiene insignias que mostrar).
+- **RLS** (`sql/migrate-community-free-readonly.sql`, aplicar manualmente en Supabase): nuevo helper `public.can_read_community(uid)` (true para `role='admin'` o `plan IN ('free','individual','vip')`) reemplaza `is_vip_or_admin` en las policies SELECT de `community_posts`, `community_comments` y `community_likes`. `is_vip_or_admin` sigue intacto como gate de escritura (INSERT/UPDATE/DELETE). El storage de imágenes (`community_images`) ya era público en SELECT, sin cambios ahí.
+- **Frontend**: `src/lib/plans.ts` (nuevo) centraliza `canReadCommunity`, `canWriteCommunity`, `canAccessCertificates` — admin siempre `true`, free lee comunidad pero no escribe ni ve certificados. `StudentDashboard.tsx` y `Header.tsx` ocultan "Certificado" para Free y muestran "Comunidad VIP" para todos los planes. `CommunityFeed`/`PostDetail`/`PostCard`/`LikeButton` reciben `canWrite`: ocultan composer, reply y like para Free y muestran una tarjeta CTA ("Estás viendo la comunidad en modo lectura" → `/planes`). `src/lib/api/community.ts` agrega `assertCanWriteCommunity()` como defensa en profundidad antes de cualquier escritura (RLS sigue siendo el gate real).
+- **Modelo de seguridad**: lectura = free/individual/vip/admin; escritura = individual/vip/admin. Ver `sql/migrate-community-free-readonly.sql` para el detalle de políticas.
+
+### Live — botón Picture-in-Picture y mensaje de bienvenida solo antes de iniciar
+- **Segundo plano en Android**: Chrome pausa cualquier `<video>` de una pestaña oculta (política del navegador, no bug nuestro). Nuevo botón de ventana flotante en `LivePlayerControls` (`requestPictureInPicture` / `webkitSetPresentationMode` en iOS) que mantiene el video sonando al cambiar de app o bloquear el teléfono. Solo se muestra si el navegador lo soporta.
+- **Mensaje "Iniciamos en instantes"**: seguía fijado con el vivo ya iniciado. `LiveChat` y `PublicLiveChat` reciben `showWelcome`, que las salas pasan como `status === "scheduled"`.
+
+### Grabaciones — timeout de reconexión del Live Input subido a 300 s
+- **Síntoma**: el live del 19-09 quedó partido en 7 videos en Cloudflare (12 s, 59 s, 6 min, 18 min, uno con Error…) todos entre 17:32 y 17:41 UTC, más el principal de 3:18.
+- **Causa**: Cloudflare crea un video nuevo por cada sesión RTMP. `timeoutSeconds` (60) cubre caídas de red, pero NO un Stop/Start manual en OBS (cierre limpio = fin de emisión). Los pedazos de pocos segundos al arranque apuntan a reinicios manuales.
+- **Cambio**: `recording.timeoutSeconds` 60 → 300 en el input `950f6b77…` (via `scripts/configure-live-input.mjs`, que ahora preserva `preferLowLatency` y `deleteRecordingAfterDays` en el PUT). Verificado por API.
+- **Tradeoff**: la grabación se finaliza ~5 min después de cortar el stream. Al "Finalizar" de inmediato, el vinculado automático puede no encontrar video listo — esperar 5 min o usar "Cambiar grabación" después.
+- **Regla operativa**: una vez al aire, no tocar Detener/Iniciar en OBS; dejar que reconecte solo.
+- **Pendiente**: feature "Unir grabaciones" en el panel (concatenar varios UIDs del mismo input con ffmpeg en el pipeline de R2) para recuperar lives fragmentados como el del 19-09.
+
+
 ### Modo claro — fase 6: selector publicado
 - `src/lib/theme.ts`: `APPEARANCE_SELECTOR_ENABLED` pasa de `import.meta.env.DEV` a `true`. El default sigue siendo oscuro; claro y Sistema quedan disponibles desde el selector del header.
 - Merge de `origin/master`: `LiveViewersDialog` y el replay del link público llegaron con la paleta vieja (`bg-darker`, `text-gold`, `textMuted`) y un "Probá"; se pasaron a tokens y a tú al resolver.

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef, type RefObject, type ChangeEvent } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Loader2, Settings, Check } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Loader2, Settings, Check, PictureInPicture2 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
@@ -37,6 +37,11 @@ const LivePlayerControls = ({
   const [controlsVisible, setControlsVisible] = useState(true);
   const [volume, setVolume] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // Picture-in-Picture: la única forma de que el video siga sonando en Android
+  // cuando el usuario cambia de app o bloquea el teléfono (Chrome pausa
+  // cualquier <video> de una pestaña oculta). iOS Safari usa su API propia.
+  const [isPip, setIsPip] = useState(false);
+  const [pipSupported, setPipSupported] = useState(false);
   const [liveDelta, setLiveDelta] = useState(0);
   // Spinner solo si el buffering supera 1.5s — micropausas del HLS no
   // dispararan más el loader visible y aparente que el stream "se traba"
@@ -160,6 +165,56 @@ const LivePlayerControls = ({
         videoEl.removeEventListener("webkitendfullscreen", handleIosFsEnd);
       }
     };
+  }, [playerRef]);
+
+  useEffect(() => {
+    const video = playerRef.current?.video;
+    if (!video) return;
+    const iosVideo = video as HTMLVideoElement & {
+      webkitSupportsPresentationMode?: (mode: string) => boolean;
+      webkitPresentationMode?: string;
+    };
+    const supported =
+      (typeof document !== "undefined" && document.pictureInPictureEnabled && !video.disablePictureInPicture) ||
+      (typeof iosVideo.webkitSupportsPresentationMode === "function" &&
+        iosVideo.webkitSupportsPresentationMode("picture-in-picture"));
+    setPipSupported(Boolean(supported));
+
+    const handleEnter = () => setIsPip(true);
+    const handleLeave = () => setIsPip(false);
+    const handleIosMode = () => setIsPip(iosVideo.webkitPresentationMode === "picture-in-picture");
+    video.addEventListener("enterpictureinpicture", handleEnter);
+    video.addEventListener("leavepictureinpicture", handleLeave);
+    video.addEventListener("webkitpresentationmodechanged", handleIosMode);
+    return () => {
+      video.removeEventListener("enterpictureinpicture", handleEnter);
+      video.removeEventListener("leavepictureinpicture", handleLeave);
+      video.removeEventListener("webkitpresentationmodechanged", handleIosMode);
+    };
+  }, [playerRef]);
+
+  const handlePipToggle = useCallback(async () => {
+    const video = playerRef.current?.video;
+    if (!video) return;
+    const iosVideo = video as HTMLVideoElement & {
+      webkitSetPresentationMode?: (mode: string) => void;
+      webkitPresentationMode?: string;
+    };
+    try {
+      if (typeof iosVideo.webkitSetPresentationMode === "function" && !document.pictureInPictureEnabled) {
+        iosVideo.webkitSetPresentationMode(
+          iosVideo.webkitPresentationMode === "picture-in-picture" ? "inline" : "picture-in-picture",
+        );
+        return;
+      }
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+      } else {
+        await video.requestPictureInPicture();
+      }
+    } catch (e) {
+      console.warn("[LivePlayerControls] picture-in-picture error:", e);
+    }
   }, [playerRef]);
 
   const handleFullscreenToggle = useCallback(async () => {
@@ -383,6 +438,20 @@ const LivePlayerControls = ({
               </button>
 
               <div className="flex-1" />
+
+              {pipSupported && (
+                <button
+                  onClick={() => { handlePipToggle(); wakeControls(); }}
+                  aria-label={isPip ? "Salir de ventana flotante" : "Ventana flotante (seguir viendo en otra app)"}
+                  title={isPip ? "Salir de ventana flotante" : "Ventana flotante"}
+                  className={cn(
+                    "mr-3 sm:mr-4 hover:text-accent active:scale-90 transition-all",
+                    isPip ? "text-gold" : "text-foreground-strong",
+                  )}
+                >
+                  <PictureInPicture2 size={20} />
+                </button>
+              )}
 
               <button
                 onClick={() => { handleFullscreenToggle(); wakeControls(); }}
