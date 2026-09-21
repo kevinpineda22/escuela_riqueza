@@ -386,7 +386,7 @@ export function PostDetail({ postId, currentUserId, isAdmin, canWrite, onBack, o
               <div>
                 <h4 className="font-bold text-foreground-strong">Estás viendo la comunidad en modo lectura</h4>
                 <p className="mt-0.5 text-sm text-foreground-muted">
-                  Con el plan Individual o VIP podés publicar, comentar y reaccionar.
+                  Con el plan Individual o VIP puedes publicar, comentar y reaccionar.
                 </p>
               </div>
             </div>

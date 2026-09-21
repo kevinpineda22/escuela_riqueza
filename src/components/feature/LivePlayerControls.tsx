@@ -446,7 +446,7 @@ const LivePlayerControls = ({
                   title={isPip ? "Salir de ventana flotante" : "Ventana flotante"}
                   className={cn(
                     "mr-3 sm:mr-4 hover:text-accent active:scale-90 transition-all",
-                    isPip ? "text-gold" : "text-foreground-strong",
+                    isPip ? "text-accent" : "text-foreground-strong",
                   )}
                 >
                   <PictureInPicture2 size={20} />

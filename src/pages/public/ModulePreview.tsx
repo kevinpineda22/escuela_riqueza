@@ -84,7 +84,7 @@ const ModulePreview = () => {
 
       <main className="relative pt-24 sm:pt-32 pb-16 sm:pb-24">
         <div className="max-w-5xl mx-auto px-5 sm:px-6">
-          <Link to="/" className="inline-flex items-center gap-1.5 text-xs sm:text-sm text-foreground-muted hover:text-accent transition-colors mb-6">
+          <Link to="/" className="flex w-fit items-center gap-1.5 text-xs sm:text-sm text-foreground-muted hover:text-accent transition-colors mb-6">
             <ArrowLeft size={14} /> Volver al inicio
           </Link>
 
