@@ -138,6 +138,15 @@ _Última actualización: 2026-09-21_
 - Anónimo: landing completa, `/planes`, `/login`, 404; header a 320px sin choques entre logo, selector y accesos.
 - VIP: dashboard (todas las pestañas, lección, certificados) y `/vip-live`.
 - Admin: contenido, lives, métricas, usuarios, ajustes y sponsors.
+- Free (2026-09-21): módulos, lección con barra de plan gratuito, playlist, notas bloqueadas, sala de trofeos en 0/3 y Mi Panel. Se corrigió: tarjeta de módulo que en hover pasaba a gris translúcido, pistas `text-foreground-muted/50` ilegibles en claro (⇒ `light:text-fg-40`) y "Mejorar mi Plan" que parecía deshabilitado (⇒ borde dorado).
+- Individual (2026-09-21): 4 pestañas sin fondos oscuros sueltos ni scroll horizontal; lección con barra "Plan Individual", playlist, Mi Panel y modo podcast con la barra global. Con el podcast sonando, cambiar oscuro⇄claro conserva el MISMO nodo `<audio>` y la reproducción sigue (21,1 s → 22,6 s → 23,7 s).
+- Modo simple (toggle apagado) en claro, 390px: landing sin fondos oscuros; 120 textos medidos contra el marfil, el mínimo es el dorado a 5,15:1; las seis tarjetas de inteligencias en flujo normal, sin sticky. "Reducir movimiento" del SO no se emuló: por código sigue el mismo camino (`reduce = prefersReduced || !animationsEnabled` en todos los consumidores y en `MotionProvider`).
+- Dos pestañas: cambiar el tema en una lo aplica en la otra (un solo cambio de `data-theme`, sin recarga ni bucle), en ambos sentidos.
+- Editor de la landing (admin, claro): el input de edición es texto oscuro sobre marfil con caret y borde dorados (no fuerza blanco). Se corrigió: el marcador "editado sin guardar" era ámbar pálido, indistinguible del de guardado ⇒ `light:outline-warning` + tinte translúcido `light:bg-warning/[0.07]` (un fondo OPACO tapa el texto con gradiente del título, porque ese texto se pinta con el fondo del padre recortado al texto); el ícono de deshacer pasa a `light:text-warning`. La edición de prueba se deshizo sin guardar.
+- Admin: arrastre de lección en curso (elevada, sombra cálida, borde dorado; soltada sin mover ⇒ sin petición), zona de subida con archivo encima y con archivo elegido en `LessonFormSheet` (cancelado sin guardar). La barra de progreso de subida real NO se vio: solo se revisó por código (tiene overrides `light:`).
+- Voseo: el detector exigía 3 letras antes de la tilde y se le escapaban los "Usá"; corregido a 2 en `scripts/voseo-scan.mjs`, y aparecieron 4 (aria-label del reordenamiento, error de `LogoUploader`, nota y toast de `AdminLiveManager`) ⇒ "Usa".
+- Fuera del tema, en ambos temas: con la barra del podcast abierta, el lápiz de edición y "volver arriba" quedaban tapados (este último detrás: z-60 contra z-100). `GlobalPodcastPlayer` publica su altura en `--podcast-bar-h` (ResizeObserver) y los dos botones usan `bottom: calc(… + var(--podcast-bar-h, 0px))`. Verificado: con barra, lápiz y flecha terminan en 634/638 px y la barra empieza en 659 px; sin barra la variable desaparece y vuelven a 24/20 px.
+- Barrido por ancho (2026-09-21, sesión free, claro): 9 rutas públicas (`/`, `/planes`, `/historia`, `/terminos`, `/privacidad`, `/explorar/1`, `/cuenta-verificada`, `/restablecer-contrasena`, 404) en 390/768/1440 y las 4 pestañas del dashboard en 1024/1440, sin scroll horizontal ni fondos oscuros fuera de islas (script de colores calculados + revisión a ojo de `/explorar/1`). Fuera del tema, en ambos temas: el link "Volver al inicio" de `/explorar/:id` quedaba pegado al badge del módulo (dos `inline-flex` hermanos) ⇒ `flex w-fit`.
 - Link público `/live/:token` en replay: queda dentro de la isla oscura del escenario.
 - Selector: menú sólido en claro; cambiar de tema con scroll a mitad de página conserva posición, foco y la misma ventana (sin recarga).
 - Toasts success/error/info/warning con descripción y acción, legibles en ambos temas.
@@ -145,10 +154,9 @@ _Última actualización: 2026-09-21_
 - Oscuro idéntico: snapshot de colores calculados antes/después (`git stash`) en rutas públicas, dashboard, `/vip-live` y 6 rutas admin; solo diferencias equivalentes (oklab vs rgba) y los envoltorios nuevos del logo.
 
 **No verificado** (queda abierto, no se da por aprobado):
-- Sesiones free e individual (solo se vieron VIP y admin).
 - Replay reproduciendo de verdad: en local `/api/stream/recording-url` da 502 (no corre la función de Vercel), así que solo se vio el estado de error.
 - Live en curso con la lista de conectados nueva (`LiveViewersDialog`): no había transmisión; el diálogo usa las mismas clases ya revisadas en la sala VIP.
-- Viewports 768/1024/1440 y móvil horizontal de forma sistemática; teclado móvil sobre chat.
+- Móvil horizontal y teclado móvil sobre el chat.
 
 **Reversión:** `APPEARANCE_SELECTOR_ENABLED` de vuelta a `import.meta.env.DEV` solo oculta el selector. Para devolver a todos al oscuro sin borrar preferencias, sumar `data-theme-lock="dark"` al `<html>` de `index.html`.
 

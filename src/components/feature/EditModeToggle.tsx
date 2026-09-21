@@ -112,7 +112,7 @@ const EditModeToggle = () => {
 
       {/* FAB: punto de entrada al modo edición (o salida rápida). A la IZQUIERDA
           para no chocar con "volver arriba" (ScrollToTop, abajo a la derecha). */}
-      <div className="fixed left-6 bottom-6 z-[200] flex flex-col items-start gap-2">
+      <div className="fixed left-6 bottom-[calc(1.5rem+var(--podcast-bar-h,0px))] z-[200] flex flex-col items-start gap-2">
         <button
           onClick={handleToggle}
           className={`

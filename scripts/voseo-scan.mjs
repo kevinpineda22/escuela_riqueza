@@ -15,7 +15,7 @@ clic podrás estarás tendrás verás harás irás recibirás verás recibirá`.
 const WORDS = /(?<!\p{L})(vos|che|dale|laburo|laburar|copado|re\s+(?:bien|lindo|fácil)|celu|boludo|piola|chabón|pibe|mina|bondi|guita|fijate|acordate|asegurate|avisame|decime|contame|mandame|escribime|llamame|mostrame|dejame|pasame|sentate|quedate|olvidate|sumate|unite|registrate|anotate|conectate|suscribite|ingresá|ingresás|acá|recién|titila|titilan|agarrá|agarrar|ahorita)(?!\p{L})/giu;
 
 // Candidatos agudos: imperativo voseante (-á/-é/-í) o presente voseante (-ás/-és/-ís).
-const ACUTE = /(?<!\p{L})(\p{L}{3,}(?:á|é|í)s?)(?!\p{L})/giu;
+const ACUTE = /(?<!\p{L})(\p{L}{2,}(?:á|é|í)s?)(?!\p{L})/giu;
 
 let hits = 0;
 for (const file of process.argv.slice(2)) {

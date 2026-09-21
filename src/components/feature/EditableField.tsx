@@ -120,7 +120,7 @@ const EditableField = ({
     ? cn(
         "group cursor-pointer rounded-[3px] outline-dashed outline-1 outline-offset-2 transition-colors",
         isPending
-          ? "outline-amber-400/70 bg-amber-400/5"
+          ? "outline-amber-400/70 bg-amber-400/5 light:outline-warning light:bg-warning/[0.07]"
           : "outline-brand/30 hover:outline-brand/70 light:outline-accent/40 light:hover:outline-accent/80 hover:bg-brand/5",
       )
     : "";
@@ -160,7 +160,7 @@ const EditableField = ({
           }}
           title="Deshacer este cambio"
           aria-label="Deshacer este cambio"
-          className="inline-flex align-middle ml-1 text-amber-400/70 hover:text-amber-300 transition-colors"
+          className="inline-flex align-middle ml-1 text-amber-400/70 hover:text-amber-300 light:text-warning light:hover:text-foreground-strong transition-colors"
         >
           <Undo2 size={13} />
         </button>

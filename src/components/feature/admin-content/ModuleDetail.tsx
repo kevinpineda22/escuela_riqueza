@@ -276,7 +276,7 @@ const LessonRow = ({
         onPointerDown={(e) => { e.currentTarget.focus(); dragControls.start(e); }}
         onKeyDown={handleKeyDown}
         title="Arrastra para reordenar (o usa ↑ ↓)"
-        aria-label={`Reordenar "${lesson.title}". Posición ${index + 1}. Usá las flechas arriba y abajo para moverla.`}
+        aria-label={`Reordenar "${lesson.title}". Posición ${index + 1}. Usa las flechas arriba y abajo para moverla.`}
         className={cn(
           "shrink-0 -ml-1 p-1 rounded-md touch-none transition-colors",
           "text-fg-25 hover:text-accent hover:bg-ink/5 cursor-grab active:cursor-grabbing",

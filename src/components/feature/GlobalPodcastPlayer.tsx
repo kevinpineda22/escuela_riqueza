@@ -72,6 +72,7 @@ const GlobalPodcastPlayer = () => {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const rafRef = useRef<number>(0);
+  const barRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const tick = () => {
@@ -91,6 +92,23 @@ const GlobalPodcastPlayer = () => {
     }
 
     return () => cancelAnimationFrame(rafRef.current);
+  }, [isPodcastMode, track]);
+
+  // Publica la altura de la barra en --podcast-bar-h para que los botones
+  // flotantes (lápiz de edición, volver arriba) se corran encima en vez de
+  // quedar tapados. Sin barra, la variable no existe y vuelven a su lugar.
+  useEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    const root = document.documentElement;
+    const publish = () => root.style.setProperty("--podcast-bar-h", `${el.offsetHeight}px`);
+    publish();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(publish) : null;
+    observer?.observe(el);
+    return () => {
+      observer?.disconnect();
+      root.style.removeProperty("--podcast-bar-h");
+    };
   }, [isPodcastMode, track]);
 
   if (!track || !isPodcastMode) return null;
@@ -149,6 +167,7 @@ const GlobalPodcastPlayer = () => {
 
   return (
     <motion.div
+      ref={barRef}
       initial={{ y: "100%" }}
       animate={{ y: 0 }}
       transition={{ type: "spring", stiffness: 260, damping: 30 }}

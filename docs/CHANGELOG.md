@@ -12,6 +12,13 @@
 - Merge de `origin/master`: `LiveViewersDialog` y el replay del link público llegaron con la paleta vieja (`bg-darker`, `text-gold`, `textMuted`) y un "Probá"; se pasaron a tokens y a tú al resolver.
 - Detalle de lo revisado en navegador y de lo que quedó sin verificar: `docs/PROJECT_STATE.md` §4.1.
 
+### Modo claro — recorrido con cuentas free, individual y admin
+- **Free**: la tarjeta de módulo pasaba a gris translúcido en hover (`hover:bg-ink/5` le ganaba a `light:bg-surface-panel`) ⇒ `light:hover:bg-surface-panel` (`StudentDashboard`, `AdminMetrics`). "Mejorar mi Plan" parecía deshabilitado ⇒ borde y texto dorado en claro. Pistas `text-foreground-muted/50` (≈2,3:1 en claro) ⇒ `light:text-fg-40`.
+- **Editor de la landing**: el marcador "editado sin guardar" era ámbar pálido, igual al de guardado ⇒ `light:outline-warning` + tinte TRANSLÚCIDO (un fondo opaco tapa el texto con gradiente del título). Ícono de deshacer ⇒ `light:text-warning`.
+- **Voseo**: `scripts/voseo-scan.mjs` exigía 3 letras antes de la tilde y no veía "Usá"; ahora 2. Corregidos 4 textos (aria-label del reordenamiento, `LogoUploader`, nota y toast de `AdminLiveManager`).
+- **Layout, ambos temas**: en `/explorar/:id` "Volver al inicio" quedaba pegado al badge ⇒ `flex w-fit`. Con la barra del podcast abierta, el lápiz de edición y "volver arriba" quedaban tapados ⇒ `GlobalPodcastPlayer` publica `--podcast-bar-h` y ambos botones suben esa altura.
+- Verificado en navegador: individual (incluido cambio de tema con el podcast sonando, mismo `<audio>` sin corte), modo simple, dos pestañas sincronizadas, anchos 390/768/1024/1440, arrastre de lección y zonas de subida sin guardar nada.
+
 ### Link público de live — identidad, lista de conectados y replay
 - **Lista de conectados compartida**: el diálogo "Conectados" de `VIPLiveRoom` se extrajo a `src/components/feature/LiveViewersDialog.tsx` (props `open`, `onOpenChange`, `viewers`, `totalViewers`, `currentUserId`) y ahora también lo usa `PublicLiveRoom`. El tipo `ViewerInfo` se movió a `src/types/live.ts`.
 - **Identidad en el link público**: si quien entra por `/live/:token` tiene sesión iniciada, se trackea presencia con la MISMA key (`user.id`) y el MISMO payload `ViewerInfo` que `VIPLiveRoom` — aparece por su nombre en la lista de conectados de todos, y NO se duplica el conteo si esa persona también abre la sala VIP (comparten el canal `live_presence:${live.id}`). Sin sesión, se conserva el tracking anónimo (`anon-<uuid>`) sin cambios.
