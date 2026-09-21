@@ -3,7 +3,7 @@
 > Lista viva de mejoras/verificaciones en curso. Actualizar estado a medida que se cierran.
 > Estados: 🔴 pendiente · 🟡 en progreso · 🟢 hecho · ⚪ bloqueado (falta info)
 
-_Última actualización: 2026-09-19_
+_Última actualización: 2026-09-21_
 
 ---
 
@@ -130,20 +130,26 @@ _Última actualización: 2026-09-19_
 
 ---
 
-## 7. Modo claro — fase 6 (cierre) 🔴
+## 7. Modo claro — fase 6 (cierre) 🟡
 
-**Estado:** fases 1-5 de `docs/MODO_CLARO_ESPECIFICACION.md` hechas. Falta solo la fase 6: revisión visual humana + activación del selector.
+**Estado:** selector publicado el 2026-09-21 (`APPEARANCE_SELECTOR_ENABLED = true` en `src/lib/theme.ts`). Oscuro sigue siendo el default.
 
-**Bloqueante único** — `src/lib/theme.ts`:
+**Revisado en navegador (2026-09-19 y 2026-09-21)**, claro y oscuro:
+- Anónimo: landing completa, `/planes`, `/login`, 404; header a 320px sin choques entre logo, selector y accesos.
+- VIP: dashboard (todas las pestañas, lección, certificados) y `/vip-live`.
+- Admin: contenido, lives, métricas, usuarios, ajustes y sponsors.
+- Link público `/live/:token` en replay: queda dentro de la isla oscura del escenario.
+- Selector: menú sólido en claro; cambiar de tema con scroll a mitad de página conserva posición, foco y la misma ventana (sin recarga).
+- Toasts success/error/info/warning con descripción y acción, legibles en ambos temas.
+- Arranque: preferencia inexistente, JSON inválido y registro viejo sin tema ⇒ oscuro, conservando animaciones/latencia.
+- Oscuro idéntico: snapshot de colores calculados antes/después (`git stash`) en rutas públicas, dashboard, `/vip-live` y 6 rutas admin; solo diferencias equivalentes (oklab vs rgba) y los envoltorios nuevos del logo.
 
-```ts
-export const APPEARANCE_SELECTOR_ENABLED = import.meta.env.DEV;
-```
+**No verificado** (queda abierto, no se da por aprobado):
+- Sesiones free e individual (solo se vieron VIP y admin).
+- Replay reproduciendo de verdad: en local `/api/stream/recording-url` da 502 (no corre la función de Vercel), así que solo se vio el estado de error.
+- Live en curso con la lista de conectados nueva (`LiveViewersDialog`): no había transmisión; el diálogo usa las mismas clases ya revisadas en la sala VIP.
+- Viewports 768/1024/1440 y móvil horizontal de forma sistemática; teclado móvil sobre chat.
 
-El selector de apariencia solo aparece en desarrollo. Quitar ese gate publica el modo claro a todos los usuarios. **No se hizo el 2026-09-19 porque la plataforma está en vivo.**
+**Reversión:** `APPEARANCE_SELECTOR_ENABLED` de vuelta a `import.meta.env.DEV` solo oculta el selector. Para devolver a todos al oscuro sin borrar preferencias, sumar `data-theme-lock="dark"` al `<html>` de `index.html`.
 
-**Antes de activarlo, recorrer en `npm run dev`** (lo que el script no puede medir): contraste sobre fondos compuestos durante shimmer/hover, gradientes de los actos de la landing, logos transparentes, y el cambio de tema con reproducción/draft/scroll en curso. La matriz completa está en la sección 12 de la spec.
-
-**Ya verificado automáticamente (2026-09-19):** typecheck limpio, 137 tests, `scripts/theme-audit.mjs` sin hallazgos fuera de islas oscuras declaradas.
-
-**Archivos:** `src/lib/theme.ts`, `src/components/feature/AppearanceToggle.tsx`, `docs/MODO_CLARO_ESPECIFICACION.md`
+**Archivos:** `src/lib/theme.ts`, `src/components/feature/AppearanceToggle.tsx`, `index.html`, `docs/MODO_CLARO_ESPECIFICACION.md`

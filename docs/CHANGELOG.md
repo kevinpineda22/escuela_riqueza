@@ -7,6 +7,11 @@
 
 ## 2026-09-21
 
+### Modo claro — fase 6: selector publicado
+- `src/lib/theme.ts`: `APPEARANCE_SELECTOR_ENABLED` pasa de `import.meta.env.DEV` a `true`. El default sigue siendo oscuro; claro y Sistema quedan disponibles desde el selector del header.
+- Merge de `origin/master`: `LiveViewersDialog` y el replay del link público llegaron con la paleta vieja (`bg-darker`, `text-gold`, `textMuted`) y un "Probá"; se pasaron a tokens y a tú al resolver.
+- Detalle de lo revisado en navegador y de lo que quedó sin verificar: `docs/PROJECT_STATE.md` §4.1.
+
 ### Link público de live — identidad, lista de conectados y replay
 - **Lista de conectados compartida**: el diálogo "Conectados" de `VIPLiveRoom` se extrajo a `src/components/feature/LiveViewersDialog.tsx` (props `open`, `onOpenChange`, `viewers`, `totalViewers`, `currentUserId`) y ahora también lo usa `PublicLiveRoom`. El tipo `ViewerInfo` se movió a `src/types/live.ts`.
 - **Identidad en el link público**: si quien entra por `/live/:token` tiene sesión iniciada, se trackea presencia con la MISMA key (`user.id`) y el MISMO payload `ViewerInfo` que `VIPLiveRoom` — aparece por su nombre en la lista de conectados de todos, y NO se duplica el conteo si esa persona también abre la sala VIP (comparten el canal `live_presence:${live.id}`). Sin sesión, se conserva el tracking anónimo (`anon-<uuid>`) sin cambios.
