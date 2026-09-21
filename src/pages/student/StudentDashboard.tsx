@@ -393,30 +393,30 @@ const StudentDashboard = () => {
   };
 
   return (
-    <div className={cn("min-h-screen bg-darker selection:bg-gold/30 font-sans text-textMain flex flex-col overflow-x-hidden", isPodcastMode ? "pb-24 md:pb-28" : "")}>
+    <div className={cn("min-h-screen bg-surface-page selection:bg-brand/30 font-sans text-foreground flex flex-col overflow-x-hidden", isPodcastMode ? "pb-24 md:pb-28" : "")}>
       <Header />
 
 
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-10 grid grid-cols-1 lg:grid-cols-4 gap-8 relative">
         {/* Desktop Sidebar */}
-        <aside data-lenis-prevent className="col-span-1 border-r border-white/10 pr-6 lg:flex flex-col hidden h-full sticky top-24 self-start max-h-[calc(100dvh-120px)] overflow-y-auto overscroll-contain custom-scrollbar">
+        <aside data-lenis-prevent className="col-span-1 border-r border-line-subtle pr-6 lg:flex flex-col hidden h-full sticky top-24 self-start max-h-[calc(100dvh-120px)] overflow-y-auto overscroll-contain custom-scrollbar">
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4 }}>
             <div className="mb-10 text-center">
-              <div className="w-24 h-24 rounded-full bg-gold/10 flex items-center justify-center border-2 border-gold/30 mb-4 mx-auto text-3xl font-bold text-gold shadow-[0_0_15px_rgba(204,164,59,0.3)] overflow-hidden relative group">
+              <div className="w-24 h-24 rounded-full bg-brand/10 flex items-center justify-center border-2 border-brand/30 mb-4 mx-auto text-3xl font-bold text-accent shadow-[0_0_15px_rgba(204,164,59,0.3)] overflow-hidden relative group">
                 {avatarPreview ? (
                   <img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover" />
                 ) : (
                   getInitials(profileName || "Usuario")
                 )}
                 <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-opacity">
-                  <Camera size={24} className="text-white" />
+                  <Camera size={24} className="text-media-foreground" />
                   <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} disabled={isUpdatingProfile} />
                 </label>
               </div>
-              <h3 className="text-xl font-bold text-white capitalize line-clamp-1">{user?.fullName || "Estudiante"}</h3>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 mt-2 rounded-full bg-white/5 border border-white/10 text-xs font-bold tracking-widest uppercase">
-                {user?.plan === PLANS.VIP ? <Crown size={12} className="text-gold" /> : null}
-                <span className={user?.plan === PLANS.VIP ? "text-gold" : "text-white/70"}>{user?.plan || "Free"}</span>
+              <h3 className="text-xl font-bold text-foreground-strong capitalize line-clamp-1">{user?.fullName || "Estudiante"}</h3>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 mt-2 rounded-full bg-ink/5 border border-line-subtle text-xs font-bold tracking-widest uppercase">
+                {user?.plan === PLANS.VIP ? <Crown size={12} className="text-accent" /> : null}
+                <span className={user?.plan === PLANS.VIP ? "text-accent" : "text-fg-70"}>{user?.plan || "Free"}</span>
               </div>
             </div>
 
@@ -431,21 +431,21 @@ const StudentDashboard = () => {
                     onClick={() => changeTab(item.id as TabId)}
                     className={cn(
                       "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm font-medium group",
-                      isActive ? "bg-white/10 text-white shadow-sm border border-white/5" : "text-textMuted hover:text-white hover:bg-white/5 border border-transparent"
+                      isActive ? "bg-ink/10 text-foreground-strong shadow-sm border border-ink/5" : "text-foreground-muted hover:text-foreground-strong hover:bg-ink/5 border border-transparent"
                     )}
                   >
-                    <item.icon size={18} className={isActive ? "text-gold" : "text-textMuted group-hover:text-white/80 transition-colors"} /> 
+                    <item.icon size={18} className={isActive ? "text-accent" : "text-foreground-muted group-hover:text-fg-80 transition-colors"} /> 
                     {item.label}
                   </button>
                 );
               })}
 
               {user?.plan === PLANS.VIP && (
-                <div className="pt-4 mt-4 border-t border-white/10">
+                <div className="pt-4 mt-4 border-t border-line-subtle">
                   <button
                     type="button"
                     onClick={() => navigate("/vip-live")}
-                    className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl transition-all text-sm font-bold bg-red-600/10 text-red-400 hover:bg-red-600/20 border border-red-500/30 group"
+                    className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl transition-all text-sm font-bold bg-red-600/10 text-danger hover:bg-red-600/20 border border-red-500/30 group"
                   >
                     <div className="flex items-center gap-3">
                       <div className="relative">
@@ -468,28 +468,28 @@ const StudentDashboard = () => {
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mb-6 p-4 md:p-5 rounded-2xl border bg-gradient-to-r from-gold/5 via-gold/10 to-gold/5 border-gold/20 shadow-[0_0_30px_rgba(204,164,59,0.08)]"
+              className="mb-6 p-4 md:p-5 rounded-2xl border bg-gradient-to-r from-brand/5 via-brand/10 to-brand/5 border-brand/20 shadow-[0_0_30px_rgba(204,164,59,0.08)]"
             >
               <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div className="flex items-center gap-4">
                   <div className={cn(
                     "w-3 h-3 rounded-full shrink-0",
-                    liveEvent.status === "live" ? "bg-red-500 animate-pulse shadow-[0_0_10px_red]" : "bg-gold"
+                    liveEvent.status === "live" ? "bg-red-500 animate-pulse shadow-[0_0_10px_red]" : "bg-brand"
                   )} />
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold">
+                      <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-accent">
                         {liveEvent.status === "live" ? "🔴 EN VIVO AHORA" : "Próximo En Vivo"}
                       </span>
-                      <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-white/10 text-white/50">
+                      <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-ink/10 text-fg-50">
                         {user?.plan}
                       </span>
                     </div>
-                    <h4 className="text-white font-bold text-sm md:text-base mt-0.5">
+                    <h4 className="text-foreground-strong font-bold text-sm md:text-base mt-0.5">
                       {liveEvent.title}
                     </h4>
                     {liveEvent.starts_at && liveEvent.status !== "live" && (
-                      <p className="text-[11px] text-textMuted/60 mt-0.5">
+                      <p className="text-[11px] text-foreground-muted/60 mt-0.5">
                         {new Date(liveEvent.starts_at).toLocaleDateString("es-CO", {
                           day: "numeric", month: "long", hour: "2-digit", minute: "2-digit"
                         })}
@@ -504,11 +504,11 @@ const StudentDashboard = () => {
                   </a>
                 ) : liveEvent.starts_at && (new Date(liveEvent.starts_at).getTime() - Date.now()) <= 15 * 60 * 1000 ? (
                   <a href="/vip-live"
-                    className="px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl font-bold text-[11px] sm:text-xs transition-all whitespace-nowrap flex items-center gap-1.5 sm:gap-2 bg-gold/20 hover:bg-gold/30 text-gold border border-gold/30 shadow-lg shadow-gold/10 shrink-0">
+                    className="px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl font-bold text-[11px] sm:text-xs transition-all whitespace-nowrap flex items-center gap-1.5 sm:gap-2 bg-brand/20 hover:bg-brand/30 text-accent border border-brand/30 shadow-lg shadow-brand/10 shrink-0">
                     Ver sala <Radio size={14} />
                   </a>
                 ) : (
-                  <span className="px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl font-bold text-[11px] sm:text-xs bg-gold/10 text-gold border border-gold/20 whitespace-nowrap shrink-0">
+                  <span className="px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl font-bold text-[11px] sm:text-xs bg-brand/10 text-accent border border-brand/20 whitespace-nowrap shrink-0">
                     <span className="hidden sm:inline">Disponible para tu plan</span><span className="sm:hidden">Disponible</span>
                   </span>
                 )}
@@ -532,8 +532,8 @@ const StudentDashboard = () => {
                   /* Grid de Módulos (Nivel 1) */
                   <>
                     <div className="mb-6">
-                      <h2 className="text-3xl font-extrabold text-white tracking-tight">Tu Aprendizaje</h2>
-                      <p className="text-textMuted mt-1">Selecciona un módulo para continuar con tus lecciones.</p>
+                      <h2 className="text-3xl font-extrabold text-foreground-strong tracking-tight">Tu Aprendizaje</h2>
+                      <p className="text-foreground-muted mt-1">Selecciona un módulo para continuar con tus lecciones.</p>
                     </div>
                     
                     {dbModules.length === 0 ? (
@@ -550,32 +550,32 @@ const StudentDashboard = () => {
                             key={mod.id}
                             initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: idx * 0.05 }}
                             onClick={() => handleModuleClick(mod.id)}
-                            className="bg-black/30 border border-white/10 rounded-2xl p-6 hover:border-gold/30 hover:bg-white/5 cursor-pointer group transition-all flex flex-col h-full relative overflow-hidden"
+                            className="bg-black/30 light:bg-surface-panel light:shadow-panel border border-line-subtle rounded-2xl p-6 hover:border-brand/30 hover:bg-ink/5 cursor-pointer group transition-all flex flex-col h-full relative overflow-hidden"
                           >
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-gold/5 rounded-full blur-3xl -mr-10 -mt-10 group-hover:bg-gold/10 transition-colors" />
-                            <div className="w-12 h-12 rounded-xl bg-gold/10 border border-gold/20 text-gold flex items-center justify-center mb-5 group-hover:scale-110 transition-transform relative z-10 shadow-[0_0_15px_rgba(204,164,59,0.15)]">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-brand/5 rounded-full blur-3xl -mr-10 -mt-10 group-hover:bg-brand/10 transition-colors" />
+                            <div className="w-12 h-12 rounded-xl bg-brand/10 border border-brand/20 text-accent flex items-center justify-center mb-5 group-hover:scale-110 transition-transform relative z-10 shadow-[0_0_15px_rgba(204,164,59,0.15)]">
                               <BookOpen size={24} />
                             </div>
-                            <h3 className="text-xl font-bold text-white mb-2 relative z-10 leading-tight group-hover:text-gold transition-colors">{mod.title}</h3>
-                            <p className="text-textMuted text-sm mb-6 flex-1 relative z-10 line-clamp-3">
+                            <h3 className="text-xl font-bold text-foreground-strong mb-2 relative z-10 leading-tight group-hover:text-accent transition-colors">{mod.title}</h3>
+                            <p className="text-foreground-muted text-sm mb-6 flex-1 relative z-10 line-clamp-3">
                               {mod.description || "Explora el contenido de este módulo y avanza en tu camino."}
                             </p>
-                              <div className="flex items-center justify-between text-sm font-medium pt-4 border-t border-white/5 relative z-10 mt-auto">
+                              <div className="flex items-center justify-between text-sm font-medium pt-4 border-t border-ink/5 relative z-10 mt-auto">
                                 <div className="flex flex-col gap-1 w-1/2">
-                                  <span className="text-white/50 flex items-center gap-1.5"><PlayCircle size={14}/> {dbLessonsMap[mod.id]?.length || 0} Clases</span>
+                                  <span className="text-fg-50 flex items-center gap-1.5"><PlayCircle size={14}/> {dbLessonsMap[mod.id]?.length || 0} Clases</span>
                                   {getModuleProgress(mod.id) > 0 && (
                                     <div className="flex items-center gap-2 w-full mt-1">
-                                      <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                                      <div className="flex-1 h-1.5 bg-ink/10 rounded-full overflow-hidden">
                                         <div 
-                                          className="h-full bg-gold rounded-full" 
+                                          className="h-full bg-brand rounded-full" 
                                           style={{ width: `${getModuleProgress(mod.id)}%` }} 
                                         />
                                       </div>
-                                      <span className="text-[10px] text-gold">{getModuleProgress(mod.id)}%</span>
+                                      <span className="text-[10px] text-accent">{getModuleProgress(mod.id)}%</span>
                                     </div>
                                   )}
                                 </div>
-                                <span className="text-gold group-hover:underline flex items-center gap-1">Entrar <ArrowLeft size={14} className="rotate-180" /></span>
+                                <span className="text-accent group-hover:underline flex items-center gap-1">Entrar <ArrowLeft size={14} className="rotate-180" /></span>
                               </div>
                           </motion.div>
                         ))}
@@ -587,7 +587,7 @@ const StudentDashboard = () => {
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
                     <button 
                       onClick={() => setSelectedModule(null)} 
-                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm text-textMuted hover:text-white hover:bg-white/10 transition-colors border border-transparent hover:border-white/10 -ml-3"
+                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm text-foreground-muted hover:text-foreground-strong hover:bg-ink/10 transition-colors border border-transparent hover:border-line-subtle -ml-3"
                     >
                       <ArrowLeft size={16} /> Volver a módulos
                     </button>
@@ -600,23 +600,25 @@ const StudentDashboard = () => {
                         <div className="xl:col-span-2 min-w-0 flex flex-col gap-6">
                           <div>
                             <div className="flex flex-wrap items-center gap-2 mb-2">
-                              <span className="text-gold text-xs font-bold tracking-wider uppercase bg-gold/10 px-2 py-0.5 rounded border border-gold/20">
+                              <span className="text-accent text-xs font-bold tracking-wider uppercase bg-brand/10 px-2 py-0.5 rounded border border-brand/20">
                                 {dbModules.find((m) => m.id === selectedModule)?.title}
                               </span>
-                              <span className="text-textMuted text-sm">•</span>
-                              <span className="text-white/70 text-sm font-medium">
+                              <span className="text-foreground-muted text-sm">•</span>
+                              <span className="text-fg-70 text-sm font-medium">
                                 Clase {dbLessonsMap[selectedModule].findIndex(l => l.id === activeLesson.id) + 1} de {dbLessonsMap[selectedModule].length}
                               </span>
                             </div>
                             {/* Los títulos vienen con guiones bajos y sin espacios, así que
                                 el navegador los trata como UNA palabra y no los corta:
                                 `overflow-wrap: anywhere` permite el salto en cualquier punto. */}
-                            <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-white leading-tight [overflow-wrap:anywhere]">
+                            <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-foreground-strong leading-tight [overflow-wrap:anywhere]">
                               {activeLesson.title}
                             </h2>
                           </div>
 
-                          <div className="rounded-2xl overflow-hidden shadow-2xl shadow-black/50 border border-white/10 bg-black">
+                          {/* En claro el envoltorio no pinta: la barra de plan sigue el tema y el
+                              lienzo trae su propio negro (isla en LessonPlayer). Spec §7.1. */}
+                          <div className="rounded-2xl overflow-hidden shadow-2xl shadow-black/50 border border-line-subtle bg-black light:bg-transparent light:border-transparent light:shadow-none">
                             <LessonPlayer 
                               videoSrc={activeLesson.stream_uid || ""} 
                               isPremium={isPremium} 
@@ -630,12 +632,12 @@ const StudentDashboard = () => {
                           </div>
 
                           {/* Notas en Desktop se quedan aquí abajo */}
-                          <div className="hidden xl:block bg-black/30 border border-white/10 rounded-2xl p-6 relative overflow-hidden group hover:border-gold/30 transition-colors">
-                            <div className="absolute top-0 right-0 -mr-4 -mt-4 w-32 h-32 bg-gold/5 rounded-full blur-3xl group-hover:bg-gold/10 transition-colors" />
+                          <div className="hidden xl:block bg-black/30 light:bg-surface-panel light:shadow-panel border border-line-subtle rounded-2xl p-6 relative overflow-hidden group hover:border-brand/30 transition-colors">
+                            <div className="absolute top-0 right-0 -mr-4 -mt-4 w-32 h-32 bg-brand/5 rounded-full blur-3xl group-hover:bg-brand/10 transition-colors" />
                             <div className="relative z-10">
                               <div className="flex items-center justify-between mb-3">
-                                <h4 className="text-white font-medium flex items-center gap-2">
-                                  <Edit3 size={18} className="text-gold" /> Apuntes Rápidos
+                                <h4 className="text-foreground-strong font-medium flex items-center gap-2">
+                                  <Edit3 size={18} className="text-accent" /> Apuntes Rápidos
                                 </h4>
                               </div>
                               <textarea
@@ -643,14 +645,14 @@ const StudentDashboard = () => {
                                 onChange={(e) => setPersonalNote(e.target.value)}
                                 disabled={!isPremium || isSavingNote}
                                 placeholder={isPremium ? "Escribe tus reflexiones de esta lección sin pausar el video..." : "El plan Free no incluye toma de notas. ¡Mejora tu plan individual o VIP!"}
-                                className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white text-sm focus:outline-none focus:border-gold/50 resize-none h-24 transition-all disabled:opacity-50 disabled:cursor-not-allowed placeholder:text-white/30"
+                                className="w-full bg-ink/5 border border-line-subtle rounded-xl p-4 text-foreground-strong text-sm focus:outline-none focus:border-brand/50 resize-none h-24 transition-all disabled:opacity-50 disabled:cursor-not-allowed placeholder:text-fg-30 light:bg-surface-input light:border-line-control/50 light:placeholder:text-foreground-placeholder"
                               ></textarea>
                               <div className="flex justify-end mt-3">
                                 <button
                                   type="button"
                                   onClick={handleSaveNote}
                                   disabled={!isPremium || isSavingNote || !personalNote.trim()}
-                                  className="px-5 py-2 text-sm bg-white/10 hover:bg-gold hover:text-darker border border-white/10 hover:border-gold text-white font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                  className="px-5 py-2 text-sm bg-ink/10 hover:bg-brand hover:text-on-brand border border-line-subtle hover:border-accent text-foreground-strong font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                                 >
                                   {isSavingNote ? <Loader2 size={16} className="animate-spin" /> : <Edit3 size={16}/>}
                                   Guardar Notas
@@ -665,11 +667,11 @@ const StudentDashboard = () => {
                           {/* El tope de altura existía solo en `xl`, así que por debajo de
                               1280px el panel crecía con las 35 clases y no tenía scroll
                               propio: la rueda movía la página entera. */}
-                          <div className="bg-black/40 border border-white/10 rounded-2xl overflow-hidden flex flex-col max-h-[70dvh] xl:max-h-[600px] shadow-lg">
-                            <div className="p-4 border-b border-white/10 bg-white/5 backdrop-blur-md sticky top-0 z-10">
-                              <h3 className="font-bold text-white text-sm flex items-center justify-between">
+                          <div className="bg-black/40 light:bg-surface-panel light:shadow-panel border border-line-subtle rounded-2xl overflow-hidden flex flex-col max-h-[70dvh] xl:max-h-[600px] shadow-lg">
+                            <div className="p-4 border-b border-line-subtle bg-ink/5 backdrop-blur-md sticky top-0 z-10">
+                              <h3 className="font-bold text-foreground-strong text-sm flex items-center justify-between">
                                 Playlist del Módulo
-                                <span className="text-xs font-medium text-gold bg-gold/10 px-2 py-0.5 rounded-full border border-gold/20">
+                                <span className="text-xs font-medium text-accent bg-brand/10 px-2 py-0.5 rounded-full border border-brand/20">
                                   {dbLessonsMap[selectedModule].length} clases
                                 </span>
                               </h3>
@@ -695,24 +697,24 @@ const StudentDashboard = () => {
                                     className={cn(
                                       "w-full text-left p-3 rounded-xl transition-all flex gap-3 group relative overflow-hidden",
                                       isActive 
-                                        ? "bg-gold/10 border border-gold/30" 
-                                        : "bg-transparent border border-transparent hover:bg-white/5"
+                                        ? "bg-brand/10 border border-brand/30" 
+                                        : "bg-transparent border border-transparent hover:bg-ink/5"
                                     )}
                                   >
                                     {isActive && (
-                                      <motion.div layoutId="activeLessonIndicator" className="absolute left-0 top-0 bottom-0 w-1 bg-gold" />
+                                      <motion.div layoutId="activeLessonIndicator" className="absolute left-0 top-0 bottom-0 w-1 bg-brand" />
                                     )}
                                     <div className="shrink-0 pt-0.5 relative z-10">
                                       {isActive ? (
-                                        <div className="w-7 h-7 rounded-full bg-gold text-darker flex items-center justify-center shadow-[0_0_10px_rgba(204,164,59,0.5)]">
+                                        <div className="w-7 h-7 rounded-full bg-brand text-on-brand flex items-center justify-center shadow-[0_0_10px_rgba(204,164,59,0.5)]">
                                           <PlayCircle size={14} className="ml-0.5" />
                                         </div>
                                       ) : isCompleted ? (
-                                        <div className="w-7 h-7 rounded-full bg-green-500/10 text-green-400 flex items-center justify-center border border-green-500/20">
+                                        <div className="w-7 h-7 rounded-full bg-green-500/10 text-green-400 light:text-success flex items-center justify-center border border-green-500/20">
                                           <CheckCircle2 size={14} />
                                         </div>
                                       ) : (
-                                        <div className="w-7 h-7 rounded-full bg-white/5 text-textMuted flex items-center justify-center border border-white/10 group-hover:border-white/30 group-hover:text-white transition-colors">
+                                        <div className="w-7 h-7 rounded-full bg-ink/5 text-foreground-muted flex items-center justify-center border border-line-subtle group-hover:border-ink/30 group-hover:text-foreground-strong transition-colors">
                                           <span className="text-xs font-bold">{index + 1}</span>
                                         </div>
                                       )}
@@ -725,13 +727,13 @@ const StudentDashboard = () => {
                                           // Sin esto los títulos largos se cortaban a mitad
                                           // de palabra y sin puntos suspensivos.
                                           "text-sm font-medium leading-snug mb-1 transition-colors [overflow-wrap:anywhere] line-clamp-2",
-                                          isActive ? "text-gold font-bold" : "text-white/80 group-hover:text-white"
+                                          isActive ? "text-accent font-bold" : "text-fg-80 group-hover:text-foreground-strong"
                                         )}
                                       >
                                         {lesson.title}
                                       </h4>
                                       <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-wider">
-                                        <span className={isActive ? "text-gold/70" : "text-textMuted"}>
+                                        <span className={isActive ? "text-accent/70" : "text-foreground-muted"}>
                                           {lesson.allowed_plans?.[0] || "FREE"}
                                         </span>
                                       </div>
@@ -743,10 +745,10 @@ const StudentDashboard = () => {
                           </div>
 
                           {/* Notas en Mobile se apilan debajo de la playlist */}
-                          <div className="xl:hidden bg-black/30 border border-white/10 rounded-2xl p-5 relative overflow-hidden group">
+                          <div className="xl:hidden bg-black/30 light:bg-surface-panel light:shadow-panel border border-line-subtle rounded-2xl p-5 relative overflow-hidden group">
                             <div className="flex items-center justify-between mb-3">
-                              <h4 className="text-white font-medium flex items-center gap-2 text-sm">
-                                <Edit3 size={16} className="text-gold" /> Apuntes Rápidos
+                              <h4 className="text-foreground-strong font-medium flex items-center gap-2 text-sm">
+                                <Edit3 size={16} className="text-accent" /> Apuntes Rápidos
                               </h4>
                             </div>
                             <textarea
@@ -754,14 +756,14 @@ const StudentDashboard = () => {
                               onChange={(e) => setPersonalNote(e.target.value)}
                               disabled={!isPremium || isSavingNote}
                               placeholder={isPremium ? "Tus reflexiones de esta lección..." : "Mejora tu plan para tomar notas."}
-                              className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-gold/50 resize-none h-20 transition-all disabled:opacity-50 disabled:cursor-not-allowed placeholder:text-white/30"
+                              className="w-full bg-ink/5 border border-line-subtle rounded-xl p-3 text-foreground-strong text-sm focus:outline-none focus:border-brand/50 resize-none h-20 transition-all disabled:opacity-50 disabled:cursor-not-allowed placeholder:text-fg-30 light:bg-surface-input light:border-line-control/50 light:placeholder:text-foreground-placeholder"
                             ></textarea>
                             <div className="flex justify-end mt-3">
                               <button
                                 type="button"
                                 onClick={handleSaveNote}
                                 disabled={!isPremium || isSavingNote || !personalNote.trim()}
-                                className="px-4 py-2 text-xs bg-white/10 hover:bg-gold hover:text-darker border border-white/10 text-white font-bold rounded-lg transition-all disabled:opacity-50 flex items-center gap-2"
+                                className="px-4 py-2 text-xs bg-ink/10 hover:bg-brand hover:text-on-brand border border-line-subtle text-foreground-strong font-bold rounded-lg transition-all disabled:opacity-50 flex items-center gap-2"
                               >
                                 {isSavingNote && <Loader2 size={14} className="animate-spin" />}
                                 Guardar
@@ -790,12 +792,12 @@ const StudentDashboard = () => {
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}
                 className="space-y-6"
               >
-                <div className="bg-white/5 border border-white/10 rounded-3xl p-6 sm:p-10 mb-6 text-center relative overflow-hidden group">
-                  <div className="absolute top-0 left-1/2 -translate-x-1/2 -mt-20 w-64 h-64 bg-gold/5 rounded-full blur-3xl group-hover:bg-gold/10 transition-colors" />
+                <div className="bg-ink/5 border border-line-subtle rounded-3xl p-6 sm:p-10 mb-6 text-center relative overflow-hidden group light:bg-surface-panel light:shadow-panel">
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 -mt-20 w-64 h-64 bg-brand/5 rounded-full blur-3xl group-hover:bg-brand/10 transition-colors" />
                   <div className="relative z-10">
-                    <Edit3 size={48} className="mx-auto text-gold mb-4 drop-shadow-[0_0_15px_rgba(204,164,59,0.3)]" />
-                    <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">Libreta de Aprendizaje</h2>
-                    <p className="text-textMuted mt-3 max-w-lg mx-auto text-sm sm:text-base">
+                    <Edit3 size={48} className="mx-auto text-accent mb-4 drop-shadow-[0_0_15px_rgba(204,164,59,0.3)]" />
+                    <h2 className="text-2xl sm:text-3xl font-extrabold text-foreground-strong tracking-tight">Libreta de Aprendizaje</h2>
+                    <p className="text-foreground-muted mt-3 max-w-lg mx-auto text-sm sm:text-base">
                       Tus apuntes rápidos organizados por lección. Úsalos para repasar los conceptos clave de tu proceso en Escuela de la Riqueza.
                     </p>
                   </div>
@@ -830,23 +832,23 @@ const StudentDashboard = () => {
                           initial={{ opacity: 0, scale: 0.95 }}
                           animate={{ opacity: 1, scale: 1 }}
                           transition={{ duration: 0.3, delay: index * 0.05 }}
-                          className="bg-black/40 border border-white/10 rounded-2xl p-5 sm:p-6 flex flex-col hover:border-gold/30 transition-colors group relative overflow-hidden"
+                          className="bg-black/40 light:bg-surface-panel light:shadow-panel border border-line-subtle rounded-2xl p-5 sm:p-6 flex flex-col hover:border-brand/30 transition-colors group relative overflow-hidden"
                         >
-                          <div className="absolute top-0 right-0 w-24 h-24 bg-white/5 rounded-full blur-2xl -mr-10 -mt-10 group-hover:bg-gold/5 transition-colors" />
-                          <div className="flex justify-between items-start mb-4 border-b border-white/5 pb-4 relative z-10">
+                          <div className="absolute top-0 right-0 w-24 h-24 bg-ink/5 rounded-full blur-2xl -mr-10 -mt-10 group-hover:bg-brand/5 transition-colors" />
+                          <div className="flex justify-between items-start mb-4 border-b border-ink/5 pb-4 relative z-10">
                             <div className="pr-4">
-                              <span className="text-[10px] sm:text-xs font-bold text-gold uppercase tracking-wider block mb-1.5">
+                              <span className="text-[10px] sm:text-xs font-bold text-accent uppercase tracking-wider block mb-1.5">
                                 {moduloTitle}
                               </span>
-                              <h3 className="text-white font-medium text-sm sm:text-base line-clamp-2" title={leccionTitle}>
+                              <h3 className="text-foreground-strong font-medium text-sm sm:text-base line-clamp-2" title={leccionTitle}>
                                 {leccionTitle}
                               </h3>
                             </div>
-                            <span className="text-[10px] text-white/40 whitespace-nowrap bg-white/5 px-2 py-1 rounded-md font-mono shrink-0 border border-white/5">
+                            <span className="text-[10px] text-fg-40 whitespace-nowrap bg-ink/5 px-2 py-1 rounded-md font-mono shrink-0 border border-ink/5">
                               {new Date(note.updated_at).toLocaleDateString()}
                             </span>
                           </div>
-                          <p className="text-white/80 text-sm sm:text-base flex-1 whitespace-pre-wrap leading-relaxed relative z-10 font-serif italic">
+                          <p className="text-fg-80 text-sm sm:text-base flex-1 whitespace-pre-wrap leading-relaxed relative z-10 font-serif italic">
                             "{note.content}"
                           </p>
                         </motion.div>
@@ -868,19 +870,19 @@ const StudentDashboard = () => {
                 <motion.div key="certificados" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
                   <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
                     <div>
-                      <h2 className="text-3xl font-extrabold text-white tracking-tight">Sala de Trofeos</h2>
-                      <p className="text-textMuted mt-1">Cada insignia representa un eje de inteligencia conquistado.</p>
+                      <h2 className="text-3xl font-extrabold text-foreground-strong tracking-tight">Sala de Trofeos</h2>
+                      <p className="text-foreground-muted mt-1">Cada insignia representa un eje de inteligencia conquistado.</p>
                     </div>
                     {dbModules.length > 0 && (
                       <motion.div
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
-                        className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-gradient-to-br from-gold/10 to-gold/5 border border-gold/30"
+                        className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-gradient-to-br from-brand/10 to-brand/5 border border-brand/30"
                       >
-                        <Award className="text-gold drop-shadow-[0_0_8px_rgba(204,164,59,0.5)]" size={22} />
+                        <Award className="text-accent drop-shadow-[0_0_8px_rgba(204,164,59,0.5)]" size={22} />
                         <div>
-                          <div className="text-gold font-extrabold text-lg leading-none">{unlockedCount} <span className="text-textMuted/70 font-medium text-sm">/ {dbModules.length}</span></div>
-                          <div className="text-[9px] uppercase tracking-[0.2em] text-textMuted mt-1">Desbloqueadas</div>
+                          <div className="text-accent font-extrabold text-lg leading-none">{unlockedCount} <span className="text-foreground-muted/70 font-medium text-sm">/ {dbModules.length}</span></div>
+                          <div className="text-[9px] uppercase tracking-[0.2em] text-foreground-muted mt-1">Desbloqueadas</div>
                         </div>
                       </motion.div>
                     )}
@@ -896,7 +898,10 @@ const StudentDashboard = () => {
                   ) : (
                     <div className="space-y-8">
                       {/* SHOWCASE */}
-                      <div className="relative bg-gradient-to-b from-black/70 via-black/40 to-black/70 border border-gold/20 rounded-3xl overflow-hidden">
+                      {/* Isla oscura: la vitrina 3D conserva su iluminación en ambos temas (spec
+                          §3.4). bg-surface-page (= #0a0a0a dentro de la isla) es la base
+                          sobre la que se componía el degradado translúcido en oscuro. */}
+                      <div data-theme="dark" className="relative bg-surface-page bg-gradient-to-b from-black/70 via-black/40 to-black/70 border border-brand/20 rounded-3xl overflow-hidden">
                         {/* Spotlight conic rotando */}
                         <motion.div
                           aria-hidden
@@ -912,10 +917,10 @@ const StudentDashboard = () => {
                         {/* Glow centro */}
                         <div className={cn(
                           "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[36rem] h-[36rem] rounded-full blur-[120px] pointer-events-none",
-                          activeIsUnlocked ? "bg-gold/15" : "bg-white/[0.03]"
+                          activeIsUnlocked ? "bg-brand/15" : "bg-ink/[0.03]"
                         )} />
                         {/* Vignette */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-darker/60 to-transparent pointer-events-none" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-surface-page/60 to-transparent pointer-events-none" />
 
                         <div className="relative z-10 px-6 sm:px-10 lg:px-14 py-12 sm:py-16 grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-10 lg:gap-12 items-center">
                           {/* Trofeo */}
@@ -928,7 +933,7 @@ const StudentDashboard = () => {
                                 return (
                                   <motion.div
                                     key={`particle-${activeBadgeModule?.id}-${i}`}
-                                    className="absolute top-1/2 left-1/2 w-1.5 h-1.5 rounded-full bg-gold pointer-events-none"
+                                    className="absolute top-1/2 left-1/2 w-1.5 h-1.5 rounded-full bg-brand pointer-events-none"
                                     style={{ boxShadow: "0 0 8px rgba(204,164,59,0.8)" }}
                                     animate={{
                                       x: [0, Math.cos(angle) * radius, 0],
@@ -951,7 +956,7 @@ const StudentDashboard = () => {
                                 aria-hidden
                                 className={cn(
                                   "absolute left-1/2 -translate-x-1/2 bottom-[-48px] w-[28rem] h-9 rounded-[50%] blur-xl",
-                                  activeIsUnlocked ? "bg-gold/35" : "bg-white/5"
+                                  activeIsUnlocked ? "bg-brand/35" : "bg-ink/5"
                                 )}
                               />
 
@@ -994,8 +999,8 @@ const StudentDashboard = () => {
                                         className={cn(
                                           "w-60 sm:w-72 lg:w-80 h-60 sm:h-72 lg:h-80 rounded-full flex items-center justify-center border-4",
                                           activeIsUnlocked
-                                            ? "bg-gold/20 border-gold text-gold shadow-[0_0_60px_rgba(204,164,59,0.55)]"
-                                            : "bg-white/5 border-white/10 text-white/25"
+                                            ? "bg-brand/20 border-accent text-accent shadow-[0_0_60px_rgba(204,164,59,0.55)]"
+                                            : "bg-ink/5 border-line-subtle text-fg-25"
                                         )}
                                       >
                                         <Award size={130} />
@@ -1014,9 +1019,9 @@ const StudentDashboard = () => {
                                       <motion.div
                                         animate={{ y: [0, -6, 0] }}
                                         transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-                                        className="w-20 h-20 rounded-full bg-darker/95 border-2 border-gold/40 flex items-center justify-center shadow-[0_0_30px_rgba(0,0,0,0.9)] backdrop-blur-md"
+                                        className="w-20 h-20 rounded-full bg-surface-page/95 border-2 border-brand/40 flex items-center justify-center shadow-[0_0_30px_rgba(0,0,0,0.9)] backdrop-blur-md"
                                       >
-                                        <Lock size={32} className="text-gold/90" />
+                                        <Lock size={32} className="text-accent/90" />
                                       </motion.div>
                                     </motion.div>
                                   )}
@@ -1026,7 +1031,7 @@ const StudentDashboard = () => {
                                     <motion.div
                                       animate={{ rotate: 360, scale: [1, 1.2, 1] }}
                                       transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                                      className="absolute top-4 right-4 text-gold pointer-events-none"
+                                      className="absolute top-4 right-4 text-accent pointer-events-none"
                                     >
                                       <Sparkles size={28} className="drop-shadow-[0_0_10px_rgba(204,164,59,0.8)]" />
                                     </motion.div>
@@ -1054,11 +1059,11 @@ const StudentDashboard = () => {
                                   className="inline-block mb-3"
                                 >
                                   {activeIsUnlocked ? (
-                                    <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-500/10 border border-green-500/30 text-green-400 text-[10px] font-bold uppercase tracking-[0.2em]">
+                                    <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-500/10 border border-green-500/30 text-green-400 light:text-success text-[10px] font-bold uppercase tracking-[0.2em]">
                                       <CheckCircle2 size={12} /> Conquistado
                                     </span>
                                   ) : (
-                                    <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/15 text-white/70 text-[10px] font-bold uppercase tracking-[0.2em]">
+                                    <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-ink/5 border border-ink/15 text-fg-70 text-[10px] font-bold uppercase tracking-[0.2em]">
                                       <Lock size={11} /> {activeProgress}% completado
                                     </span>
                                   )}
@@ -1069,7 +1074,7 @@ const StudentDashboard = () => {
                                   transition={{ delay: 0.3 }}
                                   className={cn(
                                     "text-3xl sm:text-4xl font-extrabold tracking-tight leading-tight",
-                                    activeIsUnlocked ? "text-gold" : "text-white/85"
+                                    activeIsUnlocked ? "text-accent" : "text-fg-85"
                                   )}
                                 >
                                   {activeBadgeModule?.title}
@@ -1080,7 +1085,7 @@ const StudentDashboard = () => {
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: 0.4 }}
-                                className="text-textMain/85 leading-relaxed text-sm sm:text-[15px]"
+                                className="text-foreground/85 leading-relaxed text-sm sm:text-[15px]"
                               >
                                 {activeContent?.description}
                               </motion.p>
@@ -1092,14 +1097,14 @@ const StudentDashboard = () => {
                                 className={cn(
                                   "rounded-2xl px-5 py-4 border-l-4 backdrop-blur-sm",
                                   activeIsUnlocked
-                                    ? "bg-gradient-to-r from-gold/15 to-gold/5 border-gold shadow-[0_0_25px_rgba(204,164,59,0.15)]"
-                                    : "bg-white/5 border-white/25"
+                                    ? "bg-gradient-to-r from-brand/15 to-brand/5 border-accent shadow-[0_0_25px_rgba(204,164,59,0.15)]"
+                                    : "bg-ink/5 border-ink/25"
                                 )}
                               >
                                 <p
                                   className={cn(
                                     "font-bold text-sm sm:text-[15px] italic leading-relaxed",
-                                    activeIsUnlocked ? "text-gold" : "text-white/65"
+                                    activeIsUnlocked ? "text-accent" : "text-fg-65"
                                   )}
                                 >
                                   {activeContent?.keyPhrase}
@@ -1114,15 +1119,15 @@ const StudentDashboard = () => {
                                   className="pt-2"
                                 >
                                   <div className="flex items-center justify-between text-xs mb-2">
-                                    <span className="text-textMuted uppercase tracking-widest font-medium">Progreso</span>
-                                    <span className="text-gold font-bold">{activeProgress}%</span>
+                                    <span className="text-foreground-muted uppercase tracking-widest font-medium">Progreso</span>
+                                    <span className="text-accent font-bold">{activeProgress}%</span>
                                   </div>
-                                  <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden border border-white/5">
+                                  <div className="w-full h-2 bg-ink/5 rounded-full overflow-hidden border border-ink/5">
                                     <motion.div
                                       initial={{ width: 0 }}
                                       animate={{ width: `${activeProgress}%` }}
                                       transition={{ duration: 1.1, ease: "easeOut", delay: 0.7 }}
-                                      className="h-full bg-gradient-to-r from-gold/60 via-gold to-goldHover rounded-full shadow-[0_0_10px_rgba(204,164,59,0.5)]"
+                                      className="h-full bg-gradient-to-r from-brand/60 via-brand to-brand-hover rounded-full shadow-[0_0_10px_rgba(204,164,59,0.5)]"
                                     />
                                   </div>
                                 </motion.div>
@@ -1135,8 +1140,8 @@ const StudentDashboard = () => {
                       {/* GALERÍA DE MINIATURAS */}
                       <div>
                         <div className="flex items-center justify-between mb-4">
-                          <h4 className="text-[11px] uppercase font-bold tracking-[0.25em] text-textMuted">Tu colección</h4>
-                          <span className="text-[10px] uppercase tracking-widest text-textMuted/50">Tocá una insignia</span>
+                          <h4 className="text-[11px] uppercase font-bold tracking-[0.25em] text-foreground-muted">Tu colección</h4>
+                          <span className="text-[10px] uppercase tracking-widest text-foreground-muted/50">Toca una insignia</span>
                         </div>
                         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 sm:gap-4">
                           {dbModules.map((mod, idx) => {
@@ -1154,19 +1159,32 @@ const StudentDashboard = () => {
                                 whileHover={{ y: -5 }}
                                 whileTap={{ scale: 0.96 }}
                                 onClick={() => setSelectedBadgeId(mod.id)}
+                                // Isla oscura por miniatura: bloqueada/desbloqueada/seleccionada
+                                // dependen del fondo negro (opacity+grayscale no se lee sobre blanco).
+                                // La base opaca va en el botón y el tinte de cada estado en una capa
+                                // aparte: juntos en el mismo cn(), tailwind-merge descartaba la base.
+                                data-theme="dark"
                                 className={cn(
-                                  "relative aspect-square rounded-2xl border-2 transition-colors flex items-center justify-center overflow-hidden group",
+                                  "relative isolate aspect-square rounded-2xl border-2 bg-surface-page transition-colors flex items-center justify-center overflow-hidden group",
                                   isSelected
-                                    ? "border-gold bg-gold/10 shadow-[0_0_30px_rgba(204,164,59,0.4)]"
+                                    ? "border-accent shadow-[0_0_30px_rgba(204,164,59,0.4)]"
                                     : isUnlocked
-                                      ? "border-gold/25 bg-black/30 hover:border-gold/60"
-                                      : "border-white/5 bg-white/[0.02] hover:border-white/15"
+                                      ? "border-brand/25 hover:border-brand/60"
+                                      : "border-ink/5 hover:border-ink/15"
                                 )}
                               >
+                                <span
+                                  aria-hidden
+                                  className={cn(
+                                    // -z-10 dentro del contexto isolate: sobre la base, bajo la insignia.
+                                    "absolute inset-0 -z-10 pointer-events-none",
+                                    isSelected ? "bg-brand/10" : isUnlocked ? "bg-black/30" : "bg-ink/[0.02]"
+                                  )}
+                                />
                                 {isSelected && (
                                   <motion.div
                                     layoutId="selectedThumbGlow"
-                                    className="absolute inset-0 bg-gradient-to-br from-gold/10 to-transparent pointer-events-none"
+                                    className="absolute inset-0 bg-gradient-to-br from-brand/10 to-transparent pointer-events-none"
                                     transition={{ type: "spring", stiffness: 280, damping: 28 }}
                                   />
                                 )}
@@ -1188,7 +1206,7 @@ const StudentDashboard = () => {
                                     size={54}
                                     className={cn(
                                       "transition-colors relative z-10",
-                                      isUnlocked ? "text-gold" : "text-white/25"
+                                      isUnlocked ? "text-accent" : "text-fg-25"
                                     )}
                                   />
                                 )}
@@ -1202,11 +1220,11 @@ const StudentDashboard = () => {
                                       transition={{ delay: idx * 0.05 + 0.3, type: "spring" }}
                                       className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center shadow-[0_0_12px_rgba(34,197,94,0.6)]"
                                     >
-                                      <CheckCircle2 size={13} className="text-darker" strokeWidth={3} />
+                                      <CheckCircle2 size={13} className="text-on-brand" strokeWidth={3} />
                                     </motion.div>
                                   ) : (
-                                    <div className="w-6 h-6 rounded-full bg-darker/85 border border-white/15 flex items-center justify-center backdrop-blur-md">
-                                      <Lock size={10} className="text-white/55" />
+                                    <div className="w-6 h-6 rounded-full bg-surface-page/85 border border-ink/15 flex items-center justify-center backdrop-blur-md">
+                                      <Lock size={10} className="text-fg-55" />
                                     </div>
                                   )}
                                 </div>
@@ -1218,7 +1236,7 @@ const StudentDashboard = () => {
                                       initial={{ width: 0 }}
                                       animate={{ width: `${progress}%` }}
                                       transition={{ duration: 0.8, delay: idx * 0.05 + 0.4 }}
-                                      className="h-full bg-gold/70"
+                                      className="h-full bg-brand/70"
                                     />
                                   </div>
                                 )}
@@ -1241,19 +1259,19 @@ const StudentDashboard = () => {
                 {user.plan === PLANS.VIP || user.plan === PLANS.INDIVIDUAL || user.role === "admin" ? (
                   <CommunityFeed currentUserId={user.id} isAdmin={user.role === "admin"} />
                 ) : (
-                  <div className="p-8 sm:p-16 text-center border border-transparent rounded-3xl bg-gradient-to-br from-gold/20 to-darker min-h-[400px] flex flex-col justify-center relative overflow-hidden">
-                    <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 sm:w-80 h-64 sm:h-80 bg-gold/10 rounded-full blur-3xl mix-blend-screen" />
-                    <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-64 sm:w-80 h-64 sm:h-80 bg-gold/5 rounded-full blur-3xl mix-blend-screen" />
+                  <div className="p-8 sm:p-16 text-center border border-transparent rounded-3xl bg-gradient-to-br from-brand/20 to-surface-page min-h-[400px] flex flex-col justify-center relative overflow-hidden">
+                    <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 sm:w-80 h-64 sm:h-80 bg-brand/10 rounded-full blur-3xl mix-blend-screen" />
+                    <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-64 sm:w-80 h-64 sm:h-80 bg-brand/5 rounded-full blur-3xl mix-blend-screen" />
                     <div className="relative z-10">
-                      <Lock size={48} className="mx-auto text-gold mb-6 drop-shadow-[0_0_15px_rgba(204,164,59,0.4)]" />
-                      <h3 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">Comunidad exclusiva</h3>
-                      <p className="text-white/80 mt-4 max-w-md mx-auto text-lg leading-relaxed">
+                      <Lock size={48} className="mx-auto text-accent mb-6 drop-shadow-[0_0_15px_rgba(204,164,59,0.4)]" />
+                      <h3 className="text-3xl sm:text-4xl font-extrabold text-foreground-strong tracking-tight">Comunidad exclusiva</h3>
+                      <p className="text-fg-80 mt-4 max-w-md mx-auto text-lg leading-relaxed">
                         Conecta con cientos de líderes y haz networking del más alto nivel. Disponible para miembros Individuales y VIP.
                       </p>
                       <button
                         type="button"
                         onClick={() => navigate("/planes")}
-                        className="mt-8 px-8 py-3.5 bg-gold text-darker font-bold rounded-xl hover:bg-goldHover transition-all shadow-[0_0_20px_rgba(204,164,59,0.3)] hover:shadow-[0_0_30px_rgba(204,164,59,0.5)] text-lg"
+                        className="mt-8 px-8 py-3.5 bg-brand text-on-brand font-bold rounded-xl hover:bg-brand-hover transition-all shadow-[0_0_20px_rgba(204,164,59,0.3)] hover:shadow-[0_0_30px_rgba(204,164,59,0.5)] text-lg"
                       >
                         Mejorar a VIP
                       </button>
@@ -1267,38 +1285,38 @@ const StudentDashboard = () => {
               <motion.div
                 key="perfil"
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}
-                className="bg-white/5 border border-white/10 rounded-3xl p-6 sm:p-10"
+                className="bg-ink/5 border border-line-subtle rounded-3xl p-6 sm:p-10 light:bg-surface-panel light:shadow-panel"
               >
-                <h2 className="text-2xl font-bold text-white mb-8 flex items-center gap-3 border-b border-white/10 pb-6">
-                  <UserIcon className="text-gold" /> Mi Panel
+                <h2 className="text-2xl font-bold text-foreground-strong mb-8 flex items-center gap-3 border-b border-line-subtle pb-6">
+                  <UserIcon className="text-accent" /> Mi Panel
                 </h2>
                 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
                   <div className="space-y-6">
                     <div>
-                      <label className="block text-sm font-semibold text-textMuted mb-3">Foto de Perfil</label>
+                      <label className="block text-sm font-semibold text-foreground-muted mb-3">Foto de Perfil</label>
                       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
-                        <div className="relative w-28 h-28 rounded-full bg-gold/10 flex items-center justify-center border-2 border-gold/30 text-4xl font-bold text-gold shadow-[0_0_20px_rgba(204,164,59,0.15)] group overflow-hidden shrink-0">
+                        <div className="relative w-28 h-28 rounded-full bg-brand/10 flex items-center justify-center border-2 border-brand/30 text-4xl font-bold text-accent shadow-[0_0_20px_rgba(204,164,59,0.15)] group overflow-hidden shrink-0">
                           {avatarPreview ? (
                             <img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover" />
                           ) : (
                             getInitials(profileName || "Usuario")
                           )}
                           <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-opacity backdrop-blur-sm">
-                            <Camera size={28} className="text-white" />
+                            <Camera size={28} className="text-media-foreground" />
                             <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} disabled={isUpdatingProfile} />
                           </label>
                         </div>
-                        <div className="text-sm text-textMuted bg-black/20 p-4 rounded-xl border border-white/5">
-                          <p className="text-white/90 font-medium mb-1">Actualiza tu avatar</p>
+                        <div className="text-sm text-foreground-muted bg-black/20 light:bg-surface-subtle p-4 rounded-xl border border-ink/5">
+                          <p className="text-fg-90 font-medium mb-1">Actualiza tu avatar</p>
                           <p className="text-xs">Haz clic en la imagen para subir una nueva.</p>
-                          <p className="text-xs mt-1 text-white/40">Recomendado: 400x400px (JPG, PNG. Max 2MB)</p>
+                          <p className="text-xs mt-1 text-fg-40">Recomendado: 400x400px (JPG, PNG. Max 2MB)</p>
                           {avatarPreview && (
                             <button
                               type="button"
                               onClick={handleDeleteAvatar}
                               disabled={isUpdatingProfile}
-                              className="mt-3 flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                              className="mt-3 flex items-center gap-1.5 text-xs text-danger hover:text-red-300 light:hover:text-danger bg-red-500/10 hover:bg-red-500/20 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
                             >
                               <Trash2 size={12} /> Eliminar foto
                             </button>
@@ -1308,73 +1326,73 @@ const StudentDashboard = () => {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-semibold text-textMuted mb-2">Nombre Completo</label>
+                      <label className="block text-sm font-semibold text-foreground-muted mb-2">Nombre Completo</label>
                       <input 
                         type="text" 
                         value={profileName}
                         onChange={(e) => setProfileName(e.target.value)}
-                        className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-gold/50 transition-colors"
+                        className="w-full bg-black/50 light:bg-surface-input border border-line-subtle light:border-line-control/50 rounded-xl px-4 py-3 text-foreground-strong focus:outline-none focus:border-brand/50 transition-colors"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-semibold text-textMuted mb-2">Correo Electrónico</label>
+                      <label className="block text-sm font-semibold text-foreground-muted mb-2">Correo Electrónico</label>
                       <input 
                         type="email" 
                         defaultValue={user?.email}
                         disabled
-                        className="w-full bg-black/20 border border-white/5 rounded-xl px-4 py-3 text-white/50 cursor-not-allowed"
+                        className="w-full bg-black/20 light:bg-surface-subtle border border-ink/5 rounded-xl px-4 py-3 text-fg-50 cursor-not-allowed"
                       />
                     </div>
 
                     <button 
                       onClick={handleUpdateProfile}
                       disabled={isUpdatingProfile || !profileName.trim()}
-                      className="px-6 py-3.5 bg-gold hover:bg-goldHover text-darker font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 w-full sm:w-auto shadow-lg"
+                      className="px-6 py-3.5 bg-brand hover:bg-brand-hover text-on-brand font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 w-full sm:w-auto shadow-lg"
                     >
                       {isUpdatingProfile ? <Loader2 className="w-5 h-5 animate-spin" /> : <Edit3 size={18} />}
                       Guardar Cambios
                     </button>
                   </div>
 
-                  <div className="bg-black/40 rounded-2xl p-6 sm:p-8 border border-white/10 h-fit flex flex-col relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-gold/5 rounded-bl-full -mr-10 -mt-10" />
-                    <h3 className="text-xl font-bold text-white mb-6 relative z-10 flex items-center gap-2">
-                      <Award className="text-gold" size={20} /> Tu Suscripción
+                  <div className="bg-black/40 light:bg-surface-panel light:shadow-panel rounded-2xl p-6 sm:p-8 border border-line-subtle h-fit flex flex-col relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-brand/5 rounded-bl-full -mr-10 -mt-10" />
+                    <h3 className="text-xl font-bold text-foreground-strong mb-6 relative z-10 flex items-center gap-2">
+                      <Award className="text-accent" size={20} /> Tu Suscripción
                     </h3>
                     <div className="space-y-5 relative z-10 flex-1">
-                      <div className="flex justify-between items-center pb-5 border-b border-white/5">
-                        <span className="text-textMuted font-medium">Plan actual</span>
-                        <span className="text-gold font-bold uppercase tracking-widest text-lg">{user?.plan || "Free"}</span>
+                      <div className="flex justify-between items-center pb-5 border-b border-ink/5">
+                        <span className="text-foreground-muted font-medium">Plan actual</span>
+                        <span className="text-accent font-bold uppercase tracking-widest text-lg">{user?.plan || "Free"}</span>
                       </div>
-                      <div className="flex justify-between items-center pb-5 border-b border-white/5">
-                        <span className="text-textMuted font-medium">Estado</span>
-                        <span className="text-green-400 font-bold bg-green-500/10 px-3 py-1 rounded-md border border-green-500/20 text-sm flex items-center gap-1.5">
+                      <div className="flex justify-between items-center pb-5 border-b border-ink/5">
+                        <span className="text-foreground-muted font-medium">Estado</span>
+                        <span className="text-green-400 light:text-success font-bold bg-green-500/10 px-3 py-1 rounded-md border border-green-500/20 text-sm flex items-center gap-1.5">
                           <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span> Activo
                         </span>
                       </div>
-                      <div className="flex justify-between items-center pb-5 border-b border-white/5">
-                        <span className="text-textMuted font-medium">Miembro desde</span>
-                        <span className="text-white/90 font-medium">
+                      <div className="flex justify-between items-center pb-5 border-b border-ink/5">
+                        <span className="text-foreground-muted font-medium">Miembro desde</span>
+                        <span className="text-fg-90 font-medium">
                           {user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : "Hoy"}
                         </span>
                       </div>
                       {user?.plan !== PLANS.FREE && subscriptionEndDate && (
                         <div className="flex justify-between items-center">
-                          <span className="text-textMuted font-medium">Próximo cobro</span>
-                          <span className="text-white/90 font-medium">{subscriptionEndDate}</span>
+                          <span className="text-foreground-muted font-medium">Próximo cobro</span>
+                          <span className="text-fg-90 font-medium">{subscriptionEndDate}</span>
                         </div>
                       )}
                     </div>
                     
                     {user?.plan === PLANS.FREE ? (
-                      <button className="w-full mt-8 py-3.5 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl transition-all border border-white/20 relative z-10 hover:border-gold/30 hover:text-gold">
+                      <button className="w-full mt-8 py-3.5 bg-ink/10 hover:bg-ink/20 text-foreground-strong font-bold rounded-xl transition-all border border-ink/20 relative z-10 hover:border-brand/30 hover:text-accent">
                         Mejorar mi Plan
                       </button>
                     ) : (
                       <button 
                         onClick={handleManageBilling}
-                        className="w-full mt-8 py-3.5 bg-white/5 hover:bg-white/10 text-white/70 font-medium rounded-xl transition-all border border-white/5 text-sm relative z-10"
+                        className="w-full mt-8 py-3.5 bg-ink/5 hover:bg-ink/10 text-fg-70 font-medium rounded-xl transition-all border border-ink/5 text-sm relative z-10 light:bg-surface-panel light:shadow-sm light:hover:bg-surface-subtle"
                       >
                         Gestionar Métodos de Pago
                       </button>
@@ -1390,55 +1408,55 @@ const StudentDashboard = () => {
 
       {/* Mockup de Customer Portal de Stripe */}
       <Dialog open={isBillingModalOpen} onOpenChange={setIsBillingModalOpen}>
-        <DialogContent className="sm:max-w-[425px] bg-darker border-white/10 text-white">
+        <DialogContent className="sm:max-w-[425px] bg-surface-page border-line-subtle text-foreground-strong">
           <DialogHeader>
             <DialogTitle className="text-xl flex items-center gap-2">
-              <Award className="text-gold" size={24} /> Portal de Pagos
+              <Award className="text-accent" size={24} /> Portal de Pagos
             </DialogTitle>
-            <DialogDescription className="text-textMuted">
+            <DialogDescription className="text-foreground-muted">
               Gestiona tu suscripción y métodos de pago.
             </DialogDescription>
           </DialogHeader>
           
           <div className="py-6 space-y-6">
-            <div className="bg-white/5 border border-white/10 rounded-xl p-5 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-gold/5 rounded-bl-full -mr-5 -mt-5" />
+            <div className="bg-ink/5 border border-line-subtle rounded-xl p-5 relative overflow-hidden light:bg-surface-panel light:shadow-panel">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-brand/5 rounded-bl-full -mr-5 -mt-5" />
               <div className="relative z-10 flex justify-between items-start mb-4">
                 <div>
-                  <h4 className="text-sm font-semibold text-textMuted uppercase tracking-wider mb-1">Plan Actual</h4>
-                  <p className="text-2xl font-bold text-white uppercase">{user?.plan}</p>
+                  <h4 className="text-sm font-semibold text-foreground-muted uppercase tracking-wider mb-1">Plan Actual</h4>
+                  <p className="text-2xl font-bold text-foreground-strong uppercase">{user?.plan}</p>
                 </div>
-                <span className="text-green-400 font-bold bg-green-500/10 px-2 py-1 rounded border border-green-500/20 text-xs flex items-center gap-1.5">
+                <span className="text-green-400 light:text-success font-bold bg-green-500/10 px-2 py-1 rounded border border-green-500/20 text-xs flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span> Activo
                 </span>
               </div>
-              <div className="relative z-10 flex justify-between items-center text-sm pt-4 border-t border-white/10">
-                <span className="text-white/60">Próximo cobro:</span>
-                <span className="text-white font-medium">{subscriptionEndDate || "15 de Junio de 2026 (Simulado)"}</span>
+              <div className="relative z-10 flex justify-between items-center text-sm pt-4 border-t border-line-subtle">
+                <span className="text-fg-60">Próximo cobro:</span>
+                <span className="text-foreground-strong font-medium">{subscriptionEndDate || "15 de Junio de 2026 (Simulado)"}</span>
               </div>
             </div>
 
             <div className="space-y-3">
-              <h4 className="text-sm font-semibold text-white/80">Métodos de Pago</h4>
-              <div className="bg-black/30 border border-white/10 rounded-xl p-4 flex justify-between items-center">
+              <h4 className="text-sm font-semibold text-fg-80">Métodos de Pago</h4>
+              <div className="bg-black/30 light:bg-surface-panel light:shadow-panel border border-line-subtle rounded-xl p-4 flex justify-between items-center">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-6 bg-white/10 rounded border border-white/20 flex items-center justify-center text-[10px] font-bold text-white/60">
+                  <div className="w-10 h-6 bg-ink/10 rounded border border-ink/20 flex items-center justify-center text-[10px] font-bold text-fg-60">
                     VISA
                   </div>
                   <div className="text-sm">
-                    <p className="text-white font-medium">•••• 4242</p>
-                    <p className="text-xs text-white/50">Expira 12/28</p>
+                    <p className="text-foreground-strong font-medium">•••• 4242</p>
+                    <p className="text-xs text-fg-50">Expira 12/28</p>
                   </div>
                 </div>
-                <span className="text-xs text-gold bg-gold/10 px-2 py-1 rounded border border-gold/20">Predeterminado</span>
+                <span className="text-xs text-accent bg-brand/10 px-2 py-1 rounded border border-brand/20">Predeterminado</span>
               </div>
             </div>
 
             <div className="flex flex-col gap-3 pt-4">
-              <button className="w-full py-2.5 bg-white/10 hover:bg-white/15 text-white text-sm font-medium rounded-lg transition-colors border border-white/10">
+              <button className="w-full py-2.5 bg-ink/10 hover:bg-ink/15 text-foreground-strong text-sm font-medium rounded-lg transition-colors border border-line-subtle">
                 Añadir método de pago
               </button>
-              <button className="w-full py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-sm font-medium rounded-lg transition-colors border border-red-500/20">
+              <button className="w-full py-2.5 bg-red-500/10 hover:bg-red-500/20 text-danger text-sm font-medium rounded-lg transition-colors border border-red-500/20">
                 Cancelar suscripción
               </button>
             </div>

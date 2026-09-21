@@ -233,30 +233,33 @@ const LivePlayerControls = ({
           <button
             type="button"
             aria-label="Calidad de video"
-            className="absolute right-3 sm:right-5 bottom-16 sm:bottom-20 z-[32] flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/15 text-white/90 hover:text-gold hover:bg-black/80 active:scale-95 transition-all pointer-events-auto shadow-lg"
+            className="absolute right-3 sm:right-5 bottom-16 sm:bottom-20 z-[32] flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-ink/15 text-fg-90 hover:text-accent hover:bg-black/80 active:scale-95 transition-all pointer-events-auto shadow-lg"
           >
             <Settings size={16} />
             <span className="text-[10px] sm:text-xs font-black tracking-wider tabular-nums">{currentLevelLabel}</span>
           </button>
         </DropdownMenuTrigger>
+        {/* Se portalea al body, fuera de la isla del escenario: el contexto oscuro
+            se declara aquí explícitamente (spec §4.4). */}
         <DropdownMenuContent
+          data-theme="dark"
           align="end"
           side="top"
-          className="min-w-[160px] bg-darker/95 backdrop-blur-xl border-white/10"
+          className="min-w-[160px] bg-surface-page/95 backdrop-blur-xl border-line-subtle"
         >
-          <DropdownMenuLabel className="text-xs text-textMuted uppercase tracking-wider">
+          <DropdownMenuLabel className="text-xs text-foreground-muted uppercase tracking-wider">
             Calidad
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() => { onSelectLevel(-1); wakeControls(); }}
-            className={cn("cursor-pointer", currentLevel === -1 && "text-gold")}
+            className={cn("cursor-pointer", currentLevel === -1 && "text-accent")}
           >
             <span className="flex-1">Auto</span>
-            {currentLevel === -1 && <Check size={14} className="text-gold" />}
+            {currentLevel === -1 && <Check size={14} className="text-accent" />}
           </DropdownMenuItem>
           {levels.length === 0 ? (
-            <DropdownMenuItem disabled className="text-textMuted text-xs italic">
+            <DropdownMenuItem disabled className="text-foreground-muted text-xs italic">
               Sin renditions adicionales
             </DropdownMenuItem>
           ) : (
@@ -266,31 +269,31 @@ const LivePlayerControls = ({
                 <DropdownMenuItem
                   key={lvl.index}
                   onClick={() => { onSelectLevel(lvl.index); wakeControls(); }}
-                  className={cn("cursor-pointer", currentLevel === lvl.index && "text-gold")}
+                  className={cn("cursor-pointer", currentLevel === lvl.index && "text-accent")}
                 >
                   <span className="flex-1">{lvl.label}</span>
-                  {currentLevel === lvl.index && <Check size={14} className="text-gold" />}
+                  {currentLevel === lvl.index && <Check size={14} className="text-accent" />}
                 </DropdownMenuItem>
               ))
           )}
 
           <DropdownMenuSeparator />
-          <DropdownMenuLabel className="text-xs text-textMuted uppercase tracking-wider">
+          <DropdownMenuLabel className="text-xs text-foreground-muted uppercase tracking-wider">
             Latencia
           </DropdownMenuLabel>
           <DropdownMenuItem
             onClick={() => { onSelectLatencyMode("smooth"); wakeControls(); }}
-            className={cn("cursor-pointer", latencyMode === "smooth" && "text-gold")}
+            className={cn("cursor-pointer", latencyMode === "smooth" && "text-accent")}
           >
             <span className="flex-1">Fluidez</span>
-            {latencyMode === "smooth" && <Check size={14} className="text-gold" />}
+            {latencyMode === "smooth" && <Check size={14} className="text-accent" />}
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => { onSelectLatencyMode("low"); wakeControls(); }}
-            className={cn("cursor-pointer", latencyMode === "low" && "text-gold")}
+            className={cn("cursor-pointer", latencyMode === "low" && "text-accent")}
           >
             <span className="flex-1">Baja latencia</span>
-            {latencyMode === "low" && <Check size={14} className="text-gold" />}
+            {latencyMode === "low" && <Check size={14} className="text-accent" />}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -304,7 +307,7 @@ const LivePlayerControls = ({
             transition={{ duration: 0.2 }}
             className="absolute inset-0 z-[25] flex items-center justify-center pointer-events-none"
           >
-            <Loader2 size={40} strokeWidth={2.5} className="animate-spin text-gold/80" />
+            <Loader2 size={40} strokeWidth={2.5} className="animate-spin text-accent/80" />
           </motion.div>
         )}
       </AnimatePresence>
@@ -318,8 +321,8 @@ const LivePlayerControls = ({
             transition={{ type: "spring", damping: 18, stiffness: 220 }}
             className="absolute inset-0 z-[25] flex items-center justify-center pointer-events-none"
           >
-            <div className="p-5 rounded-full bg-black/60 backdrop-blur-md border border-white/15 shadow-2xl">
-              <Play size={36} fill="currentColor" strokeWidth={0} className="text-white ml-1" />
+            <div className="p-5 rounded-full bg-black/60 backdrop-blur-md border border-ink/15 shadow-2xl">
+              <Play size={36} fill="currentColor" strokeWidth={0} className="text-foreground-strong ml-1" />
             </div>
           </motion.div>
         )}
@@ -338,7 +341,7 @@ const LivePlayerControls = ({
               <button
                 onClick={() => { onTogglePlay(); wakeControls(); }}
                 aria-label={isPlaying ? "Pausar" : "Reproducir"}
-                className="text-white hover:text-gold active:scale-90 transition-all"
+                className="text-foreground-strong hover:text-accent active:scale-90 transition-all"
               >
                 {isPlaying ? <Pause size={22} fill="currentColor" strokeWidth={0} /> : <Play size={22} fill="currentColor" strokeWidth={0} />}
               </button>
@@ -347,7 +350,7 @@ const LivePlayerControls = ({
                 <button
                   onClick={() => { onToggleMute(); wakeControls(); }}
                   aria-label={isMuted ? "Desmutear" : "Mutear"}
-                  className="text-white hover:text-gold active:scale-90 transition-all"
+                  className="text-foreground-strong hover:text-accent active:scale-90 transition-all"
                 >
                   {isMuted || volume === 0 ? <VolumeX size={20} /> : <Volume2 size={20} />}
                 </button>
@@ -368,7 +371,7 @@ const LivePlayerControls = ({
                 onClick={() => { handleGoLive(); wakeControls(); }}
                 aria-label={isBehind ? `Volver al filo del vivo, atrasado ${Math.floor(liveDelta)} segundos` : "Saltar al filo del vivo"}
                 title={isBehind ? "Volver al vivo" : "Ya estás al filo del vivo"}
-                className="flex items-center gap-1.5 sm:gap-2 ml-1 text-red-500 hover:text-red-400 active:scale-95 text-[10px] sm:text-xs font-black tracking-widest transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 sm:gap-2 ml-1 text-red-500 hover:text-danger active:scale-95 text-[10px] sm:text-xs font-black tracking-widest transition-colors cursor-pointer"
               >
                 <span className="relative flex w-2 h-2">
                   <span className="absolute inset-0 rounded-full bg-red-500 animate-ping opacity-75" />
@@ -384,7 +387,7 @@ const LivePlayerControls = ({
               <button
                 onClick={() => { handleFullscreenToggle(); wakeControls(); }}
                 aria-label={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
-                className="text-white hover:text-gold active:scale-90 transition-all"
+                className="text-foreground-strong hover:text-accent active:scale-90 transition-all"
               >
                 {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
               </button>

@@ -20,19 +20,19 @@ interface LiveViewersDialogProps {
 const LiveViewersDialog = ({ open, onOpenChange, viewers, totalViewers, currentUserId }: LiveViewersDialogProps) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-darker border-white/10 max-w-md">
+      <DialogContent className="bg-surface-page border-line-subtle max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-white flex items-center gap-2.5">
-            <div className="p-1.5 rounded-lg bg-gold/15">
-              <Users size={16} className="text-gold" />
+          <DialogTitle className="text-foreground-strong flex items-center gap-2.5">
+            <div className="p-1.5 rounded-lg bg-brand/15">
+              <Users size={16} className="text-accent" />
             </div>
             Conectados
-            <span className="text-gold font-black">({totalViewers})</span>
+            <span className="text-accent font-black">({totalViewers})</span>
           </DialogTitle>
         </DialogHeader>
         <div className="max-h-[60vh] overflow-y-auto -mx-2 px-2 space-y-1">
           {viewers.length === 0 ? (
-            <p className="text-textMuted text-sm text-center py-8">Cargando conectados...</p>
+            <p className="text-foreground-muted text-sm text-center py-8">Cargando conectados...</p>
           ) : (
             viewers
               .slice()
@@ -40,24 +40,24 @@ const LiveViewersDialog = ({ open, onOpenChange, viewers, totalViewers, currentU
               .map(v => (
                 <div
                   key={v.user_id}
-                  className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-white/[0.04] transition-colors"
+                  className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-ink/[0.04] transition-colors"
                 >
                   {v.avatar_url ? (
                     <img
                       src={v.avatar_url}
                       alt={v.full_name}
-                      className="w-10 h-10 rounded-full object-cover ring-1 ring-white/10 shrink-0"
+                      className="w-10 h-10 rounded-full object-cover ring-1 ring-ink/10 shrink-0"
                     />
                   ) : (
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gold/30 to-gold/10 text-gold flex items-center justify-center font-black text-sm ring-1 ring-gold/30 shrink-0">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-brand/30 to-brand/10 text-accent flex items-center justify-center font-black text-sm ring-1 ring-focus/30 shrink-0">
                       {v.full_name?.[0]?.toUpperCase() ?? "?"}
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-white truncate">
+                    <p className="text-sm font-bold text-foreground-strong truncate">
                       {v.full_name}
                       {v.user_id === currentUserId && (
-                        <span className="ml-1.5 text-gold/70 font-normal text-xs">(Tú)</span>
+                        <span className="ml-1.5 text-accent/70 light:text-accent font-normal text-xs">(Tú)</span>
                       )}
                     </p>
                     <div className="flex items-center gap-1.5 mt-0.5">
@@ -65,9 +65,9 @@ const LiveViewersDialog = ({ open, onOpenChange, viewers, totalViewers, currentU
                       <span
                         className={cn(
                           "text-[9px] font-black uppercase tracking-widest",
-                          v.plan === "vip" && "text-gold",
-                          v.plan === "individual" && "text-blue-300",
-                          v.plan === "free" && "text-textMuted",
+                          v.plan === "vip" && "text-accent",
+                          v.plan === "individual" && "text-blue-300 light:text-info",
+                          v.plan === "free" && "text-foreground-muted",
                         )}
                       >
                         {v.plan === "vip" ? "★ VIP" : v.plan === "individual" ? "Individual" : "Free"}
@@ -78,12 +78,12 @@ const LiveViewersDialog = ({ open, onOpenChange, viewers, totalViewers, currentU
               ))
           )}
           {totalViewers > viewers.length && (
-            <div className="flex items-center gap-3 p-2.5 rounded-xl border-t border-white/5 mt-1">
-              <div className="w-10 h-10 rounded-full bg-white/5 text-textMuted flex items-center justify-center ring-1 ring-white/10 shrink-0">
+            <div className="flex items-center gap-3 p-2.5 rounded-xl border-t border-ink/5 mt-1">
+              <div className="w-10 h-10 rounded-full bg-ink/5 text-foreground-muted flex items-center justify-center ring-1 ring-ink/10 shrink-0">
                 <Users size={16} />
               </div>
-              <p className="text-sm text-textMuted">
-                <span className="font-bold text-white">{totalViewers - viewers.length}</span>{" "}
+              <p className="text-sm text-foreground-muted">
+                <span className="font-bold text-foreground-strong">{totalViewers - viewers.length}</span>{" "}
                 {totalViewers - viewers.length === 1 ? "invitado" : "invitados"} por link público
               </p>
             </div>

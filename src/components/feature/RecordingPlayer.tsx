@@ -40,23 +40,23 @@ const RecordingPlayer = ({ live }: RecordingPlayerProps) => {
   if (isR2) {
     if (loading) {
       return (
-        <div className="aspect-video bg-black rounded-xl flex items-center justify-center border border-white/10">
-          <Loader2 className="animate-spin text-gold" size={28} />
+        <div className="aspect-video bg-black rounded-xl flex items-center justify-center border border-line-subtle">
+          <Loader2 className="animate-spin text-accent" size={28} />
         </div>
       );
     }
     if (!r2Url) {
       return (
-        <div className="aspect-video bg-black/40 rounded-xl flex items-center justify-center border border-dashed border-white/10">
+        <div className="aspect-video bg-black/40 light:bg-surface-subtle rounded-xl flex items-center justify-center border border-dashed border-line-subtle">
           <div className="text-center">
-            <Video size={32} className="mx-auto text-white/20 mb-2" />
-            <p className="text-sm text-textMuted">No se pudo cargar la grabación</p>
+            <Video size={32} className="mx-auto text-fg-20 light:text-fg-40 mb-2" />
+            <p className="text-sm text-foreground-muted">No se pudo cargar la grabación</p>
           </div>
         </div>
       );
     }
     return (
-      <div className="aspect-video bg-black rounded-xl overflow-hidden border border-white/10">
+      <div className="aspect-video bg-black rounded-xl overflow-hidden border border-line-subtle">
         <video src={r2Url} controls className="w-full h-full" preload="metadata" />
       </div>
     );
@@ -65,16 +65,16 @@ const RecordingPlayer = ({ live }: RecordingPlayerProps) => {
   if (live.recording_stream_uid) {
     if (!CF_STREAM_HOST) {
       return (
-        <div className="aspect-video bg-black/40 rounded-xl flex items-center justify-center border border-dashed border-white/10">
+        <div className="aspect-video bg-black/40 light:bg-surface-subtle rounded-xl flex items-center justify-center border border-dashed border-line-subtle">
           <div className="text-center">
-            <Video size={32} className="mx-auto text-white/20 mb-2" />
-            <p className="text-sm text-textMuted">Falta configurar <code>VITE_CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN</code></p>
+            <Video size={32} className="mx-auto text-fg-20 light:text-fg-40 mb-2" />
+            <p className="text-sm text-foreground-muted">Falta configurar <code>VITE_CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN</code></p>
           </div>
         </div>
       );
     }
     return (
-      <div className="aspect-video bg-black rounded-xl overflow-hidden border border-white/10">
+      <div className="aspect-video bg-black rounded-xl overflow-hidden border border-line-subtle">
         <iframe
           src={`https://${CF_STREAM_HOST}/${live.recording_stream_uid}/iframe`}
           allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"

@@ -129,24 +129,24 @@ export function CommunityFeed({ currentUserId, isAdmin }: CommunityFeedProps) {
       <motion.div
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-gold/[0.12] via-darker to-darker p-6 sm:p-8"
+        className="relative overflow-hidden rounded-3xl border border-line-subtle bg-gradient-to-br from-gold/[0.12] via-surface-page to-surface-page p-6 sm:p-8"
       >
-        <div className="pointer-events-none absolute -top-24 -right-24 h-72 w-72 rounded-full bg-gold/20 blur-3xl" />
+        <div className="pointer-events-none absolute -top-24 -right-24 h-72 w-72 rounded-full bg-brand/20 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-32 -left-20 h-72 w-72 rounded-full bg-purple-500/8 blur-3xl" />
         <div className="pointer-events-none absolute inset-0 opacity-[0.03] [background-image:radial-gradient(circle_at_1px_1px,white_1px,transparent_0)] [background-size:20px_20px]" />
 
         <div className="relative flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-gold/30 bg-gold/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-gold backdrop-blur-sm">
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-brand/30 bg-brand/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-accent backdrop-blur-sm">
               <Sparkles size={12} /> Espacio exclusivo
             </div>
-            <h2 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
+            <h2 className="text-3xl font-extrabold tracking-tight text-foreground-strong sm:text-4xl">
               Comunidad{" "}
-              <span className="bg-gradient-to-r from-gold to-goldHover bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-brand to-brand-hover light:from-gilt-start light:to-gilt-end bg-clip-text text-transparent">
                 VIP
               </span>
             </h2>
-            <p className="mt-2 max-w-xl text-sm text-textMuted sm:text-base">
+            <p className="mt-2 max-w-xl text-sm text-foreground-muted sm:text-base">
               Conecta con otros miembros, comparte preguntas, ideas y recursos.
             </p>
           </div>
@@ -156,7 +156,7 @@ export function CommunityFeed({ currentUserId, isAdmin }: CommunityFeedProps) {
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}
             onClick={() => setDialogOpen(true)}
-            className="group relative inline-flex items-center justify-center gap-2 self-start overflow-hidden rounded-2xl bg-gold px-6 py-3 font-bold text-darker shadow-[0_8px_32px_-8px_rgba(204,164,59,0.6)] transition-all hover:bg-goldHover sm:self-auto"
+            className="group relative inline-flex items-center justify-center gap-2 self-start overflow-hidden rounded-2xl bg-brand px-6 py-3 font-bold text-on-brand shadow-[0_8px_32px_-8px_rgba(204,164,59,0.6)] transition-all hover:bg-brand-hover sm:self-auto"
           >
             <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/40 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
             <Plus size={18} /> Nueva publicación
@@ -173,9 +173,9 @@ export function CommunityFeed({ currentUserId, isAdmin }: CommunityFeedProps) {
       </motion.div>
 
       {/* Filters bar */}
-      <div className="sticky top-2 z-10 flex flex-col gap-3 rounded-2xl border border-white/10 bg-darker/80 p-3 backdrop-blur-xl sm:p-4">
+      <div className="sticky top-2 z-10 flex flex-col gap-3 rounded-2xl border border-line-subtle bg-surface-page/80 p-3 backdrop-blur-xl sm:p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-1.5 rounded-xl bg-white/[0.04] p-1 ring-1 ring-white/5">
+          <div className="flex items-center gap-1.5 rounded-xl bg-ink/[0.04] light:bg-surface-subtle p-1 ring-1 ring-ink/5">
             {([
               { id: "recent", label: "Recientes", icon: Clock },
               { id: "popular", label: "Populares", icon: Flame },
@@ -189,13 +189,13 @@ export function CommunityFeed({ currentUserId, isAdmin }: CommunityFeedProps) {
                   onClick={() => setSort(opt.id)}
                   className={cn(
                     "relative inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
-                    active ? "text-darker" : "text-textMuted hover:text-white"
+                    active ? "text-on-brand" : "text-foreground-muted hover:text-foreground-strong"
                   )}
                 >
                   {active && (
                     <motion.span
                       layoutId="sortPill"
-                      className="absolute inset-0 -z-10 rounded-lg bg-gold shadow-[0_0_16px_rgba(204,164,59,0.4)]"
+                      className="absolute inset-0 -z-10 rounded-lg bg-brand shadow-[0_0_16px_rgba(204,164,59,0.4)]"
                       transition={{ type: "spring", stiffness: 400, damping: 32 }}
                     />
                   )}
@@ -205,7 +205,7 @@ export function CommunityFeed({ currentUserId, isAdmin }: CommunityFeedProps) {
             })}
           </div>
 
-          <div className="hidden text-xs text-textMuted sm:block">
+          <div className="hidden text-xs text-foreground-muted sm:block">
             {posts.length} {posts.length === 1 ? "publicación" : "publicaciones"}
           </div>
         </div>
@@ -238,24 +238,24 @@ export function CommunityFeed({ currentUserId, isAdmin }: CommunityFeedProps) {
         <motion.div
           initial={{ opacity: 0, scale: 0.97 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="relative overflow-hidden rounded-3xl border border-dashed border-white/15 bg-gradient-to-br from-white/[0.03] to-transparent py-16 text-center"
+          className="relative overflow-hidden rounded-3xl border border-dashed border-ink/15 bg-gradient-to-br from-white/[0.03] to-transparent light:from-surface-panel py-16 text-center"
         >
-          <div className="pointer-events-none absolute inset-x-0 -top-10 mx-auto h-40 w-40 rounded-full bg-gold/10 blur-3xl" />
+          <div className="pointer-events-none absolute inset-x-0 -top-10 mx-auto h-40 w-40 rounded-full bg-brand/10 blur-3xl" />
           <motion.div
             animate={{ y: [0, -6, 0] }}
             transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-            className="mx-auto mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-gold/20 to-gold/5 ring-1 ring-gold/30"
+            className="mx-auto mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-brand/20 to-brand/5 ring-1 ring-focus/30"
           >
-            <MessageSquare className="text-gold" size={28} />
+            <MessageSquare className="text-accent" size={28} />
           </motion.div>
-          <h3 className="mb-2 text-xl font-bold text-white">Aún no hay publicaciones</h3>
-          <p className="mx-auto mb-6 max-w-sm text-sm text-textMuted">
+          <h3 className="mb-2 text-xl font-bold text-foreground-strong">Aún no hay publicaciones</h3>
+          <p className="mx-auto mb-6 max-w-sm text-sm text-foreground-muted">
             Sé el primero en iniciar una conversación. Pregunta, comparte una idea o un recurso valioso.
           </p>
           <button
             type="button"
             onClick={() => setDialogOpen(true)}
-            className="inline-flex items-center gap-2 rounded-xl bg-gold px-5 py-2.5 font-bold text-darker transition-colors hover:bg-goldHover"
+            className="inline-flex items-center gap-2 rounded-xl bg-brand px-5 py-2.5 font-bold text-on-brand transition-colors hover:bg-brand-hover"
           >
             <Plus size={16} /> Crear la primera
           </button>
@@ -275,10 +275,10 @@ export function CommunityFeed({ currentUserId, isAdmin }: CommunityFeedProps) {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      className="flex items-center gap-2 pt-1 text-[11px] font-bold uppercase tracking-wider text-gold/90"
+                      className="flex items-center gap-2 pt-1 text-[11px] font-bold uppercase tracking-wider text-accent/90"
                     >
                       <Pin size={12} /> Fijado por el equipo
-                      <div className="h-px flex-1 bg-gradient-to-r from-gold/40 to-transparent" />
+                      <div className="h-px flex-1 bg-gradient-to-r from-brand/40 to-transparent" />
                     </motion.div>
                   )}
                   {pinned.map((post) => (
@@ -301,10 +301,10 @@ export function CommunityFeed({ currentUserId, isAdmin }: CommunityFeedProps) {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      className="flex items-center gap-2 pt-3 text-[11px] font-bold uppercase tracking-wider text-textMuted"
+                      className="flex items-center gap-2 pt-3 text-[11px] font-bold uppercase tracking-wider text-foreground-muted"
                     >
                       <Clock size={12} /> Recientes
-                      <div className="h-px flex-1 bg-gradient-to-r from-white/15 to-transparent" />
+                      <div className="h-px flex-1 bg-gradient-to-r from-white/15 to-transparent light:from-line-subtle" />
                     </motion.div>
                   )}
                   {regular.map((post) => (
@@ -342,13 +342,13 @@ export function CommunityFeed({ currentUserId, isAdmin }: CommunityFeedProps) {
 
 function StatPill({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: number }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 backdrop-blur-sm">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gold/10 text-gold ring-1 ring-gold/20">
+    <div className="flex items-center gap-3 rounded-xl border border-line-subtle bg-ink/[0.03] light:bg-surface-panel px-3 py-2.5 backdrop-blur-sm">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-accent ring-1 ring-focus/20">
         <Icon size={15} />
       </div>
       <div className="min-w-0">
-        <div className="text-base font-bold tabular-nums text-white leading-none">{value}</div>
-        <div className="mt-0.5 truncate text-[10px] uppercase tracking-wide text-textMuted">{label}</div>
+        <div className="text-base font-bold tabular-nums text-foreground-strong leading-none">{value}</div>
+        <div className="mt-0.5 truncate text-[10px] uppercase tracking-wide text-foreground-muted">{label}</div>
       </div>
     </div>
   );
@@ -372,8 +372,8 @@ function CategoryChip({
       className={cn(
         "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all",
         active
-          ? "border-gold bg-gold text-darker shadow-[0_0_14px_rgba(204,164,59,0.35)]"
-          : "border-white/10 bg-white/[0.03] text-textMuted hover:border-white/25 hover:text-white"
+          ? "border-accent bg-brand text-on-brand shadow-[0_0_14px_rgba(204,164,59,0.35)]"
+          : "border-line-subtle bg-ink/[0.03] light:bg-surface-panel text-foreground-muted hover:border-ink/25 hover:text-foreground-strong"
       )}
     >
       {icon}
@@ -388,15 +388,15 @@ function SkeletonCard({ delay = 0 }: { delay?: number }) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ delay }}
-      className="rounded-2xl border border-white/10 bg-white/[0.02] p-5"
+      className="rounded-2xl border border-line-subtle bg-ink/[0.02] light:bg-surface-panel p-5"
     >
       <div className="flex items-start gap-4">
-        <div className="h-11 w-11 shrink-0 animate-pulse rounded-full bg-white/10" />
+        <div className="h-11 w-11 shrink-0 animate-pulse rounded-full bg-ink/10" />
         <div className="flex-1 space-y-3">
-          <div className="h-3 w-1/3 animate-pulse rounded bg-white/10" />
-          <div className="h-5 w-3/4 animate-pulse rounded bg-white/15" />
-          <div className="h-3 w-full animate-pulse rounded bg-white/10" />
-          <div className="h-3 w-5/6 animate-pulse rounded bg-white/10" />
+          <div className="h-3 w-1/3 animate-pulse rounded bg-ink/10" />
+          <div className="h-5 w-3/4 animate-pulse rounded bg-ink/15" />
+          <div className="h-3 w-full animate-pulse rounded bg-ink/10" />
+          <div className="h-3 w-5/6 animate-pulse rounded bg-ink/10" />
         </div>
       </div>
     </motion.div>

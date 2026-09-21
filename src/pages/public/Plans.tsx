@@ -15,7 +15,7 @@ interface FaqItem {
 const FAQ: FaqItem[] = [
   {
     q: "¿Puedo cambiar de plan en cualquier momento?",
-    a: "Sí. Podés mejorar o bajar de plan cuando quieras desde tu panel. Los cobros se ajustan automáticamente.",
+    a: "Sí. Puedes mejorar o bajar de plan cuando quieras desde tu panel. Los cobros se ajustan automáticamente.",
   },
   {
     q: "¿Qué incluye el plan Free?",
@@ -27,7 +27,7 @@ const FAQ: FaqItem[] = [
   },
     {
       q: "¿Hay reembolso si no me convence?",
-      a: "Tenés 14 días desde tu primera suscripción para solicitar reembolso completo sin preguntas.",
+      a: "Tienes 14 días desde tu primera suscripción para solicitar reembolso completo sin preguntas.",
     },
     {
       q: "¿Qué diferencia a la Escuela de la Riqueza de otros programas de formación empresarial?",

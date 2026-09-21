@@ -28,13 +28,13 @@ export async function authedFetch(input: string, init: RequestInit = {}): Promis
   if (session?.expires_at && session.expires_at - nowSec < 60) {
     const { data: refreshed, error } = await supabase.auth.refreshSession();
     if (error || !refreshed.session) {
-      throw new ApiError("UNAUTHENTICATED", "Sesión expirada, iniciá sesión de nuevo", 401);
+      throw new ApiError("UNAUTHENTICATED", "Sesión expirada, inicia sesión de nuevo", 401);
     }
     session = refreshed.session;
   }
 
   if (!session?.access_token) {
-    throw new ApiError("UNAUTHENTICATED", "Sesión expirada, iniciá sesión de nuevo", 401);
+    throw new ApiError("UNAUTHENTICATED", "Sesión expirada, inicia sesión de nuevo", 401);
   }
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${session.access_token}`);

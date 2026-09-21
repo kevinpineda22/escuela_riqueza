@@ -104,9 +104,9 @@ export const LessonFormSheet = ({
         onInteractOutside={(e) => { if (isBusy) e.preventDefault(); }}
         onEscapeKeyDown={(e) => { if (isBusy) e.preventDefault(); }}
       >
-        <SheetHeader className="px-6 pt-6 pb-4 border-b border-white/5">
+        <SheetHeader className="px-6 pt-6 pb-4 border-b border-ink/5">
           <div className="flex items-center gap-2.5">
-            <span className="w-9 h-9 rounded-lg bg-gold/15 border border-gold/30 flex items-center justify-center text-gold">
+            <span className="w-9 h-9 rounded-lg bg-brand/15 border border-brand/30 flex items-center justify-center text-accent">
               <Film size={18} />
             </span>
             <div>
@@ -115,8 +115,8 @@ export const LessonFormSheet = ({
               </SheetTitle>
               <SheetDescription className="text-xs">
                 {mode === "create"
-                  ? "Subí el video y configurá el acceso."
-                  : "Actualizá los datos. El video se reemplaza solo si subís uno nuevo."}
+                  ? "Sube el video y configura el acceso."
+                  : "Actualiza los datos. El video se reemplaza solo si subes uno nuevo."}
               </SheetDescription>
             </div>
           </div>
@@ -124,7 +124,7 @@ export const LessonFormSheet = ({
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
           <div className="space-y-2">
-            <label className="block text-xs font-semibold text-white/60 uppercase tracking-wider">
+            <label className="block text-xs font-semibold text-fg-60 uppercase tracking-wider">
               Título
             </label>
             <input
@@ -133,12 +133,12 @@ export const LessonFormSheet = ({
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Ej: Episodio 1 — El Despertar"
               autoFocus
-              className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-white/30 outline-none focus:border-gold/40 focus:ring-1 focus:ring-gold/20 transition-colors"
+              className="w-full bg-black/40 border border-line-subtle rounded-lg px-4 py-2.5 text-sm text-foreground-strong placeholder:text-fg-30 outline-none focus:border-brand/40 focus:ring-1 focus:ring-focus/20 transition-colors light:bg-surface-input light:border-line-control/50 light:placeholder:text-foreground-placeholder"
             />
           </div>
 
           <div className="space-y-2">
-            <label className="block text-xs font-semibold text-white/60 uppercase tracking-wider">
+            <label className="block text-xs font-semibold text-fg-60 uppercase tracking-wider">
               Descripción
             </label>
             <textarea
@@ -146,30 +146,30 @@ export const LessonFormSheet = ({
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Detalles de la lección..."
               rows={3}
-              className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-white/30 outline-none focus:border-gold/40 focus:ring-1 focus:ring-gold/20 transition-colors resize-none"
+              className="w-full bg-black/40 border border-line-subtle rounded-lg px-4 py-2.5 text-sm text-foreground-strong placeholder:text-fg-30 outline-none focus:border-brand/40 focus:ring-1 focus:ring-focus/20 transition-colors resize-none light:bg-surface-input light:border-line-control/50 light:placeholder:text-foreground-placeholder"
             />
           </div>
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="block text-xs font-semibold text-white/60 uppercase tracking-wider">
+              <label className="block text-xs font-semibold text-fg-60 uppercase tracking-wider">
                 Video {mode === "edit" && existingStreamUid && "(reemplazo opcional)"}
               </label>
               {existingStreamUid && !file && (
-                <span className="flex items-center gap-1 text-[10px] font-semibold text-green-300">
+                <span className="flex items-center gap-1 text-[10px] font-semibold text-green-300 light:text-success">
                   <CheckCircle2 size={11} /> Video actual cargado
                 </span>
               )}
             </div>
 
             {file ? (
-              <div className="flex items-center gap-3 bg-gold/5 border border-gold/30 rounded-lg p-3">
-                <div className="w-10 h-10 rounded-md bg-gold/15 border border-gold/30 flex items-center justify-center shrink-0">
-                  <Film size={18} className="text-gold" />
+              <div className="flex items-center gap-3 bg-brand/5 border border-brand/30 rounded-lg p-3">
+                <div className="w-10 h-10 rounded-md bg-brand/15 border border-brand/30 flex items-center justify-center shrink-0">
+                  <Film size={18} className="text-accent" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-white truncate">{file.name}</p>
-                  <p className="text-xs text-textMuted font-mono">
+                  <p className="text-sm font-semibold text-foreground-strong truncate">{file.name}</p>
+                  <p className="text-xs text-foreground-muted font-mono">
                     {(file.size / (1024 * 1024)).toFixed(2)} MB
                   </p>
                 </div>
@@ -177,7 +177,7 @@ export const LessonFormSheet = ({
                   <button
                     type="button"
                     onClick={() => setFile(null)}
-                    className="shrink-0 p-1.5 text-white/50 hover:text-white hover:bg-white/10 rounded-md transition-colors"
+                    className="shrink-0 p-1.5 text-fg-50 hover:text-foreground-strong hover:bg-ink/10 rounded-md transition-colors"
                     aria-label="Quitar archivo"
                   >
                     <X size={14} />
@@ -188,8 +188,8 @@ export const LessonFormSheet = ({
               <div
                 className={`relative border-2 border-dashed rounded-lg p-6 flex flex-col items-center justify-center text-center transition-all cursor-pointer ${
                   dragActive
-                    ? "border-gold bg-gold/5"
-                    : "border-white/10 hover:border-gold/30 bg-black/20 hover:bg-black/40"
+                    ? "border-accent bg-brand/5"
+                    : "border-line-subtle hover:border-brand/30 bg-black/20 hover:bg-black/40 light:hover:bg-surface-subtle light:bg-surface-panel"
                 } ${isBusy ? "pointer-events-none opacity-50" : ""}`}
                 onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
                 onDragLeave={() => setDragActive(false)}
@@ -208,25 +208,25 @@ export const LessonFormSheet = ({
                   disabled={isBusy}
                   onChange={(e) => pickFile(e.target.files?.[0])}
                 />
-                <UploadCloud size={28} className="text-white/30 mb-2" />
-                <p className="text-sm font-semibold text-white mb-0.5">
-                  Arrastrá un video o hacé clic
+                <UploadCloud size={28} className="text-fg-30 mb-2" />
+                <p className="text-sm font-semibold text-foreground-strong mb-0.5">
+                  Arrastra un video o haz clic
                 </p>
-                <p className="text-xs text-textMuted">MP4, MOV, WebM — hasta 5GB</p>
+                <p className="text-xs text-foreground-muted">MP4, MOV, WebM — hasta 5GB</p>
               </div>
             )}
 
             {uploadProgress !== null && (
-              <div className="bg-black/40 border border-white/10 rounded-lg p-3 space-y-2">
+              <div className="bg-black/40 border border-line-subtle rounded-lg p-3 space-y-2 light:bg-surface-panel">
                 <div className="flex justify-between items-center text-xs">
-                  <span className="flex items-center gap-1.5 text-white/70 font-semibold">
-                    <Loader2 size={12} className="animate-spin text-gold" /> Subiendo a Cloudflare
+                  <span className="flex items-center gap-1.5 text-fg-70 font-semibold">
+                    <Loader2 size={12} className="animate-spin text-accent" /> Subiendo a Cloudflare
                   </span>
-                  <span className="text-gold font-bold tabular-nums">{uploadProgress}%</span>
+                  <span className="text-accent font-bold tabular-nums">{uploadProgress}%</span>
                 </div>
-                <div className="h-1.5 bg-black/60 rounded-full overflow-hidden">
+                <div className="h-1.5 bg-black/60 light:bg-ink/10 rounded-full overflow-hidden">
                   <motion.div
-                    className="h-full bg-gold"
+                    className="h-full bg-brand"
                     initial={{ width: 0 }}
                     animate={{ width: `${uploadProgress}%` }}
                     transition={{ duration: 0.2 }}
@@ -239,12 +239,12 @@ export const LessonFormSheet = ({
           <PlansSelector value={plans} onChange={setPlans} />
         </div>
 
-        <SheetFooter className="px-6 py-4 border-t border-white/5 bg-darker/60">
+        <SheetFooter className="px-6 py-4 border-t border-ink/5 bg-surface-page/60">
           <button
             type="button"
             onClick={() => onOpenChange(false)}
             disabled={isBusy}
-            className="px-4 py-2 text-sm text-white/60 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg font-semibold transition-colors disabled:opacity-50"
+            className="px-4 py-2 text-sm text-fg-60 hover:text-foreground-strong bg-ink/5 hover:bg-ink/10 rounded-lg font-semibold transition-colors disabled:opacity-50"
           >
             Cancelar
           </button>
@@ -252,7 +252,7 @@ export const LessonFormSheet = ({
             type="button"
             onClick={handleSubmit}
             disabled={!title.trim() || isBusy}
-            className="flex items-center justify-center gap-2 px-5 py-2 bg-gold hover:bg-goldHover text-black rounded-lg font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center justify-center gap-2 px-5 py-2 bg-brand hover:bg-brand-hover text-black rounded-lg font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isBusy && <Loader2 size={14} className="animate-spin" />}
             {uploadProgress !== null

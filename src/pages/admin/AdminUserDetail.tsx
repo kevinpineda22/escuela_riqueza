@@ -31,9 +31,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Plan } from "@/types/user";
 
 const planColors: Record<Plan, string> = {
-  free: "bg-white/10 text-white/70 border border-white/20",
-  individual: "bg-blue-500/10 text-blue-400 border border-blue-500/20",
-  vip: "bg-gold/15 text-gold border border-gold/30 shadow-[0_0_10px_rgba(204,164,59,0.1)]",
+  free: "bg-ink/10 text-fg-70 border border-ink/20",
+  individual: "bg-blue-500/10 text-blue-400 border border-blue-500/20 light:bg-info-surface light:text-info light:border-info-line",
+  vip: "bg-brand/15 text-accent border border-brand/30 shadow-[0_0_10px_rgba(204,164,59,0.1)]",
 };
 
 const getInitials = (name: string) => {
@@ -172,33 +172,33 @@ const AdminUserDetail = () => {
       {/* Volver */}
       <Link
         to="/admin/users"
-        className="inline-flex items-center gap-2 text-sm text-textMuted hover:text-white transition-colors"
+        className="inline-flex items-center gap-2 text-sm text-foreground-muted hover:text-foreground-strong transition-colors"
       >
         <ArrowLeft size={16} /> Volver al listado
       </Link>
 
       {/* Card principal */}
-      <div className="relative bg-black/30 border border-white/10 rounded-3xl p-6 sm:p-8 overflow-hidden">
+      <div className="relative bg-black/30 border border-line-subtle rounded-3xl p-6 sm:p-8 overflow-hidden light:bg-surface-panel light:shadow-panel">
         <div
           aria-hidden
-          className="absolute top-0 right-0 w-48 h-48 bg-gold/5 rounded-full blur-3xl -mr-20 -mt-20 hidden md:block"
+          className="absolute top-0 right-0 w-48 h-48 bg-brand/5 rounded-full blur-3xl -mr-20 -mt-20 hidden md:block"
         />
 
         <div className="relative flex flex-col sm:flex-row items-start sm:items-center gap-5 sm:gap-6">
-          <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gold/10 border-2 border-gold/30 flex items-center justify-center text-gold text-2xl sm:text-3xl font-bold shrink-0 shadow-[0_0_25px_rgba(204,164,59,0.2)]">
+          <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-brand/10 border-2 border-brand/30 flex items-center justify-center text-accent text-2xl sm:text-3xl font-bold shrink-0 shadow-[0_0_25px_rgba(204,164,59,0.2)]">
             {getInitials(user.full_name).toUpperCase()}
           </div>
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-[10px] sm:text-xs font-bold uppercase tracking-[0.2em] text-gold">
+              <span className="text-[10px] sm:text-xs font-bold uppercase tracking-[0.2em] text-accent">
                 Perfil de alumno
               </span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight truncate">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-foreground-strong tracking-tight truncate">
               {user.full_name}
             </h1>
-            <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-textMuted">
+            <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-foreground-muted">
               {user.email && (
                 <span className="inline-flex items-center gap-1.5 min-w-0">
                   <Mail size={14} className="shrink-0" />
@@ -220,8 +220,8 @@ const AdminUserDetail = () => {
                 className={cn(
                   "px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider border",
                   user.role === "admin"
-                    ? "bg-red-500/10 text-red-400 border-red-500/20"
-                    : "bg-green-500/10 text-green-400 border-green-500/20"
+                    ? "bg-red-500/10 text-danger border-red-500/20"
+                    : "bg-green-500/10 text-green-400 light:text-success border-green-500/20"
                 )}
               >
                 {user.role}
@@ -230,8 +230,8 @@ const AdminUserDetail = () => {
                 className={cn(
                   "px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider border inline-flex items-center gap-1.5",
                   user.status === "active"
-                    ? "bg-green-500/10 text-green-400 border-green-500/20"
-                    : "bg-red-500/10 text-red-400 border-red-500/20"
+                    ? "bg-green-500/10 text-green-400 light:text-success border-green-500/20"
+                    : "bg-red-500/10 text-danger border-red-500/20"
                 )}
               >
                 <span
@@ -250,39 +250,39 @@ const AdminUserDetail = () => {
       {/* Grid info + acciones */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Suscripción */}
-        <div className="lg:col-span-2 bg-black/30 border border-white/10 rounded-2xl p-5 sm:p-6">
-          <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-            <CreditCard size={18} className="text-gold" /> Suscripción
+        <div className="lg:col-span-2 bg-black/30 border border-line-subtle rounded-2xl p-5 sm:p-6 light:bg-surface-panel light:shadow-panel">
+          <h2 className="text-lg font-bold text-foreground-strong mb-4 flex items-center gap-2">
+            <CreditCard size={18} className="text-accent" /> Suscripción
           </h2>
           {subscription ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1">
-                <p className="text-xs text-textMuted uppercase tracking-wider">Plan</p>
-                <p className="text-white font-bold uppercase tracking-wide">{subscription.plan}</p>
+                <p className="text-xs text-foreground-muted uppercase tracking-wider">Plan</p>
+                <p className="text-foreground-strong font-bold uppercase tracking-wide">{subscription.plan}</p>
               </div>
               <div className="space-y-1">
-                <p className="text-xs text-textMuted uppercase tracking-wider">Estado</p>
-                <p className="inline-flex items-center gap-1.5 text-white font-medium capitalize">
+                <p className="text-xs text-foreground-muted uppercase tracking-wider">Estado</p>
+                <p className="inline-flex items-center gap-1.5 text-foreground-strong font-medium capitalize">
                   {subscription.status === "active" ? (
-                    <CheckCircle2 size={14} className="text-green-400" />
+                    <CheckCircle2 size={14} className="text-green-400 light:text-success" />
                   ) : (
-                    <XCircle size={14} className="text-red-400" />
+                    <XCircle size={14} className="text-danger" />
                   )}
                   {subscription.status}
                 </p>
               </div>
               {subscription.current_period_end && (
                 <div className="space-y-1 sm:col-span-2">
-                  <p className="text-xs text-textMuted uppercase tracking-wider">Período actual hasta</p>
-                  <p className="text-white/85 text-sm flex items-center gap-1.5">
-                    <Clock size={14} className="text-gold" />
+                  <p className="text-xs text-foreground-muted uppercase tracking-wider">Período actual hasta</p>
+                  <p className="text-fg-85 text-sm flex items-center gap-1.5">
+                    <Clock size={14} className="text-accent" />
                     {formatDateTime(subscription.current_period_end)}
                   </p>
                 </div>
               )}
             </div>
           ) : (
-            <div className="text-center py-6 text-textMuted">
+            <div className="text-center py-6 text-foreground-muted">
               <CreditCard className="mx-auto mb-2 opacity-30" size={28} />
               <p className="text-sm">Sin suscripción activa registrada</p>
             </div>
@@ -290,43 +290,43 @@ const AdminUserDetail = () => {
         </div>
 
         {/* Metadata */}
-        <div className="bg-black/30 border border-white/10 rounded-2xl p-5 sm:p-6">
-          <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-            <Clock size={18} className="text-gold" /> Actividad
+        <div className="bg-black/30 border border-line-subtle rounded-2xl p-5 sm:p-6 light:bg-surface-panel light:shadow-panel">
+          <h2 className="text-lg font-bold text-foreground-strong mb-4 flex items-center gap-2">
+            <Clock size={18} className="text-accent" /> Actividad
           </h2>
           <div className="space-y-3 text-sm">
             <div>
-              <p className="text-xs text-textMuted uppercase tracking-wider">Creado</p>
-              <p className="text-white/85">{formatDateTime(user.created_at)}</p>
+              <p className="text-xs text-foreground-muted uppercase tracking-wider">Creado</p>
+              <p className="text-fg-85">{formatDateTime(user.created_at)}</p>
             </div>
             <div>
-              <p className="text-xs text-textMuted uppercase tracking-wider">Última actualización</p>
-              <p className="text-white/85">{formatDateTime(user.updated_at)}</p>
+              <p className="text-xs text-foreground-muted uppercase tracking-wider">Última actualización</p>
+              <p className="text-fg-85">{formatDateTime(user.updated_at)}</p>
             </div>
             <div>
-              <p className="text-xs text-textMuted uppercase tracking-wider">ID</p>
-              <p className="text-white/50 font-mono text-[11px] break-all">{user.id}</p>
+              <p className="text-xs text-foreground-muted uppercase tracking-wider">ID</p>
+              <p className="text-fg-50 font-mono text-[11px] break-all">{user.id}</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* Acciones */}
-      <div className="bg-black/30 border border-white/10 rounded-2xl p-5 sm:p-6">
-        <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-          <Shield size={18} className="text-gold" /> Acciones administrativas
+      <div className="bg-black/30 border border-line-subtle rounded-2xl p-5 sm:p-6 light:bg-surface-panel light:shadow-panel">
+        <h2 className="text-lg font-bold text-foreground-strong mb-4 flex items-center gap-2">
+          <Shield size={18} className="text-accent" /> Acciones administrativas
         </h2>
 
         {showPlanEditor ? (
           <div className="space-y-4">
-            <p className="text-sm text-textMuted">Selecciona el nuevo plan:</p>
+            <p className="text-sm text-foreground-muted">Selecciona el nuevo plan:</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {(["free", "individual", "vip"] as Plan[]).map((p) => (
                 <label
                   key={p}
                   className={cn(
                     "flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all",
-                    newPlan === p ? "border-gold bg-gold/10" : "border-white/10 bg-black/30 hover:border-white/30"
+                    newPlan === p ? "border-accent bg-brand/10" : "border-line-subtle bg-black/30 hover:border-ink/30 light:bg-surface-panel"
                   )}
                 >
                   <input
@@ -338,8 +338,8 @@ const AdminUserDetail = () => {
                     className="accent-gold"
                   />
                   <div>
-                    <p className="text-white font-bold capitalize text-sm">{p}</p>
-                    <p className="text-textMuted text-[11px]">
+                    <p className="text-foreground-strong font-bold capitalize text-sm">{p}</p>
+                    <p className="text-foreground-muted text-[11px]">
                       {p === "free" && "Acceso básico con publicidad"}
                       {p === "individual" && "Catálogo completo sin anuncios"}
                       {p === "vip" && "Todo + lives + mentoría"}
@@ -352,14 +352,14 @@ const AdminUserDetail = () => {
               <button
                 onClick={() => setShowPlanEditor(false)}
                 disabled={isMutating}
-                className="px-4 py-2.5 text-sm text-white/70 hover:text-white transition-colors"
+                className="px-4 py-2.5 text-sm text-fg-70 hover:text-foreground-strong transition-colors"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleSavePlan}
                 disabled={isMutating}
-                className="px-5 py-2.5 bg-gold hover:bg-goldHover text-darker font-bold rounded-xl text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                className="px-5 py-2.5 bg-brand hover:bg-brand-hover text-on-brand font-bold rounded-xl text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {isMutating && <Loader2 size={14} className="animate-spin" />}
                 Guardar cambios
@@ -371,7 +371,7 @@ const AdminUserDetail = () => {
             <button
               onClick={() => setShowPlanEditor(true)}
               disabled={isMutating}
-              className="flex items-center gap-2 px-4 py-2.5 bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-gold/30 text-white rounded-xl text-sm font-semibold transition-all disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2.5 bg-ink/[0.04] hover:bg-ink/[0.08] border border-line-subtle hover:border-brand/30 text-foreground-strong rounded-xl text-sm font-semibold transition-all disabled:opacity-50 light:bg-surface-panel light:shadow-sm light:hover:bg-surface-subtle"
             >
               <Edit size={16} /> Modificar plan
             </button>
@@ -381,8 +381,8 @@ const AdminUserDetail = () => {
               className={cn(
                 "flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all border disabled:opacity-50",
                 user.status === "active"
-                  ? "bg-red-500/10 hover:bg-red-500/20 border-red-500/30 text-red-400"
-                  : "bg-green-500/10 hover:bg-green-500/20 border-green-500/30 text-green-400"
+                  ? "bg-red-500/10 hover:bg-red-500/20 border-red-500/30 text-danger"
+                  : "bg-green-500/10 hover:bg-green-500/20 border-green-500/30 text-green-400 light:text-success"
               )}
             >
               {user.status === "active" ? (
@@ -398,7 +398,7 @@ const AdminUserDetail = () => {
             <button
               onClick={handleDelete}
               disabled={isMutating}
-              className="flex items-center gap-2 px-4 py-2.5 bg-red-900/30 hover:bg-red-900/50 border border-red-800/30 hover:border-red-700/50 text-red-400 hover:text-red-300 rounded-xl text-sm font-semibold transition-all disabled:opacity-50 ml-auto"
+              className="flex items-center gap-2 px-4 py-2.5 bg-red-900/30 hover:bg-red-900/50 border border-red-800/30 hover:border-red-700/50 text-danger hover:text-red-300 light:hover:text-danger rounded-xl text-sm font-semibold transition-all disabled:opacity-50 ml-auto"
             >
               <Trash2 size={16} /> Eliminar
             </button>

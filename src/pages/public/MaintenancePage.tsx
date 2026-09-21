@@ -95,7 +95,7 @@ const MaintenancePage = () => {
 
         {isAdmin && (
           <p className="mt-6 text-[11px] text-fg-40 max-w-sm mx-auto">
-            Estás viendo esta página como administrador. Desactivá el modo mantenimiento en
+            Estás viendo esta página como administrador. Desactiva el modo mantenimiento en
             <span className="text-accent/80"> Configuración → Operativa</span> para reabrir la plataforma.
           </p>
         )}

@@ -3,7 +3,7 @@
 > Lista viva de mejoras/verificaciones en curso. Actualizar estado a medida que se cierran.
 > Estados: 🔴 pendiente · 🟡 en progreso · 🟢 hecho · ⚪ bloqueado (falta info)
 
-_Última actualización: 2026-07-28_
+_Última actualización: 2026-09-19_
 
 ---
 
@@ -127,3 +127,23 @@ _Última actualización: 2026-07-28_
 - **Pendiente (opcional, si el cliente quiere más):** shine en botón primario, focus glow en inputs.
 
 **Archivos:** `src/pages/public/AuthPage.tsx`
+
+---
+
+## 7. Modo claro — fase 6 (cierre) 🔴
+
+**Estado:** fases 1-5 de `docs/MODO_CLARO_ESPECIFICACION.md` hechas. Falta solo la fase 6: revisión visual humana + activación del selector.
+
+**Bloqueante único** — `src/lib/theme.ts`:
+
+```ts
+export const APPEARANCE_SELECTOR_ENABLED = import.meta.env.DEV;
+```
+
+El selector de apariencia solo aparece en desarrollo. Quitar ese gate publica el modo claro a todos los usuarios. **No se hizo el 2026-09-19 porque la plataforma está en vivo.**
+
+**Antes de activarlo, recorrer en `npm run dev`** (lo que el script no puede medir): contraste sobre fondos compuestos durante shimmer/hover, gradientes de los actos de la landing, logos transparentes, y el cambio de tema con reproducción/draft/scroll en curso. La matriz completa está en la sección 12 de la spec.
+
+**Ya verificado automáticamente (2026-09-19):** typecheck limpio, 137 tests, `scripts/theme-audit.mjs` sin hallazgos fuera de islas oscuras declaradas.
+
+**Archivos:** `src/lib/theme.ts`, `src/components/feature/AppearanceToggle.tsx`, `docs/MODO_CLARO_ESPECIFICACION.md`

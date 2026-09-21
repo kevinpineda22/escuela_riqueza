@@ -140,7 +140,7 @@ const SignInForm = ({ onSuccess, onSwitch, onForgot, compact = false }: SignInFo
       if (err instanceof ApiError) {
         setSubmitError(err.message);
       } else if (err instanceof TypeError) {
-        setSubmitError("Se perdió la conexión. Revisá tu internet e intentá de nuevo.");
+        setSubmitError("Se perdió la conexión. Revisa tu conexión a internet e inténtalo de nuevo.");
       } else {
         setSubmitError("No pudimos iniciar sesión. Inténtalo de nuevo.");
       }
@@ -359,7 +359,7 @@ const SignUpForm = ({ onSuccess, onSwitch, compact = false }: SignUpFormProps) =
           <p className="text-xs text-foreground-muted mt-1">Has seleccionado el plan {selectedPlan.toUpperCase()}</p>
         </div>
         
-        <div className="bg-ink/5 border border-line-subtle rounded-xl p-5 mb-2">
+        <div className="bg-ink/5 border border-line-subtle rounded-xl p-5 mb-2 light:bg-surface-panel light:shadow-panel">
           <div className="flex items-center gap-3 mb-4 text-fg-50">
             <CreditCard size={24} />
             <span className="text-sm font-semibold">Pasarela de pago segura (MOCK)</span>
@@ -371,7 +371,7 @@ const SignUpForm = ({ onSuccess, onSwitch, compact = false }: SignUpFormProps) =
             type="button"
             disabled={isProcessing}
             onClick={() => executeSignup(selectedPlan)}
-            className="w-full py-3 bg-green-500 hover:bg-green-600 text-foreground-strong font-bold rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-70"
+            className="w-full py-3 bg-green-500 hover:bg-green-600 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-70"
           >
             {isProcessing ? <><Loader2 size={18} className="animate-spin" /> Procesando...</> : "Simular Pago Exitoso"}
           </button>
@@ -448,7 +448,7 @@ const SignUpForm = ({ onSuccess, onSwitch, compact = false }: SignUpFormProps) =
         <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-2 text-amber-300 light:text-warning">
           <AlertCircle size={18} className="shrink-0 mt-0.5" />
           <p className="text-sm font-medium leading-tight">
-            Los registros nuevos están temporalmente pausados. Volvé a intentarlo en un rato.
+            Los registros nuevos están temporalmente pausados. Vuelve a intentarlo más tarde.
           </p>
         </div>
       )}

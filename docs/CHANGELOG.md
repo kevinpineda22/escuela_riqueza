@@ -16,6 +16,15 @@
   - Copy del admin: la nota del link público en `AdminLiveManager` ahora aclara que también permite ver la grabación cuando el en vivo termina.
 - **Hotfixes previos (2026-09-19) documentados acá por no estar registrados antes**: la página pública ya no expulsa al espectador por un solo poll fallido a `get_public_live` (requiere 2 misses consecutivos sin fila, nunca por error de red); y con sesión iniciada en el link público se muestra el chat completo (`LiveChat`, con envío) en vez del de solo lectura.
 
+## 2026-09-19
+
+### Modo claro — fases 4 y 5 recuperadas; fase 6 (cierre) queda pendiente
+- **Contexto**: el trabajo de tematización de las fases 4 (alumnos/multimedia) y 5 (administración) de `docs/MODO_CLARO_ESPECIFICACION.md` no estaba perdido: había quedado parkeado en `git stash` (`stash@{0}: On johan: fase6-admin-backup`, 44 archivos, +1327/−1242) mientras `master` avanzaba con los fixes de lives. Restaurado con `git stash apply` sobre `d598db0` — aplica limpio con 3-way; el stash se conserva como respaldo.
+- **Estado real por fase**: 1, 2 y 3 commiteadas en `87ca9fc`. 4 y 5 en working tree sin commitear. 6 sin empezar.
+- **Fix**: `HistoryPage.tsx` — el marco del video de la historia era `bg-black` sin declarar la isla oscura, así que en modo claro quedaba como una mancha negra dentro de una página marfil. Ahora lleva `data-theme="dark"`, mismo patrón que `LessonPlayer`.
+- **Verificación automática** (no reemplaza la revisión visual que pide la spec): `npm run typecheck` limpio; `npx vitest run` → 18 archivos / 137 tests; `scripts/theme-audit.mjs` sobre todo `src/` bajó de 143 a 61 hallazgos, y los 61 restantes caen dentro de islas oscuras declaradas (`LessonPlayer`, `VIPLiveRoom:314`, `PublicLiveRoom:260`, vitrina de certificados, `AuthPage:690`) o son scrims sobre foto de avatar. Barrido de paleta legacy: 3 usos, los 3 intencionales (`light:bg-darker` = placa oscura detrás del logo en claro).
+- **Fase 6 NO ejecutada — decisión explícita**: el selector sigue gateado en `src/lib/theme.ts` con `APPEARANCE_SELECTOR_ENABLED = import.meta.env.DEV`, o sea solo visible en desarrollo. Quitar ese gate publica el modo claro a los usuarios reales de Iván, y la puerta de salida de la fase 6 exige revisión visual humana previa (contraste sobre fondos compuestos, shimmer, gradientes, logos transparentes) — nada de eso lo cubre un script. **La plataforma está en vivo, así que no se activó.** Retomar cuando haya ventana para el recorrido visual.
+
 ## 2026-09-18
 
 ### Lives — RLS cerrada y detección de OBS corregida (Paquete 0-1 del plan de estabilización)

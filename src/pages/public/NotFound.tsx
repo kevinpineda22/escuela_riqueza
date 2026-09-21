@@ -116,8 +116,8 @@ const NotFound = () => (
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.6 }}
       >
-        El recurso que buscas no existe o fue movido. Volvé al inicio y
-        retomá tu camino.
+        El recurso que buscas no existe o fue movido. Vuelve al inicio y
+        retoma tu camino.
       </motion.p>
 
       <motion.div

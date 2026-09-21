@@ -573,7 +573,7 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
       <div
         className={cn(
           "p-3 rounded-xl border flex flex-wrap items-center justify-between gap-2",
-          isPremium ? "bg-gold/10 border-gold/30 text-gold" : "bg-white/5 border-white/10 text-white/70"
+          isPremium ? "bg-brand/10 border-brand/30 text-accent" : "bg-ink/5 border-line-subtle text-fg-70 light:bg-surface-panel light:shadow-sm"
         )}
       >
         <div className="flex items-center gap-2 font-medium text-xs sm:text-sm min-w-0">
@@ -587,7 +587,7 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
             onClick={handlePodcastToggle}
             className={cn(
               "flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-lg font-medium transition-all text-xs sm:text-sm shrink-0",
-              isPlayingThisInPodcast ? "bg-gold text-darker shadow-[0_0_15px_rgba(204,164,59,0.3)]" : "bg-transparent border border-gold hover:bg-gold/10 text-gold"
+              isPlayingThisInPodcast ? "bg-brand text-on-brand shadow-[0_0_15px_rgba(204,164,59,0.3)]" : "bg-transparent border border-accent hover:bg-brand/10 text-accent"
             )}
           >
             <Headphones size={16} /> Podcast <span className="hidden sm:inline">{isPlayingThisInPodcast ? "ON" : "OFF"}</span>
@@ -595,18 +595,20 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
         )}
       </div>
 
-      <div className="relative aspect-video max-h-[70dvh] sm:max-h-none bg-black rounded-2xl overflow-hidden border border-white/10 shadow-2xl group transition-all duration-500 ease-in-out">
+      {/* Isla oscura: lienzo, play, anuncio, contador y "completada" son iguales en
+          ambos temas (spec §3.4, §8). Es un atributo: no cambia la identidad del nodo. */}
+      <div data-theme="dark" className="relative aspect-video max-h-[70dvh] sm:max-h-none bg-black rounded-2xl overflow-hidden border border-line-subtle shadow-2xl group transition-all duration-500 ease-in-out">
         {!videoSrc ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20">
-            <MonitorPlay size={48} className="text-white/20 mb-4" />
-            <h3 className="text-white font-bold text-lg">Video no disponible</h3>
-            <p className="text-textMuted text-sm">Esta lección aún no tiene un video asignado.</p>
+            <MonitorPlay size={48} className="text-fg-20 mb-4" />
+            <h3 className="text-foreground-strong font-bold text-lg">Video no disponible</h3>
+            <p className="text-foreground-muted text-sm">Esta lección aún no tiene un video asignado.</p>
           </div>
         ) : null}
 
         <div 
           className={cn(
-            "absolute inset-0 z-30 bg-gradient-to-br from-darker to-[#1a1a1a] flex flex-col items-center justify-center transition-all duration-500 ease-in-out",
+            "absolute inset-0 z-30 bg-gradient-to-br from-surface-page to-[#1a1a1a] flex flex-col items-center justify-center transition-all duration-500 ease-in-out",
             isPlayingThisInPodcast && !showAd ? "opacity-100 visible" : "opacity-0 invisible pointer-events-none"
           )}
         >
@@ -615,14 +617,14 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
             className="h-16 sm:h-24 md:h-32 object-contain mb-4 sm:mb-6 opacity-80 animate-pulse drop-shadow-[0_0_15px_rgba(204,164,59,0.3)]"
           />
           <div className="flex items-center gap-2 sm:gap-3 px-4 text-center">
-            <Headphones size={20} className="text-gold animate-bounce shrink-0" />
-            <h3 className="text-lg sm:text-2xl font-bold text-white">Modo Podcast Activado</h3>
+            <Headphones size={20} className="text-accent animate-bounce shrink-0" />
+            <h3 className="text-lg sm:text-2xl font-bold text-foreground-strong">Modo Podcast Activado</h3>
           </div>
-          <p className="text-xs sm:text-sm text-textMuted mt-2 mb-4 sm:mb-6 px-4 text-center">Reproduciéndose en segundo plano.</p>
+          <p className="text-xs sm:text-sm text-foreground-muted mt-2 mb-4 sm:mb-6 px-4 text-center">Reproduciéndose en segundo plano.</p>
           
           <button 
             onClick={handlePodcastToggle}
-            className="px-6 py-2.5 bg-white/10 hover:bg-white/20 border border-white/20 rounded-full flex items-center justify-center transition-all gap-2 text-sm font-bold text-white pointer-events-auto"
+            className="px-6 py-2.5 bg-ink/10 hover:bg-ink/20 border border-ink/20 rounded-full flex items-center justify-center transition-all gap-2 text-sm font-bold text-foreground-strong pointer-events-auto"
           >
             <MonitorPlay size={18} />
             Volver a Video
@@ -648,11 +650,11 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
 
             <div
               className={cn(
-                "absolute left-2 sm:left-4 z-50 bg-black/50 backdrop-blur-md px-2 py-1 sm:px-3 sm:py-1.5 border border-white/10 text-[9px] sm:text-xs font-bold text-white uppercase tracking-wider rounded-md sm:rounded-lg flex items-center gap-1.5 pointer-events-none",
+                "absolute left-2 sm:left-4 z-50 bg-black/50 backdrop-blur-md px-2 py-1 sm:px-3 sm:py-1.5 border border-line-subtle text-[9px] sm:text-xs font-bold text-foreground-strong uppercase tracking-wider rounded-md sm:rounded-lg flex items-center gap-1.5 pointer-events-none",
                 adFullscreen ? "top-[max(0.5rem,env(safe-area-inset-top))]" : "top-2 sm:top-4"
               )}
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-gold animate-pulse"></span>
+              <span className="w-1.5 h-1.5 rounded-full bg-brand animate-pulse"></span>
               Publicidad
             </div>
 
@@ -661,7 +663,7 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
               onClick={e => { e.stopPropagation(); setAdFullscreen(v => !v); }}
               aria-label={adFullscreen ? "Salir de pantalla completa" : "Ver en pantalla completa"}
               className={cn(
-                "absolute right-2 sm:right-4 z-50 p-2 sm:p-2.5 rounded-md sm:rounded-lg bg-black/50 hover:bg-black/70 backdrop-blur-md border border-white/10 text-white transition-colors",
+                "absolute right-2 sm:right-4 z-50 p-2 sm:p-2.5 rounded-md sm:rounded-lg bg-black/50 hover:bg-black/70 backdrop-blur-md border border-line-subtle text-foreground-strong transition-colors",
                 adFullscreen ? "top-[max(0.5rem,env(safe-area-inset-top))]" : "top-2 sm:top-4"
               )}
             >
@@ -735,27 +737,27 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
 
             {!adStarted && (
               <div className="absolute inset-0 z-[46] flex flex-col items-center justify-center gap-4 bg-black px-6 text-center pointer-events-none">
-                <div className="w-10 h-10 rounded-full border-2 border-white/15 border-t-gold animate-spin" />
+                <div className="w-10 h-10 rounded-full border-2 border-ink/15 border-t-gold animate-spin" />
                 {adStalled ? (
                   <>
-                    <p className="text-sm text-white/70">El anuncio está tardando en cargar.</p>
+                    <p className="text-sm text-fg-70">El anuncio está tardando en cargar.</p>
                     <button
                       type="button"
                       onClick={handleAdTap}
-                      className="pointer-events-auto bg-gold hover:bg-goldHover text-darker font-bold px-6 py-2.5 rounded-lg transition-all"
+                      className="pointer-events-auto bg-brand hover:bg-brand-hover text-on-brand font-bold px-6 py-2.5 rounded-lg transition-all"
                     >
-                      Tocá para reproducir
+                      Toca para reproducir
                     </button>
                     <button
                       type="button"
                       onClick={handleAdEnd}
-                      className="pointer-events-auto text-xs text-white/50 hover:text-white underline underline-offset-4"
+                      className="pointer-events-auto text-xs text-fg-50 hover:text-foreground-strong underline underline-offset-4"
                     >
                       Continuar con la lección
                     </button>
                   </>
                 ) : (
-                  <p className="text-xs text-white/50">Cargando anuncio...</p>
+                  <p className="text-xs text-fg-50">Cargando anuncio...</p>
                 )}
               </div>
             )}
@@ -774,7 +776,7 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
                 <button
                   type="button"
                   onClick={handleAdTap}
-                  className="bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 text-white text-[11px] sm:text-sm font-bold px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-md sm:rounded-lg flex items-center gap-1.5 transition-colors shrink-0"
+                  className="bg-ink/10 hover:bg-ink/20 backdrop-blur-md border border-ink/20 text-foreground-strong text-[11px] sm:text-sm font-bold px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-md sm:rounded-lg flex items-center gap-1.5 transition-colors shrink-0"
                 >
                   <Volume2 size={14} />
                   <span className="hidden min-[380px]:inline">Activar sonido</span>
@@ -786,21 +788,21 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
               {adCurrentTime >= adSkipAt ? (
                 <button
                   onClick={handleAdEnd}
-                  className="bg-gold hover:bg-goldHover text-darker font-bold text-xs sm:text-sm px-3 py-1.5 sm:px-6 sm:py-2 rounded-md sm:rounded-lg transition-all shadow-[0_0_15px_rgba(204,164,59,0.5)] animate-in fade-in zoom-in duration-300 shrink-0"
+                  className="bg-brand hover:bg-brand-hover text-on-brand font-bold text-xs sm:text-sm px-3 py-1.5 sm:px-6 sm:py-2 rounded-md sm:rounded-lg transition-all shadow-[0_0_15px_rgba(204,164,59,0.5)] animate-in fade-in zoom-in duration-300 shrink-0"
                 >
                   Omitir ⏭
                 </button>
               ) : (
-                <div className="bg-black/50 backdrop-blur-md px-2.5 py-1.5 sm:px-4 sm:py-2 border border-white/10 text-[11px] sm:text-xs font-medium text-white/90 rounded-md sm:rounded-lg shrink-0">
+                <div className="bg-black/50 backdrop-blur-md px-2.5 py-1.5 sm:px-4 sm:py-2 border border-line-subtle text-[11px] sm:text-xs font-medium text-fg-90 rounded-md sm:rounded-lg shrink-0">
                   Omitir en {Math.max(0, Math.ceil(adSkipAt - adCurrentTime))}s
                 </div>
               )}
             </div>
 
             {/* Barra de progreso al ras del borde inferior — no roba área visible al anuncio */}
-            <div className="absolute inset-x-0 bottom-0 z-50 h-1 bg-white/10">
+            <div className="absolute inset-x-0 bottom-0 z-50 h-1 bg-ink/10">
               <div
-                className="h-full bg-gold/80 transition-all duration-300"
+                className="h-full bg-brand/80 transition-all duration-300"
                 style={{ width: `${Math.min((adCurrentTime / adTotalDuration) * 100, 100)}%` }}
               ></div>
             </div>
@@ -808,7 +810,7 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
         )}
 
         {!playRequested && !showAd && (
-          <div className="absolute inset-0 z-20 bg-darker flex items-center justify-center p-3 sm:p-4">
+          <div className="absolute inset-0 z-20 bg-surface-page flex items-center justify-center p-3 sm:p-4">
             {endedRef.current ? (
               // En móvil el contenedor es un aspect-video bajito: sin escalar, el botón
               // "Reproducir de nuevo" se salía de la caja.
@@ -816,11 +818,11 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
                 <div className="w-12 h-12 sm:w-20 sm:h-20 rounded-full bg-green-500/20 border-2 border-green-500 flex items-center justify-center shrink-0">
                   <Check className="text-green-500 w-6 h-6 sm:w-10 sm:h-10" />
                 </div>
-                <p className="text-white font-bold text-sm sm:text-lg text-center">Lección completada</p>
+                <p className="text-foreground-strong font-bold text-sm sm:text-lg text-center">Lección completada</p>
                 <button
                   onClick={handlePlayRequest}
                   disabled={!videoSrc}
-                  className="px-4 py-2 sm:px-6 sm:py-2.5 bg-gold hover:bg-goldHover text-darker font-bold text-xs sm:text-base rounded-lg transition-all flex items-center gap-2 shrink-0"
+                  className="px-4 py-2 sm:px-6 sm:py-2.5 bg-brand hover:bg-brand-hover text-on-brand font-bold text-xs sm:text-base rounded-lg transition-all flex items-center gap-2 shrink-0"
                 >
                   <Play size={16} className="shrink-0" /> Reproducir de nuevo
                 </button>
@@ -830,9 +832,9 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
                 data-testid="main-play-button"
                 onClick={handlePlayRequest}
                 disabled={!videoSrc}
-                className={cn("w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center transition-transform hover:scale-105 shadow-[0_0_30px_rgba(204,164,59,0.4)]", videoSrc ? "bg-gold hover:bg-goldHover" : "bg-gray-600 cursor-not-allowed")}
+                className={cn("w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center transition-transform hover:scale-105 shadow-[0_0_30px_rgba(204,164,59,0.4)]", videoSrc ? "bg-brand hover:bg-brand-hover" : "bg-gray-600 cursor-not-allowed")}
               >
-                <Play className="text-darker ml-1.5 sm:ml-2 w-8 h-8 sm:w-10 sm:h-10" />
+                <Play className="text-on-brand ml-1.5 sm:ml-2 w-8 h-8 sm:w-10 sm:h-10" />
               </button>
             )}
           </div>
@@ -855,18 +857,18 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
       </div>
 
       <Dialog open={showResumeModal} onOpenChange={setShowResumeModal}>
-        <DialogContent className="bg-darker border-white/10 sm:max-w-md">
+        <DialogContent className="bg-surface-page border-line-subtle sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-white">Retomar Lección</DialogTitle>
-            <DialogDescription className="text-textMuted">
+            <DialogTitle className="text-foreground-strong">Retomar Lección</DialogTitle>
+            <DialogDescription className="text-foreground-muted">
               Parece que dejaste esta lección en el minuto {Math.floor(savedProgressSeconds / 60)}:{(Math.floor(savedProgressSeconds % 60)).toString().padStart(2, '0')}. ¿Qué deseas hacer?
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex gap-2 sm:justify-end mt-4">
-            <Button variant="outline" onClick={handleStartOver} className="bg-white/5 text-white hover:bg-white/10 border-white/10">
+            <Button variant="outline" onClick={handleStartOver} className="bg-ink/5 text-foreground-strong hover:bg-ink/10 border-line-subtle">
               Iniciar de nuevo
             </Button>
-            <Button onClick={handleResume} className="bg-gold text-darker hover:bg-goldHover">
+            <Button onClick={handleResume} className="bg-brand text-on-brand hover:bg-brand-hover">
               {resumeTarget === "podcast"
                 ? <><Headphones className="w-4 h-4 mr-2" /> Continuar escuchando</>
                 : <><Play className="w-4 h-4 mr-2" /> Continuar viendo</>}

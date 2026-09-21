@@ -84,7 +84,9 @@ const HistoryPage = () => {
               multiline
             />
 
+            {/* Isla oscura declarada: el marco del video conserva su fondo negro tambien en claro. */}
             <div 
+              data-theme="dark"
               className="my-12 rounded-2xl overflow-hidden shadow-[0_0_40px_rgba(204,164,59,0.15)] border border-line-subtle relative bg-black aspect-video group"
               onMouseLeave={() => setIsVideoInteracted(false)}
             >

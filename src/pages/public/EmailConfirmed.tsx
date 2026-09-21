@@ -148,8 +148,8 @@ const EmailConfirmed = () => {
               </h1>
               <p className="text-sm text-foreground-muted leading-relaxed max-w-sm mx-auto">
                 {hasSession
-                  ? "Tu cuenta está activa. Ya podés entrar a tu panel cuando quieras."
-                  : "Tu cuenta quedó verificada. Iniciá sesión para acceder a tu panel."}
+                  ? "Tu cuenta está activa. Ya puedes entrar a tu panel cuando quieras."
+                  : "Tu cuenta quedó verificada. Inicia sesión para acceder a tu panel."}
               </p>
             </div>
 

@@ -80,12 +80,12 @@ const LogoUploader = ({ value, onChange, fallback }: LogoUploaderProps) => {
       if (!uploadRes.ok) {
         const errText = await uploadRes.text();
         console.error("Cloudflare upload failed:", uploadRes.status, errText);
-        throw new Error("Cloudflare rechazó el archivo. Revisá el formato o probá de nuevo.");
+        throw new Error("Cloudflare rechazó el archivo. Revisa el formato o inténtalo de nuevo.");
       }
 
       // 3) Confirmamos URL final
       onChange(deliveryUrl);
-      toast.success("Logo actualizado. Guardá los cambios para aplicarlo en toda la plataforma.");
+      toast.success("Logo actualizado. Guarda los cambios para aplicarlo en toda la plataforma.");
       // El preview local lo dejamos limpio (la URL real ya está en value via onChange)
       setPreview(null);
       URL.revokeObjectURL(localPreview);
@@ -111,7 +111,7 @@ const LogoUploader = ({ value, onChange, fallback }: LogoUploaderProps) => {
       <div className="flex items-center gap-4">
         <div
           className={cn(
-            "relative w-20 h-20 rounded-2xl border border-white/10 bg-darker flex items-center justify-center overflow-hidden shrink-0",
+            "relative w-20 h-20 rounded-2xl border border-line-subtle bg-surface-page flex items-center justify-center overflow-hidden shrink-0",
             uploading && "opacity-60",
           )}
         >
@@ -122,11 +122,11 @@ const LogoUploader = ({ value, onChange, fallback }: LogoUploaderProps) => {
               className="w-full h-full object-contain p-2"
             />
           ) : (
-            <ImageIcon className="text-white/30" size={28} />
+            <ImageIcon className="text-fg-30" size={28} />
           )}
           {uploading && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-              <Loader2 className="text-gold animate-spin" size={22} />
+              <Loader2 className="text-accent animate-spin" size={22} />
             </div>
           )}
         </div>
@@ -137,7 +137,7 @@ const LogoUploader = ({ value, onChange, fallback }: LogoUploaderProps) => {
               type="button"
               onClick={handlePick}
               disabled={uploading}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gold hover:bg-goldHover text-darker text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand hover:bg-brand-hover text-on-brand text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {value ? <RefreshCw size={14} /> : <Upload size={14} />}
               {uploading ? "Subiendo..." : value ? "Cambiar logo" : "Subir logo"}
@@ -147,20 +147,20 @@ const LogoUploader = ({ value, onChange, fallback }: LogoUploaderProps) => {
                 href={value}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[11px] text-white/40 hover:text-gold underline truncate max-w-[200px]"
+                className="text-[11px] text-fg-40 hover:text-accent underline truncate max-w-[200px]"
               >
                 Ver original
               </a>
             )}
           </div>
-          <p className="mt-2 text-[11px] text-textMuted leading-relaxed">
+          <p className="mt-2 text-[11px] text-foreground-muted leading-relaxed">
             PNG, SVG, WebP o JPG. Máx 2 MB. Recomendado: fondo transparente, alto ≥ 80px.
           </p>
         </div>
       </div>
 
       {error && (
-        <div className="flex items-start gap-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300">
+        <div className="flex items-start gap-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300 light:text-danger">
           <AlertCircle size={14} className="shrink-0 mt-0.5" />
           <p className="text-xs leading-tight">{error}</p>
         </div>
