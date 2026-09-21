@@ -180,7 +180,7 @@ const AdminMetrics = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.1 }}
-            className="bg-black/30 border border-line-subtle rounded-2xl p-6 hover:bg-ink/[0.02] transition-colors relative overflow-hidden group light:bg-surface-panel light:shadow-panel"
+            className="bg-black/30 border border-line-subtle rounded-2xl p-6 hover:bg-ink/[0.02] light:hover:bg-surface-panel transition-colors relative overflow-hidden group light:bg-surface-panel light:shadow-panel"
           >
             <div className="absolute inset-0 bg-gradient-to-br from-brand/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
             <div className="flex items-start justify-between mb-4 gap-2">

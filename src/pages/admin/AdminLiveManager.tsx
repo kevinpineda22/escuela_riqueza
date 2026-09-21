@@ -630,7 +630,7 @@ const AdminLiveManager = () => {
                     );
                   })}
                 </div>
-                <p className="text-[10px] text-foreground-muted/50 flex items-center gap-1">
+                <p className="text-[10px] text-foreground-muted/50 light:text-fg-40 flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-brand/50" />
                   El plan más alto seleccionado se usa como <code className="text-accent">required_plan</code> automáticamente.
                 </p>
@@ -679,9 +679,9 @@ const AdminLiveManager = () => {
                   onChange={e => setFormData({ ...formData, stream_live_input_id: e.target.value })}
                   className="w-full bg-black/50 border border-line-subtle rounded-xl px-4 py-3 text-foreground-strong focus:outline-none focus:border-accent font-mono text-sm mt-2 light:bg-surface-input light:border-line-control/50 light:placeholder:text-foreground-placeholder" />
               )}
-              <p className="text-[10px] text-foreground-muted/50 flex items-center gap-1">
+              <p className="text-[10px] text-foreground-muted/50 light:text-fg-40 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-green-500/50" /> 
-                El Input ID principal está preconfigurado. Usá "Personalizado" solo si creaste otro Live Input en Cloudflare.
+                El Input ID principal está preconfigurado. Usa "Personalizado" solo si creaste otro Live Input en Cloudflare.
               </p>
             </div>
 
@@ -713,7 +713,7 @@ const AdminLiveManager = () => {
                   </button>
                 )}
               </div>
-              <p className="text-[10px] text-foreground-muted/50">Al finalizar el directo, haz clic en "Obtener grabación" para vincularla automáticamente. Sin necesidad de ir a Cloudflare.</p>
+              <p className="text-[10px] text-foreground-muted/50 light:text-fg-40">Al finalizar el directo, haz clic en "Obtener grabación" para vincularla automáticamente. Sin necesidad de ir a Cloudflare.</p>
             </div>
 
             <details className="mt-4 group">
@@ -808,7 +808,7 @@ const AdminLiveManager = () => {
                     <label htmlFor="bg-upload" className="cursor-pointer block">
                       <Upload size={24} className="mx-auto text-foreground-muted mb-2" />
                       <p className="text-sm text-foreground-muted">Arrastra una imagen o <span className="text-accent font-semibold">haz clic</span> para subir</p>
-                      <p className="text-[10px] text-foreground-muted/50 mt-1">Recomendado: 1920×1080, max 5MB</p>
+                      <p className="text-[10px] text-foreground-muted/50 light:text-fg-40 mt-1">Recomendado: 1920×1080, max 5MB</p>
                     </label>
                   </div>
                 </div>
@@ -869,7 +869,7 @@ const AdminLiveManager = () => {
                     if (recordingUid) {
                       toast.success("Sala finalizada y grabación vinculada automáticamente");
                     } else {
-                      toast.success("Sala finalizada. Usá 'Obtener grabación' en el editor si la grabación no se vinculó automáticamente.");
+                      toast.success("Sala finalizada. Usa 'Obtener grabación' en el editor si la grabación no se vinculó automáticamente.");
                     }
                   } catch (err) { console.error(err); toast.error("Error"); }
                 }}
@@ -1242,7 +1242,7 @@ const AdminLiveManager = () => {
                     <div className="text-center">
                       <Video size={32} className="mx-auto text-fg-20 mb-2" />
                       <p className="text-sm text-foreground-muted">Sin grabación disponible</p>
-                      <p className="text-[10px] text-foreground-muted/50 mt-1">
+                      <p className="text-[10px] text-foreground-muted/50 light:text-fg-40 mt-1">
                         {live.stream_live_input_id
                           ? "Cloudflare puede tardar unos minutos en procesarla tras finalizar."
                           : "Este evento no tiene un Live Input configurado."}
@@ -1323,7 +1323,7 @@ const AdminLiveManager = () => {
                         })
                       : "Sin fecha"}
                   </p>
-                  <p className="text-[10px] text-foreground-muted/50 font-mono truncate mt-0.5">{rec.uid}</p>
+                  <p className="text-[10px] text-foreground-muted/50 light:text-fg-40 font-mono truncate mt-0.5">{rec.uid}</p>
                 </button>
               );
             })}

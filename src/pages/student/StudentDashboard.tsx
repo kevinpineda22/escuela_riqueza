@@ -554,7 +554,7 @@ const StudentDashboard = () => {
                             key={mod.id}
                             initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: idx * 0.05 }}
                             onClick={() => handleModuleClick(mod.id)}
-                            className="bg-black/30 light:bg-surface-panel light:shadow-panel border border-line-subtle rounded-2xl p-6 hover:border-brand/30 hover:bg-ink/5 cursor-pointer group transition-all flex flex-col h-full relative overflow-hidden"
+                            className="bg-black/30 light:bg-surface-panel light:shadow-panel border border-line-subtle rounded-2xl p-6 hover:border-brand/30 hover:bg-ink/5 light:hover:bg-surface-panel cursor-pointer group transition-all flex flex-col h-full relative overflow-hidden"
                           >
                             <div className="absolute top-0 right-0 w-32 h-32 bg-brand/5 rounded-full blur-3xl -mr-10 -mt-10 group-hover:bg-brand/10 transition-colors" />
                             <div className="w-12 h-12 rounded-xl bg-brand/10 border border-brand/20 text-accent flex items-center justify-center mb-5 group-hover:scale-110 transition-transform relative z-10 shadow-[0_0_15px_rgba(204,164,59,0.15)]">
@@ -1171,7 +1171,7 @@ const StudentDashboard = () => {
                       <div>
                         <div className="flex items-center justify-between mb-4">
                           <h4 className="text-[11px] uppercase font-bold tracking-[0.25em] text-foreground-muted">Tu colección</h4>
-                          <span className="text-[10px] uppercase tracking-widest text-foreground-muted/50">Toca una insignia</span>
+                          <span className="text-[10px] uppercase tracking-widest text-foreground-muted/50 light:text-fg-40">Toca una insignia</span>
                         </div>
                         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 sm:gap-4">
                           {dbModules.map((mod, idx) => {
@@ -1416,7 +1416,7 @@ const StudentDashboard = () => {
                     </div>
                     
                     {user?.plan === PLANS.FREE ? (
-                      <button className="w-full mt-8 py-3.5 bg-ink/10 hover:bg-ink/20 text-foreground-strong font-bold rounded-xl transition-all border border-ink/20 relative z-10 hover:border-brand/30 hover:text-accent">
+                      <button className="w-full mt-8 py-3.5 bg-ink/10 hover:bg-ink/20 text-foreground-strong font-bold rounded-xl transition-all border border-ink/20 relative z-10 hover:border-brand/30 hover:text-accent light:bg-surface-panel light:border-brand/40 light:text-accent light:hover:bg-brand/10 light:hover:border-brand/60">
                         Mejorar mi Plan
                       </button>
                     ) : (

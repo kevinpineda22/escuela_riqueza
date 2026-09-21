@@ -36,7 +36,7 @@ const ScrollToTop = () => {
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.8, y: 12 }}
           transition={{ duration: 0.25, ease: "easeOut" }}
-          className="group fixed bottom-5 right-5 sm:bottom-8 sm:right-8 z-[60] w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br from-brand-hover to-brand text-on-brand shadow-[0_10px_30px_-8px_rgba(204,164,59,0.6)] flex items-center justify-center transition-transform hover:-translate-y-1 active:scale-95"
+          className="group fixed bottom-[calc(1.25rem+var(--podcast-bar-h,0px))] right-5 sm:bottom-[calc(2rem+var(--podcast-bar-h,0px))] sm:right-8 z-[60] w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br from-brand-hover to-brand text-on-brand shadow-[0_10px_30px_-8px_rgba(204,164,59,0.6)] flex items-center justify-center transition-transform hover:-translate-y-1 active:scale-95"
         >
           <ArrowUp size={22} className="transition-transform group-hover:-translate-y-0.5" />
         </motion.button>

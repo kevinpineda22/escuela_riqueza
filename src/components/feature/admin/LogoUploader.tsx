@@ -36,7 +36,7 @@ const LogoUploader = ({ value, onChange, fallback }: LogoUploaderProps) => {
     e.target.value = "";
 
     if (!ACCEPTED_TYPES.includes(file.type)) {
-      setError("Formato no soportado. Usá PNG, SVG, WebP o JPG.");
+      setError("Formato no soportado. Usa PNG, SVG, WebP o JPG.");
       return;
     }
     if (file.size > MAX_BYTES) {
