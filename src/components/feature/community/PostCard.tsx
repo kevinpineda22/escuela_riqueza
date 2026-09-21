@@ -12,6 +12,7 @@ interface PostCardProps {
   post: CommunityPost;
   canDelete: boolean;
   isAdmin?: boolean;
+  canWrite: boolean;
   onOpen: () => void;
   onDelete: () => void;
   onPinChanged?: (post: CommunityPost) => void;
@@ -19,7 +20,7 @@ interface PostCardProps {
 
 const PREVIEW_LIMIT = 280;
 
-export function PostCard({ post, canDelete, isAdmin, onOpen, onDelete, onPinChanged }: PostCardProps) {
+export function PostCard({ post, canDelete, isAdmin, canWrite, onOpen, onDelete, onPinChanged }: PostCardProps) {
   const cat = categoryMeta(post.category);
   const CatIcon = cat.icon;
   const isAuthorAdmin = post.author?.role === "admin";
@@ -208,6 +209,7 @@ export function PostCard({ post, canDelete, isAdmin, onOpen, onDelete, onPinChan
               liked={post.liked_by_me ?? false}
               count={post.like_count}
               size="sm"
+              readOnly={!canWrite}
             />
             <button
               type="button"

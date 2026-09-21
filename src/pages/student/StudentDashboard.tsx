@@ -35,6 +35,7 @@ import { fetchModules, fetchLessons, type Module as DBModule, type Lesson as DBL
 import { fetchActiveLive, type LiveEvent } from "@/lib/api/stream/lives";
 import { fetchAllUserProgress } from "@/lib/api/stream/progress";
 import { CommunityFeed } from "@/components/feature/community/CommunityFeed";
+import { canAccessCertificates, canReadCommunity, canWriteCommunity } from "@/lib/plans";
 
 type TabId = "modulos" | "notas" | "certificados" | "comunidad" | "perfil";
 
@@ -370,13 +371,16 @@ const StudentDashboard = () => {
   };
 
   const isPremium = user?.plan === PLANS.INDIVIDUAL || user?.plan === PLANS.VIP;
+  const canSeeCertificates = canAccessCertificates(user?.plan, user?.role);
+  const canReadCommunityTab = canReadCommunity(user?.plan, user?.role);
+  const canWriteInCommunity = canWriteCommunity(user?.plan, user?.role);
   const isPodcastMode = usePlayerStore((s) => s.isPodcastMode && !!s.track);
 
   const NAV_ITEMS = useMemo(() => [
     { id: "modulos", icon: PlayCircle, label: "Módulos" },
     { id: "notas", icon: Edit3, label: "Notas personales" },
-    { id: "certificados", icon: Award, label: "Certificado" },
-    { id: "comunidad", icon: Users, label: "Comunidad VIP", premiumOnly: true, vipOnly: false },
+    { id: "certificados", icon: Award, label: "Certificado", premiumOnly: true },
+    { id: "comunidad", icon: Users, label: "Comunidad VIP" },
     { id: "perfil", icon: UserIcon, label: "Mi Panel" }
   ], []);
 
@@ -422,7 +426,7 @@ const StudentDashboard = () => {
 
             <nav className="space-y-2">
               {NAV_ITEMS.map(item => {
-                if (item.premiumOnly && !isPremium) return null;
+                if (item.premiumOnly && !canSeeCertificates) return null;
                 const isActive = activeTab === item.id;
                 return (
                   <button
@@ -859,7 +863,33 @@ const StudentDashboard = () => {
               </motion.div>
             )}
 
-            {activeTab === "certificados" && (() => {
+            {activeTab === "certificados" && !canSeeCertificates && (
+              <motion.div
+                key="certificados-locked"
+                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}
+              >
+                <div className="p-8 sm:p-16 text-center border border-transparent rounded-3xl bg-gradient-to-br from-brand/20 to-surface-page min-h-[400px] flex flex-col justify-center relative overflow-hidden">
+                  <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 sm:w-80 h-64 sm:h-80 bg-brand/10 rounded-full blur-3xl mix-blend-screen" />
+                  <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-64 sm:w-80 h-64 sm:h-80 bg-brand/5 rounded-full blur-3xl mix-blend-screen" />
+                  <div className="relative z-10">
+                    <Lock size={48} className="mx-auto text-accent mb-6 drop-shadow-[0_0_15px_rgba(204,164,59,0.4)]" />
+                    <h3 className="text-3xl sm:text-4xl font-extrabold text-foreground-strong tracking-tight">Certificados exclusivos</h3>
+                    <p className="text-fg-80 mt-4 max-w-md mx-auto text-lg leading-relaxed">
+                      El plan Free no incluye certificados. Mejora a Individual o VIP para completar módulos y obtener tus insignias.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => navigate("/planes")}
+                      className="mt-8 px-8 py-3.5 bg-brand text-on-brand font-bold rounded-xl hover:bg-brand-hover transition-all shadow-[0_0_20px_rgba(204,164,59,0.3)] hover:shadow-[0_0_30px_rgba(204,164,59,0.5)] text-lg"
+                    >
+                      Ver planes
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === "certificados" && canSeeCertificates && (() => {
               const unlockedCount = dbModules.filter(m => getModuleProgress(m.id) === 100 && (dbLessonsMap[m.id]?.length || 0) > 0).length;
               const activeBadgeModule = (selectedBadgeId && dbModules.find(m => m.id === selectedBadgeId)) || dbModules[0] || null;
               const activeIsUnlocked = activeBadgeModule ? (getModuleProgress(activeBadgeModule.id) === 100 && (dbLessonsMap[activeBadgeModule.id]?.length || 0) > 0) : false;
@@ -1256,8 +1286,8 @@ const StudentDashboard = () => {
                 key="comunidad"
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}
               >
-                {user.plan === PLANS.VIP || user.plan === PLANS.INDIVIDUAL || user.role === "admin" ? (
-                  <CommunityFeed currentUserId={user.id} isAdmin={user.role === "admin"} />
+                {canReadCommunityTab ? (
+                  <CommunityFeed currentUserId={user.id} isAdmin={user.role === "admin"} canWrite={canWriteInCommunity} />
                 ) : (
                   <div className="p-8 sm:p-16 text-center border border-transparent rounded-3xl bg-gradient-to-br from-brand/20 to-surface-page min-h-[400px] flex flex-col justify-center relative overflow-hidden">
                     <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 sm:w-80 h-64 sm:h-80 bg-brand/10 rounded-full blur-3xl mix-blend-screen" />

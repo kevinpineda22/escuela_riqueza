@@ -70,8 +70,12 @@ const currentRecording = current.recording || {};
 console.log('📄 Config de grabación actual:', JSON.stringify(currentRecording));
 
 // 2. Mergear: mantenemos lo existente y solo ajustamos mode + timeoutSeconds.
+// Se reenvían también los campos de nivel superior que el PUT podría resetear
+// si se omiten (preferLowLatency, deleteRecordingAfterDays).
 const body = {
   meta: current.meta,
+  ...(current.preferLowLatency !== undefined && { preferLowLatency: current.preferLowLatency }),
+  ...(current.deleteRecordingAfterDays != null && { deleteRecordingAfterDays: current.deleteRecordingAfterDays }),
   recording: {
     ...currentRecording,
     mode: 'automatic',

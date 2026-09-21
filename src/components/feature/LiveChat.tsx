@@ -18,6 +18,8 @@ export interface ChatMessage {
 interface LiveChatProps {
   liveId?: string;
   onIncomingMessage?: (msg: ChatMessage) => void;
+  /** Mensaje de bienvenida fijado; solo tiene sentido antes de que arranque el vivo. */
+  showWelcome?: boolean;
 }
 
 const SYSTEM_MESSAGE: ChatMessage = {
@@ -29,7 +31,7 @@ const SYSTEM_MESSAGE: ChatMessage = {
   isSystem: true,
 };
 
-const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingMessage }: LiveChatProps) => {
+const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingMessage, showWelcome = true }: LiveChatProps) => {
   const { user } = useAuthStore();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -215,7 +217,7 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
           </div>
         ) : (
           <AnimatePresence initial={false}>
-            {messages.map((msg) => (
+            {(showWelcome ? messages : messages.filter((m) => m.id !== SYSTEM_MESSAGE.id)).map((msg) => (
               <motion.div
                 key={msg.id}
                 initial={{ opacity: 0, x: msg.user_id === user?.id && !msg.isSystem ? 20 : -20, scale: 0.95 }}

@@ -315,9 +315,9 @@ const PublicLiveRoom = () => {
   // el chat completo, que ya sabe escribir; sin sesión, el de solo lectura.
   // En replay (grabación) no hay chat ni presencia — layout simple: header + player.
   const chatNode = !token || isReplay ? null : sessionUser ? (
-    <LiveChat liveId={live.id} />
+    <LiveChat liveId={live.id} showWelcome={live.status === "scheduled"} />
   ) : (
-    <PublicLiveChat token={token} loginPath={loginPath} />
+    <PublicLiveChat token={token} loginPath={loginPath} showWelcome={live.status === "scheduled"} />
   );
 
   const mobileVideoHeightClass = "h-[50dvh] shrink-0";
