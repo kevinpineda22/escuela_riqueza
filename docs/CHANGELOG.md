@@ -7,6 +7,10 @@
 
 ## 2026-09-21
 
+### Live — botón Picture-in-Picture y mensaje de bienvenida solo antes de iniciar
+- **Segundo plano en Android**: Chrome pausa cualquier `<video>` de una pestaña oculta (política del navegador, no bug nuestro). Nuevo botón de ventana flotante en `LivePlayerControls` (`requestPictureInPicture` / `webkitSetPresentationMode` en iOS) que mantiene el video sonando al cambiar de app o bloquear el teléfono. Solo se muestra si el navegador lo soporta.
+- **Mensaje "Iniciamos en instantes"**: seguía fijado con el vivo ya iniciado. `LiveChat` y `PublicLiveChat` reciben `showWelcome`, que las salas pasan como `status === "scheduled"`.
+
 ### Grabaciones — timeout de reconexión del Live Input subido a 300 s
 - **Síntoma**: el live del 19-09 quedó partido en 7 videos en Cloudflare (12 s, 59 s, 6 min, 18 min, uno con Error…) todos entre 17:32 y 17:41 UTC, más el principal de 3:18.
 - **Causa**: Cloudflare crea un video nuevo por cada sesión RTMP. `timeoutSeconds` (60) cubre caídas de red, pero NO un Stop/Start manual en OBS (cierre limpio = fin de emisión). Los pedazos de pocos segundos al arranque apuntan a reinicios manuales.
