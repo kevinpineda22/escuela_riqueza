@@ -7,6 +7,15 @@
 
 ## 2026-09-21
 
+### Grabaciones — timeout de reconexión del Live Input subido a 300 s
+- **Síntoma**: el live del 19-09 quedó partido en 7 videos en Cloudflare (12 s, 59 s, 6 min, 18 min, uno con Error…) todos entre 17:32 y 17:41 UTC, más el principal de 3:18.
+- **Causa**: Cloudflare crea un video nuevo por cada sesión RTMP. `timeoutSeconds` (60) cubre caídas de red, pero NO un Stop/Start manual en OBS (cierre limpio = fin de emisión). Los pedazos de pocos segundos al arranque apuntan a reinicios manuales.
+- **Cambio**: `recording.timeoutSeconds` 60 → 300 en el input `950f6b77…` (via `scripts/configure-live-input.mjs`, que ahora preserva `preferLowLatency` y `deleteRecordingAfterDays` en el PUT). Verificado por API.
+- **Tradeoff**: la grabación se finaliza ~5 min después de cortar el stream. Al "Finalizar" de inmediato, el vinculado automático puede no encontrar video listo — esperar 5 min o usar "Cambiar grabación" después.
+- **Regla operativa**: una vez al aire, no tocar Detener/Iniciar en OBS; dejar que reconecte solo.
+- **Pendiente**: feature "Unir grabaciones" en el panel (concatenar varios UIDs del mismo input con ffmpeg en el pipeline de R2) para recuperar lives fragmentados como el del 19-09.
+
+
 ### Modo claro — fase 6: selector publicado
 - `src/lib/theme.ts`: `APPEARANCE_SELECTOR_ENABLED` pasa de `import.meta.env.DEV` a `true`. El default sigue siendo oscuro; claro y Sistema quedan disponibles desde el selector del header.
 - Merge de `origin/master`: `LiveViewersDialog` y el replay del link público llegaron con la paleta vieja (`bg-darker`, `text-gold`, `textMuted`) y un "Probá"; se pasaron a tokens y a tú al resolver.
