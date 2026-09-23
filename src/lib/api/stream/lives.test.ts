@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { setLivePublic, publicLiveHasRecording } from "./lives";
+import { setLivePublic, publicLiveHasRecording, setLiveReplayPublic } from "./lives";
 import { supabase } from "@/lib/supabase";
 
 vi.mock("@/lib/supabase", () => ({
@@ -58,6 +58,46 @@ describe("setLivePublic", () => {
   it("throws when Supabase returns an error", async () => {
     single.mockResolvedValue({ data: null, error: new Error("boom") });
     await expect(setLivePublic("live-1", true, null)).rejects.toThrow();
+  });
+});
+
+describe("setLiveReplayPublic", () => {
+  const single = vi.fn();
+  const select = vi.fn(() => ({ single }));
+  const eq = vi.fn(() => ({ select }));
+  const update = vi.fn(() => ({ eq }));
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    update.mockReturnValue({ eq });
+    eq.mockReturnValue({ select });
+    select.mockReturnValue({ single });
+    (supabase.from as any).mockReturnValue({ update });
+  });
+
+  it("updates replay_is_public to true", async () => {
+    single.mockResolvedValue({ data: { id: "live-1", replay_is_public: true }, error: null });
+
+    await setLiveReplayPublic("live-1", true);
+
+    expect(supabase.from).toHaveBeenCalledWith("lives");
+    const updates: any = (update.mock.calls[0] as any[])[0];
+    expect(updates).toEqual({ replay_is_public: true });
+    expect(eq).toHaveBeenCalledWith("id", "live-1");
+  });
+
+  it("updates replay_is_public to false", async () => {
+    single.mockResolvedValue({ data: { id: "live-1", replay_is_public: false }, error: null });
+
+    await setLiveReplayPublic("live-1", false);
+
+    const updates: any = (update.mock.calls[0] as any[])[0];
+    expect(updates).toEqual({ replay_is_public: false });
+  });
+
+  it("throws when Supabase returns an error", async () => {
+    single.mockResolvedValue({ data: null, error: new Error("boom") });
+    await expect(setLiveReplayPublic("live-1", true)).rejects.toThrow();
   });
 });
 
