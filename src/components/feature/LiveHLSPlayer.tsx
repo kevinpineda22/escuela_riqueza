@@ -21,6 +21,10 @@ export interface LiveHLSPlayerHandle {
   // del evento nativo 'pause' (una pausa por backgrounding de la pestaña,
   // interrupción del SO, o `ended` dispara 'pause' igual que un click).
   setUserPaused: (paused: boolean) => void;
+  // Posición del filo LL-HLS que hls.js calcula a partir de PART-HOLD-BACK
+  // (modo "low"). `null` si no hay instancia de hls.js (path nativo Safari)
+  // o si el manifest todavía no expone esa posición.
+  getLiveSyncPosition: () => number | null;
 }
 
 interface LiveHLSPlayerProps {
@@ -133,26 +137,32 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       setUserPaused: (paused: boolean) => {
         userPausedRef.current = paused;
       },
+      getLiveSyncPosition: () => hlsRef.current?.liveSyncPosition ?? null,
     }));
 
     useEffect(() => {
       const video = videoRef.current;
       if (!video || !liveInputId || !customerCode) return;
 
-      // Dos perfiles. Ninguno usa LL-HLS: los parts de Cloudflare Stream son
-      // 5xx intermitentes y reintroducen los latigazos. Sin LL-HLS, el piso
-      // de latencia con CF es ~targetduration (≈3s) — `liveSyncDuration:2`
-      // se sienta justo ahí.
-      //
-      // - "smooth" (default): ~8s del edge, buffer 20s. Tipo Twitch clásico.
-      // - "low": ~2s del edge. La latencia la fija liveSyncDuration; los
-      //   stalls dependen del buffer + ABR + catchup. Para minimizar latigazos
-      //   SIN tocar el delay: subimos maxBufferLength (más colchón forward),
-      //   suavizamos el ABR (EWMA largo + factor conservador) y bajamos el
-      //   catchup a 1.04 (menos audible que 1.05).
-      const manifestUrl = `https://customer-${customerCode}.cloudflarestream.com/${liveInputId}/manifest/video.m3u8`;
-
+      // Dos perfiles:
+      // - "smooth" (default): HLS estándar (sin LL-HLS), ~8s del edge, buffer
+      //   20s. Tipo Twitch/YouTube clásico. Es el fallback si LL-HLS da
+      //   problemas — se mantiene intacto.
+      // - "low": LL-HLS real vía el flag `?protocol=llhls` de Cloudflare
+      //   Stream (beta). El manifest expone PART-TARGET/PART-HOLD-BACK y
+      //   partes de 0.5s; con `lowLatencyMode: true` hls.js deriva su propio
+      //   target de latencia de esos tags — por eso NO fijamos
+      //   liveSyncDuration/liveMaxLatencyDuration en este modo (fijarlos
+      //   pisa el cálculo automático y anula la ganancia de LL-HLS).
+      //   Esperado: ~2-4s del edge. Para minimizar latigazos sin tocar el
+      //   delay: subimos maxBufferLength (más colchón forward), suavizamos
+      //   el ABR (EWMA largo + factor conservador) y el catchup permite
+      //   hasta 1.1x (los "parts" LL-HLS son más chicos, hay más margen que
+      //   con segmentos enteros de 2s).
       const lowLatency = latencyMode === "low";
+      const manifestUrl = lowLatency
+        ? `https://customer-${customerCode}.cloudflarestream.com/${liveInputId}/manifest/video.m3u8?protocol=llhls`
+        : `https://customer-${customerCode}.cloudflarestream.com/${liveInputId}/manifest/video.m3u8`;
 
       let hls: Hls | null = null;
       let mediaErrorRetries = 0;
@@ -162,29 +172,35 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       let reloadCooldownTimeout: number | null = null;
       let handlePlaybackRecovered: (() => void) | null = null;
       let clearStableTimer: (() => void) | null = null;
+      let llCatchUpInterval: number | null = null;
+      let handleLLCatchUpOnPlay: (() => void) | null = null;
 
       if (Hls.isSupported()) {
         hls = new Hls({
           enableWorker: true,
-          lowLatencyMode: false,
+          lowLatencyMode: lowLatency,
           backBufferLength: lowLatency ? 6 : 10,
           maxBufferLength: lowLatency ? 12 : 20,
           maxMaxBufferLength: lowLatency ? 24 : 40,
-          // Piso físico con HLS clásico + Cloudflare: targetduration ≈3s. Si te
-          // plantás MÁS cerca del edge, cualquier chunk lento te causa stall.
-          // 3s es el punto donde la matemática colapsa: margen suficiente para
-          // absorber jitter sin perder fluidez. Equivale a Twitch normal-latency.
-          liveSyncDuration: lowLatency ? 3 : 8,
-          // 2x el liveSyncDuration. Permite catchup suave; si excede, seek al edge.
-          liveMaxLatencyDuration: lowLatency ? 8 : 20,
+          // Solo para "smooth": en "low" NO fijamos liveSyncDuration ni
+          // liveMaxLatencyDuration — hls.js los deriva de PART-HOLD-BACK del
+          // manifest LL-HLS. Fijarlos acá pisa ese cálculo y anula LL-HLS.
+          ...(lowLatency
+            ? {}
+            : {
+                liveSyncDuration: 8,
+                // 2.5x el liveSyncDuration. Permite catchup suave; si excede, seek al edge.
+                liveMaxLatencyDuration: 20,
+              }),
           liveDurationInfinity: true,
           startLevel: -1,
-          // Catchup 5% — recupera el filo si se atrasa, inaudible al oído humano.
-          maxLiveSyncPlaybackRate: lowLatency ? 1.05 : 1.0,
+          // Catchup: 10% en low (partes LL-HLS más chicas dan más margen sin
+          // que se note), 0% (sin catchup) en smooth como antes.
+          maxLiveSyncPlaybackRate: lowLatency ? 1.1 : 1.0,
           abrBandWidthFactor: lowLatency ? 0.7 : 0.8,
           abrBandWidthUpFactor: lowLatency ? 0.5 : 0.7,
-          abrEwmaFastLive: lowLatency ? 3.0 : 3.0,
-          abrEwmaSlowLive: lowLatency ? 9.0 : 9.0,
+          abrEwmaFastLive: 3.0,
+          abrEwmaSlowLive: 9.0,
           fragLoadingMaxRetry: 6,
           manifestLoadingMaxRetry: 4,
           levelLoadingMaxRetry: 4,
@@ -206,6 +222,55 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
             label: lvl.height ? `${lvl.height}p` : `${Math.round((lvl.bitrate || 0) / 1000)} kbps`,
           }));
 
+        // LL-HLS catch-up (modo "low" solamente). Medido en vivo real: hls.js
+        // arranca con `targetLatency` correcto (≈1.5s, del PART-HOLD-BACK) pero
+        // el reproductor entra ~7-8s atrás del edge y `maxLatencyDuration` no
+        // está seteado (a propósito, ver arriba) — no hay seek forzado propio
+        // de hls.js. Sin este catch-up manual, el modo "low" queda pegado al
+        // atraso inicial y nunca converge a la latencia real de LL-HLS.
+        // Un seek único a `liveSyncPosition` en cuanto detectamos el atraso
+        // resuelve esto: se probó en vivo y estabiliza en ~2.3s sin stalls.
+        const LL_LATENCY_MARGIN = 3;
+        const LL_CATCHUP_COOLDOWN_MS = 30_000;
+        const LL_CHECK_INTERVAL_MS = 10_000;
+        let lastLLSeekAt = -Infinity;
+        let pendingLLCatchUpCheck = false;
+
+        const attemptLLCatchUp = (requireForwardBuffer: boolean) => {
+          if (!lowLatency || !hls) return;
+          if (userPausedRef.current || video.paused) return;
+
+          const latency = hls.latency;
+          const targetLatency = hls.targetLatency ?? 1.5;
+          const syncPosition = hls.liveSyncPosition;
+          if (!Number.isFinite(latency) || latency <= targetLatency + LL_LATENCY_MARGIN) return;
+          if (syncPosition == null || !Number.isFinite(syncPosition)) return;
+
+          if (requireForwardBuffer) {
+            const buffered = video.buffered;
+            if (!buffered.length) return;
+            const forwardBuffer = buffered.end(buffered.length - 1) - video.currentTime;
+            if (forwardBuffer < 1) return;
+          }
+
+          const now = Date.now();
+          if (now - lastLLSeekAt < LL_CATCHUP_COOLDOWN_MS) return;
+          lastLLSeekAt = now;
+
+          console.info("[LiveHLSPlayer] LL catch-up seek", { latency, targetLatency, seekTo: syncPosition });
+          try { video.currentTime = syncPosition; } catch { /* seekable todavía no listo */ }
+        };
+
+        if (lowLatency) {
+          handleLLCatchUpOnPlay = () => {
+            if (!pendingLLCatchUpCheck) return;
+            pendingLLCatchUpCheck = false;
+            attemptLLCatchUp(false);
+          };
+          video.addEventListener("playing", handleLLCatchUpOnPlay);
+          llCatchUpInterval = window.setInterval(() => attemptLLCatchUp(true), LL_CHECK_INTERVAL_MS);
+        }
+
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           // Este handler corre también tras cada recarga por recuperación
           // (H8). Si el usuario pausó a propósito, no lo reactivamos.
@@ -217,11 +282,15 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           const parsed = computeLevels(hls!);
           setLevels(parsed);
           onLevelsChange?.(parsed, hls!.currentLevel);
+          // Arma el catch-up de LL-HLS para el próximo 'playing': cubre tanto
+          // el montaje inicial como cualquier recarga por recuperación (H8),
+          // ya que executeReload vuelve a disparar MANIFEST_PARSED.
+          if (lowLatency) pendingLLCatchUpCheck = true;
         });
 
         // Diagnóstico LL-HLS — TEMPORAL. Loggea una vez si el manifest expone los
-        // tags de Low-Latency HLS. Si no, latencia se queda en 6-10s aunque el
-        // cliente tenga lowLatencyMode: true.
+        // tags de Low-Latency HLS. Esperado "SÍ" en modo "low" (manifest con
+        // `?protocol=llhls`); "NO" en "smooth" (HLS estándar a propósito).
         let llhlsLogged = false;
         hls.on(Hls.Events.LEVEL_LOADED, (_, data) => {
           if (llhlsLogged) return;
@@ -395,6 +464,8 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       }
 
       return () => {
+        if (llCatchUpInterval !== null) window.clearInterval(llCatchUpInterval);
+        if (handleLLCatchUpOnPlay) video.removeEventListener("playing", handleLLCatchUpOnPlay);
         if (stallTimer !== null) window.clearInterval(stallTimer);
         if (pendingReloadTimeout !== null) window.clearTimeout(pendingReloadTimeout);
         if (reloadCooldownTimeout !== null) window.clearTimeout(reloadCooldownTimeout);

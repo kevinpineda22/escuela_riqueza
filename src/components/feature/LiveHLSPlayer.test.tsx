@@ -17,14 +17,23 @@ const hlsInstance = {
   levels: [],
   currentLevel: -1,
   nextLevel: -1,
-  liveSyncPosition: null,
+  liveSyncPosition: null as number | null,
+  latency: null as number | null,
+  targetLatency: null as number | null,
 };
+
+// Última config pasada a `new Hls(config)` — permite afirmar sobre
+// lowLatencyMode / liveSyncDuration por perfil de latencia.
+let lastHlsConfig: Record<string, unknown> | undefined;
 
 vi.mock('hls.js', () => {
   // `new Hls()` necesita un constructor real: una arrow function no sirve.
-  function HlsMock() { return hlsInstance; }
+  function HlsMock(config: Record<string, unknown>) {
+    lastHlsConfig = config;
+    return hlsInstance;
+  }
   const Hls = HlsMock as unknown as {
-    new (): typeof hlsInstance;
+    new (config: Record<string, unknown>): typeof hlsInstance;
     isSupported: () => boolean;
     Events: Record<string, string>;
     ErrorTypes: Record<string, string>;
@@ -70,6 +79,10 @@ describe('LiveHLSPlayer recovery', () => {
     vi.useFakeTimers();
     hlsInstance.currentLevel = -1;
     hlsInstance.nextLevel = -1;
+    hlsInstance.liveSyncPosition = null;
+    hlsInstance.latency = null;
+    hlsInstance.targetLatency = null;
+    lastHlsConfig = undefined;
     for (const k of Object.keys(handlers)) delete handlers[k];
   });
 
@@ -81,6 +94,62 @@ describe('LiveHLSPlayer recovery', () => {
     renderPlayer();
     expect(hlsInstance.loadSource).toHaveBeenCalledTimes(1);
     expect(hlsInstance.loadSource).toHaveBeenCalledWith('https://customer-abc.cloudflarestream.com/input-1/manifest/video.m3u8');
+  });
+
+  // Modo "smooth": HLS estándar, sin el flag LL-HLS de Cloudflare, config
+  // clásica de hls.js — comportamiento sin cambios.
+  it('modo smooth: carga el manifest sin ?protocol=llhls y sin lowLatencyMode', () => {
+    renderPlayer({ latencyMode: 'smooth' });
+    expect(hlsInstance.loadSource).toHaveBeenCalledWith('https://customer-abc.cloudflarestream.com/input-1/manifest/video.m3u8');
+    expect(lastHlsConfig?.lowLatencyMode).toBe(false);
+    expect(lastHlsConfig?.liveSyncDuration).toBe(8);
+    expect(lastHlsConfig?.liveMaxLatencyDuration).toBe(20);
+  });
+
+  // Modo "low": manifest con `?protocol=llhls` (Cloudflare LL-HLS, beta) y
+  // hls.js en lowLatencyMode. NO se fija liveSyncDuration/liveMaxLatencyDuration:
+  // hls.js los deriva de PART-HOLD-BACK del manifest LL-HLS.
+  it('modo low: carga el manifest con ?protocol=llhls y lowLatencyMode sin liveSyncDuration', () => {
+    renderPlayer({ latencyMode: 'low' });
+    expect(hlsInstance.loadSource).toHaveBeenCalledWith('https://customer-abc.cloudflarestream.com/input-1/manifest/video.m3u8?protocol=llhls');
+    expect(lastHlsConfig?.lowLatencyMode).toBe(true);
+    expect(lastHlsConfig).not.toHaveProperty('liveSyncDuration');
+    expect(lastHlsConfig).not.toHaveProperty('liveMaxLatencyDuration');
+    expect(lastHlsConfig?.maxLiveSyncPlaybackRate).toBe(1.1);
+  });
+
+  // Medido en vivo real: hls.js entra ~7-8s atrás del edge en modo "low" y
+  // no hay seek forzado propio (no seteamos liveMaxLatencyDuration). El
+  // catch-up manual debe saltar a `liveSyncPosition` en el primer 'playing'
+  // tras MANIFEST_PARSED si el atraso supera target + margen.
+  it('modo low: hace catch-up de latencia LL-HLS al primer "playing" tras MANIFEST_PARSED', () => {
+    const { container } = renderPlayer({ latencyMode: 'low', autoPlay: true });
+    const video = container.querySelector('video') as HTMLVideoElement;
+    video.play = vi.fn().mockReturnValue(Promise.resolve());
+    Object.defineProperty(video, 'paused', { value: false, configurable: true });
+    hlsInstance.latency = 7.5;
+    hlsInstance.targetLatency = 1.5;
+    hlsInstance.liveSyncPosition = 150;
+
+    act(() => { handlers.manifestParsed('manifestParsed', {}); });
+    act(() => { video.dispatchEvent(new Event('playing')); });
+
+    expect(video.currentTime).toBe(150);
+  });
+
+  it('modo smooth: NO hace catch-up de latencia LL-HLS', () => {
+    const { container } = renderPlayer({ latencyMode: 'smooth', autoPlay: true });
+    const video = container.querySelector('video') as HTMLVideoElement;
+    video.play = vi.fn().mockReturnValue(Promise.resolve());
+    Object.defineProperty(video, 'paused', { value: false, configurable: true });
+    hlsInstance.latency = 7.5;
+    hlsInstance.targetLatency = 1.5;
+    hlsInstance.liveSyncPosition = 150;
+
+    act(() => { handlers.manifestParsed('manifestParsed', {}); });
+    act(() => { video.dispatchEvent(new Event('playing')); });
+
+    expect(video.currentTime).not.toBe(150);
   });
 
   // H5: el cambio de calidad debe usar `nextLevel` (cambia en el próximo

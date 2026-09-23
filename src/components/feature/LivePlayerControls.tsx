@@ -120,12 +120,21 @@ const LivePlayerControls = ({
     const video = playerRef.current?.video;
     if (!video || !video.seekable.length) return;
     try {
-      const liveEdge = video.seekable.end(video.seekable.length - 1);
-      if (!isFinite(liveEdge)) return;
-      // Volver al filo del vivo SIN romper el buffer: nos paramos a
-      // `liveSyncOffset` del edge, coincidiendo con liveSyncDuration del modo
-      // activo. Evita el latigazo de seek a una zona sin pre-cargar.
-      video.currentTime = Math.max(0, liveEdge - liveSyncOffset);
+      // Modo "low": hls.js calcula `liveSyncPosition` a partir de
+      // PART-HOLD-BACK del manifest LL-HLS — más preciso que restar un
+      // offset fijo al edge. Si no está disponible (path nativo Safari, o
+      // modo "smooth" sin instancia relevante) caemos al cálculo anterior.
+      const syncPosition = playerRef.current?.getLiveSyncPosition?.() ?? null;
+      if (syncPosition != null && isFinite(syncPosition)) {
+        video.currentTime = syncPosition;
+      } else {
+        const liveEdge = video.seekable.end(video.seekable.length - 1);
+        if (!isFinite(liveEdge)) return;
+        // Volver al filo del vivo SIN romper el buffer: nos paramos a
+        // `liveSyncOffset` del edge, coincidiendo con liveSyncDuration del modo
+        // activo. Evita el latigazo de seek a una zona sin pre-cargar.
+        video.currentTime = Math.max(0, liveEdge - liveSyncOffset);
+      }
       if (video.paused) {
         video.play().catch(() => {});
       }
