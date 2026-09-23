@@ -7,6 +7,23 @@
 
 ## 2026-09-23
 
+### Clase completa — "Retomamos donde lo dejaste" salía sin razón, y el seek sin feedback
+- **Síntoma 1**: el aviso de retomar aparecía aunque el alumno nunca hubiera retrocedido, y lo dejaba atrasado.
+- **Causa**: `savePosition` guardaba la posición cada 5 s SIEMPRE, incluso mirando al filo del vivo. Al volver más tarde el filo había avanzado, la posición guardada caía dentro de la ventana y se restauraba sola. Ahora solo se guarda si el alumno está a más de 30 s del filo (retroceso deliberado); si estaba en vivo, la entrada se borra.
+- **Síntoma 2**: navegar con la barra se sentía tosco y lento.
+- **Causa**: el spinner de buffering espera 1.5 s a propósito (evita parpadeos con las micropausas del HLS) y el evento `seeking` no lo dispara, así que al soltar la barra quedaban hasta ~2 s sin ninguna señal visual. Ahora `seeking` muestra el spinner en el acto y `seeked` lo oculta.
+- **Medición del salto (producción, 1080p, ventana de 70 min)**: 0.6 s / 2.3 s / 2.6 s / 4.0 s / 5.1 s — promedio ~3 s. Causa medida: la playlist de DVR trae TODA la clase (57 KB y 2107 segmentos a los 70 min, contra 5 KB y 8 segmentos de la playlist normal) y el player la re-descarga cada pocos segundos; además cada fragmento de 1080p tarda ~2 s en bajar (para 2 s de video). A 3h40 la playlist rondaría los 180 KB — esto es exactamente la "degradación después de 3 h" que documenta Cloudflare.
+- **Descartado**: bajar `maxStarvationDelay`/`maxLoadingDelay` a 2 s en modo dvr. Probado en vivo: el ABR sí caía a 240p tras cada seek, pero el tiempo hasta ver imagen no mejoró (3.5 s vs 3.7 s). Perder calidad sin ganar velocidad — revertido. El costo está del lado de Cloudflare, no en nuestra configuración.
+
+
+### Live — "Activar sonido" requería varios toques
+- **Síntoma**: había que tocar "Activar sonido" dos o tres veces para que el aviso desapareciera y se oyera el audio.
+- **Causa 1**: `muted` es prop **controlada** del `<video>` (`LiveHLSPlayer.tsx`). El handler hacía `video.muted = false` de forma imperativa mientras `isMuted` seguía en `true`; el `setAudioRetryHint(false)` de la primera línea disparaba un re-render que volvía a aplicar `muted = true` y pisaba el cambio. Ahora el estado de React se actualiza ANTES de pedir el `play()`.
+- **Causa 2**: un `AbortError` de `play()` (otro `play()`/`pause()` del propio player lo interrumpe: pausa de sala, catch-up de latencia, vuelta de background) se trataba como bloqueo del navegador y revertía a mudo. Ahora se distingue: `AbortError` da por bueno el audio; solo un rechazo real revierte y muestra el reintento.
+- **Nota**: el botón NO se puede eliminar — los navegadores bloquean el autoplay con sonido sin interacción previa del usuario. El video arranca mudo por política de Chrome/Safari/Firefox, igual que en YouTube o Twitch.
+- Aplicado en `VIPLiveRoom.tsx` y `PublicLiveRoom.tsx`.
+
+
 ### Live público — fix del paywall de repetición y link público en "Finalizados"
 - **Bug 1 — el paywall de repetición nunca aparecía**: `get_public_live` (ver `sql/migrate-public-live-replay-paid.sql`, cambio del 2026-09-22) anula `recording_stream_uid`/`recording_r2_key` para quien no tiene plan pago. `PublicLiveRoom.tsx` derivaba `hasRecording` de esas mismas columnas, así que para un visitante anónimo/Free `hasRecording` siempre daba `false` y nunca se llegaba a `showReplayPaywall` — se mostraba la pantalla genérica de "transmisión finalizada" en vez del paywall.
   - **Fix**: nueva RPC `public.public_live_has_recording(p_token)` (`sql/migrate-public-live-has-recording.sql`) que devuelve solo un `boolean` (nunca el id/key) indicando si la sala tiene grabación vinculada, sin depender del plan del caller. Nuevo helper `publicLiveHasRecording(token)` en `src/lib/api/stream/lives.ts`. `PublicLiveRoom.tsx` la consulta una vez que el live termina y el visitante no tiene `canReplay`, y arma `showReplayPaywall` con ese boolean en vez de con `hasRecording`.

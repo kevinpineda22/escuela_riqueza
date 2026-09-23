@@ -100,6 +100,30 @@ const LivePlayerControls = ({
     };
   }, [isBuffering]);
 
+  // Un seek manual (barra de "Clase completa") necesita feedback INMEDIATO: el
+  // spinner de buffering espera 1.5s a propósito para no parpadear con las
+  // micropausas del HLS, pero el evento `seeking` no lo dispara — al soltar la
+  // barra quedaban hasta ~2s sin ninguna señal visual y la navegación se
+  // sentía trabada. Acá el spinner aparece en el acto y se va con `seeked`.
+  useEffect(() => {
+    const video = playerRef.current?.video;
+    if (!video) return;
+    const handleSeeking = () => {
+      if (bufferTimerRef.current) {
+        clearTimeout(bufferTimerRef.current);
+        bufferTimerRef.current = null;
+      }
+      setShowBufferingSpinner(true);
+    };
+    const handleSeeked = () => setShowBufferingSpinner(false);
+    video.addEventListener("seeking", handleSeeking);
+    video.addEventListener("seeked", handleSeeked);
+    return () => {
+      video.removeEventListener("seeking", handleSeeking);
+      video.removeEventListener("seeked", handleSeeked);
+    };
+  }, [playerRef, latencyMode]);
+
   // Para HLS live, video.duration === Infinity (estándar HTML5). El filo real del
   // vivo se obtiene de video.seekable.end(last) — la ventana DVR que va expandiendo
   // hls.js a medida que llegan segmentos.
