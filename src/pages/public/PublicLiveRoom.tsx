@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Clock, Tv, Radio, Loader2, VideoOff, ArrowLeft, Volume2, Users, Video } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
+import { toast } from "@/components/ui/toaster";
 import { getPublicLive, fetchRecordingUrl, type LiveEvent } from "@/lib/api/stream/lives";
 import { canWatchReplay } from "@/lib/plans";
 import { useIsDesktop } from "@/hooks/useMediaQuery";
@@ -168,6 +169,20 @@ const PublicLiveRoom = () => {
   const handleSelectQualityLevel = (index: number) => {
     livePlayerRef.current?.setQualityLevel(index);
     setCurrentQualityLevel(index);
+  };
+
+  // Modo "dvr": aviso único al retomar una posición guardada, con acción
+  // rápida para volver al filo del vivo (mismo cálculo que el botón "EN VIVO").
+  const handleDvrResumed = () => {
+    toast("Retomamos donde lo dejaste", {
+      action: {
+        label: "Ir al vivo",
+        onClick: () => {
+          const range = livePlayerRef.current?.getSeekableRange();
+          if (range) livePlayerRef.current?.seekTo(range.end - 8);
+        },
+      },
+    });
   };
 
   // Fetch inicial + polling: única fuente de verdad del estado de la sala.
@@ -451,6 +466,8 @@ const PublicLiveRoom = () => {
                     autoPlay
                     latencyMode={liveLatencyMode}
                     roomPaused={isPaused}
+                    resumeKey={live.id}
+                    onResumed={handleDvrResumed}
                     className="w-full h-full object-contain bg-black"
                     onPlay={() => { setIsPlaying(true); setIsBuffering(false); }}
                     onPause={() => setIsPlaying(false)}

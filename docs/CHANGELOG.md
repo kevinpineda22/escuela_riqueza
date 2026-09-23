@@ -54,6 +54,33 @@ Nota de medición: si la pestaña queda en segundo plano el navegador ralentiza 
 player y la latencia se dispara; el catch-up la corrige al volver, pero cualquier
 medición futura debe hacerse con la pestaña activa.
 
+### Live — tercer modo de latencia "Clase completa" (DVR de Cloudflare)
+- **Qué es**: tercer perfil en `LiveHLSPlayer`/`LivePlayerControls` (`latencyMode: "dvr"`, etiqueta "Clase completa") que usa el DVR de Cloudflare Stream (`?dvrEnabled=true` en el manifest) — el alumno gana una línea de tiempo scrubbable sobre toda la transmisión, con resume automático de posición al volver a entrar.
+- **Medido en vivo real**: DVR devuelve HLS v8, latencia p50 14.6s, ventana seekable CRECE con la transmisión (88s → 144s durante la prueba), 0 stalls, misma config hls.js que "Fluidez" (`lowLatencyMode: false`, `liveSyncDuration: 8`, `liveMaxLatencyDuration: 20`).
+
+| Modo | Latencia p50 | Ventana seekable | Notas |
+|---|---|---|---|
+| Baja latencia (LL-HLS) | ~3-5 s | ~21 s fija | requiere red estable |
+| Clase completa (DVR) | 14.6 s | crece con la transmisión (88s → 144s medido) | timeline + resume |
+
+- **Incompatibilidad confirmada**: `?protocol=llhls&dvrEnabled=true` responde HTTP 500 — DVR y LL-HLS son mutuamente excluyentes en Cloudflare Stream, nunca se combinan. El modo "low" sigue pidiendo solo `?protocol=llhls`; "dvr" solo `?dvrEnabled=true`.
+- **Resume de posición**: en modo "dvr" únicamente, `LiveHLSPlayer` persiste `video.currentTime` en `localStorage` (clave `live-position:<resumeKey>`, `resumeKey` = id de la fila `lives`) cada 5s y al pausar. Al volver a entrar, si hay una posición guardada de menos de 12 horas y cae dentro de la ventana seekable actual, retoma ahí en vez del filo del vivo y dispara `onResumed`; las salas (`VIPLiveRoom`, `PublicLiveRoom`) muestran un toast único "Retomamos donde lo dejaste" con acción "Ir al vivo". Todo acceso a `localStorage` está en try/catch (puede tirar en modo privado).
+- **Timeline**: nuevo slider en `LivePlayerControls`, visible solo en modo "dvr", con elapsed/total en `mm:ss` (o `h:mm:ss`). Nuevos métodos en `LiveHLSPlayerHandle`: `getSeekableRange()` y `seekTo(position)` (clamped a la ventana seekable).
+- **Caveat conocido (sin resolver en este cambio)**: Cloudflare documenta degradación de performance en broadcasts DVR de más de 3 horas; las clases de Iván duran ~3:18, cerca del límite documentado — a monitorear en el primer live real con DVR activo.
+- Cambiar de modo de latencia sigue recreando la instancia de `Hls` (H6, ver arriba) — el cambio se ve como un breve reload, sin cambios acá.
+
+**Verificado en vivo (2026-09-23, OBS transmitiendo):** ventana navegable real de 0 a 1528 s
+(25 min de clase), retroceso a los 10 min que se mantiene, retomar posición guardada
+(15:00 sobre 32:22) y botón "Ir al vivo" que vuelve al filo (-11.9 s).
+
+Dos correcciones sobre la primera implementación, encontradas probando en vivo:
+- `liveMaxLatencyDuration: 20` se aplicaba también a `dvr`: hls.js trataba el retroceso
+  como un error de latencia y devolvía al filo del vivo de un salto ("no me deja
+  devolverme"). En `dvr` ya no se fija ni `liveSyncDuration` ni `liveMaxLatencyDuration`.
+- El retomar posición solo se intentaba en `MANIFEST_PARSED`, donde `video.seekable`
+  todavía está vacío, así que nunca restauraba. Ahora se reintenta en `LEVEL_UPDATED`,
+  antes del seek al filo.
+
 ### Modo claro — fase 6: selector publicado
 - `src/lib/theme.ts`: `APPEARANCE_SELECTOR_ENABLED` pasa de `import.meta.env.DEV` a `true`. El default sigue siendo oscuro; claro y Sistema quedan disponibles desde el selector del header.
 - Merge de `origin/master`: `LiveViewersDialog` y el replay del link público llegaron con la paleta vieja (`bg-darker`, `text-gold`, `textMuted`) y un "Probá"; se pasaron a tokens y a tú al resolver.

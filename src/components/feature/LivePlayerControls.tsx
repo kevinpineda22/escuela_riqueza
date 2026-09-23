@@ -57,6 +57,12 @@ const LivePlayerControls = ({
   const [isBehind, setIsBehind] = useState(false);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bufferTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Timeline del modo "dvr": posición actual + ventana seekable (crece con la
+  // transmisión). Throttleado a ~500ms vía un timestamp en ref — reusa el
+  // 'timeupdate' nativo del <video> en vez de armar un setInterval propio.
+  const [dvrCurrentTime, setDvrCurrentTime] = useState(0);
+  const [dvrRange, setDvrRange] = useState<{ start: number; end: number } | null>(null);
+  const lastDvrUpdateRef = useRef(0);
 
   const scheduleHide = useCallback(() => {
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
@@ -112,9 +118,45 @@ const LivePlayerControls = ({
   }, [isPlaying, playerRef]);
 
   // Debe coincidir con `liveSyncDuration` del perfil activo en LiveHLSPlayer
-  // (3 para "low", 8 para "normal"/"smooth"). Un valor fijo hacía que el botón
-  // "EN VIVO" empeorara el retraso en modo `low`.
+  // (3 para "low", 8 para "normal"/"smooth"/"dvr" — "dvr" usa la misma config
+  // hls.js que "smooth"). Un valor fijo hacía que el botón "EN VIVO" empeorara
+  // el retraso en modo `low`.
   const liveSyncOffset = latencyMode === "low" ? 3 : 8;
+
+  // Timeline del modo "dvr": actualiza posición + ventana seekable en cada
+  // 'timeupdate' del <video>, throttleado a ~500ms.
+  useEffect(() => {
+    if (latencyMode !== "dvr") return;
+    const video = playerRef.current?.video;
+    if (!video) return;
+    const handleTimeUpdate = () => {
+      const now = Date.now();
+      if (now - lastDvrUpdateRef.current < 500) return;
+      lastDvrUpdateRef.current = now;
+      setDvrCurrentTime(video.currentTime);
+      setDvrRange(playerRef.current?.getSeekableRange?.() ?? null);
+    };
+    video.addEventListener("timeupdate", handleTimeUpdate);
+    handleTimeUpdate();
+    return () => video.removeEventListener("timeupdate", handleTimeUpdate);
+  }, [latencyMode, playerRef]);
+
+  const formatElapsed = (seconds: number) => {
+    const total = Math.max(0, Math.floor(seconds));
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    const mm = String(m).padStart(2, "0");
+    const ss = String(s).padStart(2, "0");
+    return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
+  };
+
+  const handleDvrSeek = (e: ChangeEvent<HTMLInputElement>) => {
+    if (!dvrRange) return;
+    const value = parseFloat(e.target.value);
+    playerRef.current?.seekTo(dvrRange.start + value);
+    wakeControls();
+  };
 
   const handleGoLive = useCallback(() => {
     const video = playerRef.current?.video;
@@ -359,6 +401,13 @@ const LivePlayerControls = ({
             <span className="flex-1">Baja latencia</span>
             {latencyMode === "low" && <Check size={14} className="text-accent" />}
           </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => { onSelectLatencyMode("dvr"); wakeControls(); }}
+            className={cn("cursor-pointer", latencyMode === "dvr" && "text-accent")}
+          >
+            <span className="flex-1">Clase completa</span>
+            {latencyMode === "dvr" && <Check size={14} className="text-accent" />}
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -401,6 +450,31 @@ const LivePlayerControls = ({
             transition={{ duration: 0.2 }}
             className="absolute bottom-0 left-0 right-0 z-30 px-3 sm:px-5 pb-3 sm:pb-4 pt-14 bg-gradient-to-t from-black/95 via-black/60 to-transparent pointer-events-none"
           >
+            {/* Timeline — solo modo "dvr". Sin esto en smooth/low, que no tienen
+                una ventana seekable usable para un scrubber. */}
+            {latencyMode === "dvr" && dvrRange && (
+              <div className="flex items-center gap-2 sm:gap-3 pointer-events-auto mb-2 sm:mb-3">
+                <span className="text-[10px] sm:text-xs font-black tabular-nums text-foreground-strong/80 shrink-0">
+                  {formatElapsed(dvrCurrentTime - dvrRange.start)}
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={Math.max(0, dvrRange.end - dvrRange.start)}
+                  step={1}
+                  value={Math.min(Math.max(0, dvrCurrentTime - dvrRange.start), dvrRange.end - dvrRange.start)}
+                  onChange={handleDvrSeek}
+                  onMouseDown={wakeControls}
+                  onTouchStart={wakeControls}
+                  className="flex-1 accent-gold cursor-pointer"
+                  aria-label="Posición en la clase"
+                />
+                <span className="text-[10px] sm:text-xs font-black tabular-nums text-foreground-strong/80 shrink-0">
+                  {formatElapsed(dvrRange.end - dvrRange.start)}
+                </span>
+              </div>
+            )}
+
             <div className="flex items-center gap-3 sm:gap-5 pointer-events-auto">
               <button
                 onClick={() => { onTogglePlay(); wakeControls(); }}
