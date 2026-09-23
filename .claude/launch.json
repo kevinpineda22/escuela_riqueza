@@ -18,31 +18,6 @@
         "dev"
       ],
       "port": 5173
-    },
-    {
-      "name": "scratch-static",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": [
-        "--yes",
-        "serve",
-        "-l",
-        "5599",
-        "C:/Users/JUAN~1.ISA/AppData/Local/Temp/claude/C--Users-juan-isaza-Desktop-Escuela-Riqueza-escuela-riqueza/46f682cc-0a33-46ba-8139-eb5d33a230a6/scratchpad"
-      ],
-      "port": 5599
-    },
-    {
-      "name": "dev-5180",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": [
-        "run",
-        "dev",
-        "--",
-        "--port",
-        "5180",
-        "--strictPort"
-      ],
-      "port": 5180
     }
   ]
 }
