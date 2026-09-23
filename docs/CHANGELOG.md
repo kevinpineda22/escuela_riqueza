@@ -7,6 +7,13 @@
 
 ## 2026-09-23
 
+### Clase completa — "Retomamos donde lo dejaste" salía sin razón, y el seek sin feedback
+- **Síntoma 1**: el aviso de retomar aparecía aunque el alumno nunca hubiera retrocedido, y lo dejaba atrasado.
+- **Causa**: `savePosition` guardaba la posición cada 5 s SIEMPRE, incluso mirando al filo del vivo. Al volver más tarde el filo había avanzado, la posición guardada caía dentro de la ventana y se restauraba sola. Ahora solo se guarda si el alumno está a más de 30 s del filo (retroceso deliberado); si estaba en vivo, la entrada se borra.
+- **Síntoma 2**: navegar con la barra se sentía tosco y lento.
+- **Causa**: el spinner de buffering espera 1.5 s a propósito (evita parpadeos con las micropausas del HLS) y el evento `seeking` no lo dispara, así que al soltar la barra quedaban hasta ~2 s sin ninguna señal visual. Ahora `seeking` muestra el spinner en el acto y `seeked` lo oculta.
+
+
 ### Live — "Activar sonido" requería varios toques
 - **Síntoma**: había que tocar "Activar sonido" dos o tres veces para que el aviso desapareciera y se oyera el audio.
 - **Causa 1**: `muted` es prop **controlada** del `<video>` (`LiveHLSPlayer.tsx`). El handler hacía `video.muted = false` de forma imperativa mientras `isMuted` seguía en `true`; el `setAudioRetryHint(false)` de la primera línea disparaba un re-render que volvía a aplicar `muted = true` y pisaba el cambio. Ahora el estado de React se actualiza ANTES de pedir el `play()`.

@@ -214,11 +214,26 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
         const key = resumeKeyRef.current;
         return key ? `live-position:${key}` : null;
       };
+      // Solo tiene sentido "retomar" si el alumno se había quedado ATRÁS a
+      // propósito. Guardar siempre (incluso mirando el vivo al filo) hacía que
+      // al volver más tarde —con el filo ya avanzado— la posición guardada
+      // cayera dentro de la ventana y se restaurara sola, mostrando
+      // "Retomamos donde lo dejaste" a alguien que nunca pidió retomar nada y
+      // dejándolo atrasado sin quererlo.
+      const LIVE_EDGE_THRESHOLD_S = 30;
       const savePosition = () => {
         if (!isDvr) return;
         const key = getPositionStorageKey();
         if (!key) return;
         try {
+          const seekable = video.seekable;
+          const edge = seekable.length ? seekable.end(seekable.length - 1) : NaN;
+          const behind = Number.isFinite(edge) ? edge - video.currentTime : 0;
+          if (behind < LIVE_EDGE_THRESHOLD_S) {
+            // Estaba viendo en vivo: no hay nada que retomar la próxima vez.
+            localStorage.removeItem(key);
+            return;
+          }
           localStorage.setItem(key, JSON.stringify({ position: video.currentTime, savedAt: Date.now() }));
         } catch { /* localStorage no disponible (modo privado) */ }
       };
