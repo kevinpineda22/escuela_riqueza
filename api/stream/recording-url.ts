@@ -5,20 +5,14 @@ import { AwsClient } from 'aws4fetch';
 import { applyCors, requireAuth } from '../_lib/auth.js';
 import { applyRateLimit } from '../_lib/ratelimit.js';
 
-// Rama autenticada (dashboard / admin): identifica el live por `live_id` y
-// autoriza contra `allowed_plans` del usuario logueado.
-const AuthedBodySchema = z.object({
+// Identifica el live por `live_id` y autoriza contra `allowed_plans` del
+// usuario logueado. Es la única rama del endpoint: la repetición de un live
+// público (`/live/:token`) también pasa por acá con sesión iniciada — la
+// rama anónima por `share_token` fue eliminada porque firmaba una URL de R2
+// sin validar el plan de quien la pedía (ver docs/CHANGELOG.md 2026-09-22).
+const BodySchema = z.object({
   live_id: z.string().uuid(),
 });
-
-// Rama del link público (`/live/:token`, sin sesión): identifica el live por
-// `share_token` y se autoriza únicamente porque `get_public_live` (RPC
-// SECURITY DEFINER) solo devuelve fila si `is_public = true`.
-const PublicBodySchema = z.object({
-  share_token: z.string().trim().min(10).max(128),
-});
-
-const BodySchema = z.union([AuthedBodySchema, PublicBodySchema]);
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -45,9 +39,8 @@ function getR2Credentials(): R2Credentials | null {
 
 /**
  * Firma una URL GET de vida corta contra el endpoint S3-compatible de R2 para
- * el `key` dado. Extraída como función pura (sin `req`/`res`) para que ambas
- * ramas (autenticada y pública) reutilicen exactamente la misma lógica de
- * firma, y para poder testearla sin mockear Vercel.
+ * el `key` dado. Extraída como función pura (sin `req`/`res`) para poder
+ * testearla sin mockear Vercel.
  */
 export async function signR2RecordingUrl(
   creds: R2Credentials,
@@ -73,12 +66,6 @@ export async function signR2RecordingUrl(
   return signed.url;
 }
 
-function getClientIp(req: VercelRequest): string {
-  const forwarded = req.headers['x-forwarded-for'];
-  const ip = Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(',')[0];
-  return ip?.trim() || req.socket?.remoteAddress || 'unknown';
-}
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return;
 
@@ -88,7 +75,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const parsed = BodySchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: 'Falta live_id o share_token válido' });
+    return res.status(400).json({ error: 'Falta live_id válido' });
   }
 
   if (!SUPABASE_URL || !(SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY)) {
@@ -102,44 +89,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: 'Almacenamiento de grabaciones no configurado' });
   }
 
-  // ---- Rama pública: link compartible, sin JWT ----
-  if ('share_token' in parsed.data) {
-    const { share_token } = parsed.data;
-
-    const ok = await applyRateLimit(req, res, getClientIp(req), {
-      requests: 20,
-      window: '1 m',
-      prefix: 'recording-url-public',
-    });
-    if (!ok) return;
-
-    const anonSupabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY!, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-
-    const { data: live, error } = await anonSupabase.rpc('get_public_live', { p_token: share_token });
-    if (error) {
-      console.error('Supabase error (get_public_live):', error);
-      return res.status(500).json({ error: 'Error consultando la grabación' });
-    }
-    const row = Array.isArray(live) ? live[0] : null;
-    if (!row) {
-      return res.status(404).json({ error: 'Link inválido o sala no pública' });
-    }
-    if (row.recording_storage !== 'r2' || !row.recording_r2_key) {
-      return res.status(409).json({ error: 'Esta grabación aún no está archivada en R2' });
-    }
-
-    try {
-      const url = await signR2RecordingUrl(r2Creds, row.recording_r2_key);
-      return res.status(200).json({ url, expiresIn: URL_TTL_SECONDS });
-    } catch (err) {
-      console.error('Error firmando URL R2 (público):', err);
-      return res.status(500).json({ error: 'No se pudo generar el enlace de la grabación' });
-    }
-  }
-
-  // ---- Rama autenticada: dashboard / admin ----
   const user = await requireAuth(req, res);
   if (!user) return;
 

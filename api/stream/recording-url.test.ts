@@ -1,11 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { signR2RecordingUrl } from './recording-url';
 
-// `signR2RecordingUrl` es la lógica de firma compartida entre la rama
-// autenticada (dashboard/admin, `live_id`) y la rama pública del link
-// compartible (`share_token`) de recording-url.ts — se extrajo para que
-// ambas ramas firmen exactamente igual y para poder testearla sin mockear
-// `VercelRequest`/`VercelResponse`.
+// `signR2RecordingUrl` es la lógica de firma que usa recording-url.ts
+// (rama autenticada, `live_id`) — se extrajo como función pura para poder
+// testearla sin mockear `VercelRequest`/`VercelResponse`.
 const creds = {
   accountId: 'acc123',
   accessKeyId: 'AKIDEXAMPLE',

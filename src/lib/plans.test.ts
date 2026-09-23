@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canAccessCertificates, canReadCommunity, canWriteCommunity } from "@/lib/plans";
+import { canAccessCertificates, canReadCommunity, canWatchReplay, canWriteCommunity } from "@/lib/plans";
 import { PLANS, USER_ROLES } from "@/types/user";
 
 describe("canReadCommunity", () => {
@@ -40,5 +40,22 @@ describe("canAccessCertificates", () => {
     expect(canAccessCertificates(PLANS.INDIVIDUAL, USER_ROLES.STUDENT)).toBe(true);
     expect(canAccessCertificates(PLANS.VIP, USER_ROLES.STUDENT)).toBe(true);
     expect(canAccessCertificates(PLANS.FREE, USER_ROLES.ADMIN)).toBe(true);
+  });
+});
+
+describe("canWatchReplay", () => {
+  it("denies free, anonymous and missing plan", () => {
+    expect(canWatchReplay(PLANS.FREE, USER_ROLES.STUDENT)).toBe(false);
+    expect(canWatchReplay(null, null)).toBe(false);
+    expect(canWatchReplay(undefined, undefined)).toBe(false);
+  });
+
+  it("allows individual and vip", () => {
+    expect(canWatchReplay(PLANS.INDIVIDUAL, USER_ROLES.STUDENT)).toBe(true);
+    expect(canWatchReplay(PLANS.VIP, USER_ROLES.STUDENT)).toBe(true);
+  });
+
+  it("always allows admin, regardless of plan", () => {
+    expect(canWatchReplay(PLANS.FREE, USER_ROLES.ADMIN)).toBe(true);
   });
 });

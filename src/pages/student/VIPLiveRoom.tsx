@@ -8,6 +8,7 @@ import { usePlayerStore } from "@/stores/player.store";
 import { useAuthStore } from "@/stores/auth.store";
 import { usePreferencesStore } from "@/stores/preferences.store";
 import { supabase } from "@/lib/supabase";
+import { toast } from "@/components/ui/toaster";
 import { fetchActiveLive, checkLiveInputStatus, type LiveEvent } from "@/lib/api/stream/lives";
 import { useIsDesktop } from "@/hooks/useMediaQuery";
 import LiveHLSPlayer, { type LiveHLSPlayerHandle, type QualityLevel } from "@/components/feature/LiveHLSPlayer";
@@ -136,6 +137,20 @@ const VIPLiveRoom = () => {
   const handleSelectQualityLevel = (index: number) => {
     livePlayerRef.current?.setQualityLevel(index);
     setCurrentQualityLevel(index);
+  };
+
+  // Modo "dvr": aviso único al retomar una posición guardada, con acción
+  // rápida para volver al filo del vivo (mismo cálculo que el botón "EN VIVO").
+  const handleDvrResumed = () => {
+    toast("Retomamos donde lo dejaste", {
+      action: {
+        label: "Ir al vivo",
+        onClick: () => {
+          const range = livePlayerRef.current?.getSeekableRange();
+          if (range) livePlayerRef.current?.seekTo(range.end - 8);
+        },
+      },
+    });
   };
 
   const isLive = live?.status === "live" && !live?.is_paused;
@@ -471,6 +486,8 @@ const VIPLiveRoom = () => {
                     autoPlay
                     latencyMode={liveLatencyMode}
                     roomPaused={isPaused}
+                    resumeKey={live.id}
+                    onResumed={handleDvrResumed}
                     className="w-full h-full object-contain bg-black"
                     onPlay={() => { setIsPlaying(true); setIsBuffering(false); }}
                     onPause={() => setIsPlaying(false)}
