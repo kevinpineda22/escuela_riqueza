@@ -7,6 +7,14 @@
 
 ## 2026-09-23
 
+### Live — "Activar sonido" requería varios toques
+- **Síntoma**: había que tocar "Activar sonido" dos o tres veces para que el aviso desapareciera y se oyera el audio.
+- **Causa 1**: `muted` es prop **controlada** del `<video>` (`LiveHLSPlayer.tsx`). El handler hacía `video.muted = false` de forma imperativa mientras `isMuted` seguía en `true`; el `setAudioRetryHint(false)` de la primera línea disparaba un re-render que volvía a aplicar `muted = true` y pisaba el cambio. Ahora el estado de React se actualiza ANTES de pedir el `play()`.
+- **Causa 2**: un `AbortError` de `play()` (otro `play()`/`pause()` del propio player lo interrumpe: pausa de sala, catch-up de latencia, vuelta de background) se trataba como bloqueo del navegador y revertía a mudo. Ahora se distingue: `AbortError` da por bueno el audio; solo un rechazo real revierte y muestra el reintento.
+- **Nota**: el botón NO se puede eliminar — los navegadores bloquean el autoplay con sonido sin interacción previa del usuario. El video arranca mudo por política de Chrome/Safari/Firefox, igual que en YouTube o Twitch.
+- Aplicado en `VIPLiveRoom.tsx` y `PublicLiveRoom.tsx`.
+
+
 ### Live público — fix del paywall de repetición y link público en "Finalizados"
 - **Bug 1 — el paywall de repetición nunca aparecía**: `get_public_live` (ver `sql/migrate-public-live-replay-paid.sql`, cambio del 2026-09-22) anula `recording_stream_uid`/`recording_r2_key` para quien no tiene plan pago. `PublicLiveRoom.tsx` derivaba `hasRecording` de esas mismas columnas, así que para un visitante anónimo/Free `hasRecording` siempre daba `false` y nunca se llegaba a `showReplayPaywall` — se mostraba la pantalla genérica de "transmisión finalizada" en vez del paywall.
   - **Fix**: nueva RPC `public.public_live_has_recording(p_token)` (`sql/migrate-public-live-has-recording.sql`) que devuelve solo un `boolean` (nunca el id/key) indicando si la sala tiene grabación vinculada, sin depender del plan del caller. Nuevo helper `publicLiveHasRecording(token)` en `src/lib/api/stream/lives.ts`. `PublicLiveRoom.tsx` la consulta una vez que el live termina y el visitante no tiene `canReplay`, y arma `showReplayPaywall` con ese boolean en vez de con `hasRecording`.
