@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { setLivePublic } from "./lives";
+import { setLivePublic, publicLiveHasRecording } from "./lives";
 import { supabase } from "@/lib/supabase";
 
 vi.mock("@/lib/supabase", () => ({
@@ -58,5 +58,36 @@ describe("setLivePublic", () => {
   it("throws when Supabase returns an error", async () => {
     single.mockResolvedValue({ data: null, error: new Error("boom") });
     await expect(setLivePublic("live-1", true, null)).rejects.toThrow();
+  });
+});
+
+describe("publicLiveHasRecording", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns true when the RPC reports a linked recording", async () => {
+    (supabase.rpc as any).mockResolvedValue({ data: true, error: null });
+
+    const result = await publicLiveHasRecording("token-1");
+
+    expect(result).toBe(true);
+    expect(supabase.rpc).toHaveBeenCalledWith("public_live_has_recording", { p_token: "token-1" });
+  });
+
+  it("returns false when the RPC reports no recording", async () => {
+    (supabase.rpc as any).mockResolvedValue({ data: false, error: null });
+
+    const result = await publicLiveHasRecording("token-1");
+
+    expect(result).toBe(false);
+  });
+
+  it("returns false (never throws) when Supabase returns an error", async () => {
+    (supabase.rpc as any).mockResolvedValue({ data: null, error: new Error("boom") });
+
+    const result = await publicLiveHasRecording("token-1");
+
+    expect(result).toBe(false);
   });
 });

@@ -38,6 +38,85 @@ function highestPlan(plans: string[]): "free" | "individual" | "vip" {
   return "free";
 }
 
+/**
+ * Link público — cualquiera con la URL ve el en vivo sin registrarse. Se usa
+ * tanto en la pestaña de salas activas como en "Finalizados": una repetición
+ * también puede compartirse por link público (con el paywall de plan pago
+ * aplicando del lado del visitante), así que el admin necesita poder
+ * activar/copiar el link ahí también, no solo mientras la sala está en vivo.
+ */
+function PublicLinkControl({
+  live,
+  togglingPublicId,
+  setTogglingPublicId,
+  onUpdated,
+}: {
+  live: LiveEvent;
+  togglingPublicId: string | null;
+  setTogglingPublicId: (id: string | null) => void;
+  onUpdated: (updated: LiveEvent) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2 pt-3 border-t border-ink/5">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs font-bold text-fg-70 flex items-center gap-1.5">
+          <Link2 size={13} className="text-accent" /> Link público
+        </span>
+        <button
+          onClick={async e => {
+            e.stopPropagation();
+            setTogglingPublicId(live.id);
+            try {
+              const updated = await setLivePublic(live.id, !live.is_public, live.share_token);
+              onUpdated(updated);
+              toast.success(updated.is_public ? "Link público activado" : "Link público desactivado");
+            } catch {
+              toast.error("Error al actualizar el link público");
+            } finally {
+              setTogglingPublicId(null);
+            }
+          }}
+          disabled={togglingPublicId === live.id}
+          className={cn(
+            "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border disabled:opacity-50",
+            live.is_public
+              ? "bg-brand/15 text-accent border-brand/30"
+              : "bg-ink/5 text-fg-40 border-line-subtle hover:border-ink/30 hover:text-fg-70"
+          )}
+        >
+          <span className={cn("w-2 h-2 rounded-full", live.is_public ? "bg-brand shadow-[0_0_6px_rgba(204,164,59,0.6)]" : "bg-ink/20")} />
+          {live.is_public ? "Público" : "Privado"}
+        </button>
+      </div>
+      {live.is_public && live.share_token && (
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <input
+              readOnly
+              value={buildPublicLiveUrl(live.share_token)}
+              onClick={e => (e.target as HTMLInputElement).select()}
+              className="flex-1 min-w-0 bg-black/40 border border-line-subtle text-fg-80 rounded-lg px-3 py-1.5 text-xs font-mono truncate light:bg-surface-panel"
+            />
+            <button
+              onClick={e => {
+                e.stopPropagation();
+                navigator.clipboard.writeText(buildPublicLiveUrl(live.share_token!));
+                toast.success("Link copiado");
+              }}
+              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-brand/15 text-accent border border-brand/30 hover:bg-brand/25 transition-colors"
+            >
+              <Copy size={13} /> Copiar
+            </button>
+          </div>
+          <p className="text-[10px] text-yellow-500/80 light:text-warning leading-relaxed">
+            Cualquier persona con este link puede ver el en vivo sin registrarse. También permite ver la grabación cuando el en vivo termine.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const AdminLiveManager = () => {
   const [activeTab, setActiveTab] = useState<"editor" | "rooms" | "ended">("editor");
   const [lives, setLives] = useState<LiveEvent[]>([]);
@@ -1021,64 +1100,12 @@ const AdminLiveManager = () => {
                 </div>
               </div>
 
-              {/* Link público — cualquiera con la URL ve el en vivo sin registrarse */}
-              <div className="flex flex-col gap-2 pt-3 border-t border-ink/5">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-xs font-bold text-fg-70 flex items-center gap-1.5">
-                    <Link2 size={13} className="text-accent" /> Link público
-                  </span>
-                  <button
-                    onClick={async e => {
-                      e.stopPropagation();
-                      setTogglingPublicId(live.id);
-                      try {
-                        const updated = await setLivePublic(live.id, !live.is_public, live.share_token);
-                        setLives(prev => prev.map(l => l.id === updated.id ? updated : l));
-                        toast.success(updated.is_public ? "Link público activado" : "Link público desactivado");
-                      } catch {
-                        toast.error("Error al actualizar el link público");
-                      } finally {
-                        setTogglingPublicId(null);
-                      }
-                    }}
-                    disabled={togglingPublicId === live.id}
-                    className={cn(
-                      "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border disabled:opacity-50",
-                      live.is_public
-                        ? "bg-brand/15 text-accent border-brand/30"
-                        : "bg-ink/5 text-fg-40 border-line-subtle hover:border-ink/30 hover:text-fg-70"
-                    )}
-                  >
-                    <span className={cn("w-2 h-2 rounded-full", live.is_public ? "bg-brand shadow-[0_0_6px_rgba(204,164,59,0.6)]" : "bg-ink/20")} />
-                    {live.is_public ? "Público" : "Privado"}
-                  </button>
-                </div>
-                {live.is_public && live.share_token && (
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <input
-                        readOnly
-                        value={buildPublicLiveUrl(live.share_token)}
-                        onClick={e => (e.target as HTMLInputElement).select()}
-                        className="flex-1 min-w-0 bg-black/40 border border-line-subtle text-fg-80 rounded-lg px-3 py-1.5 text-xs font-mono truncate light:bg-surface-panel"
-                      />
-                      <button
-                        onClick={e => {
-                          e.stopPropagation();
-                          navigator.clipboard.writeText(buildPublicLiveUrl(live.share_token!));
-                          toast.success("Link copiado");
-                        }}
-                        className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-brand/15 text-accent border border-brand/30 hover:bg-brand/25 transition-colors"
-                      >
-                        <Copy size={13} /> Copiar
-                      </button>
-                    </div>
-                    <p className="text-[10px] text-yellow-500/80 light:text-warning leading-relaxed">
-                      Cualquier persona con este link puede ver el en vivo sin registrarse. También permite ver la grabación cuando el en vivo termine.
-                    </p>
-                  </div>
-                )}
-              </div>
+              <PublicLinkControl
+                live={live}
+                togglingPublicId={togglingPublicId}
+                setTogglingPublicId={setTogglingPublicId}
+                onUpdated={updated => setLives(prev => prev.map(l => l.id === updated.id ? updated : l))}
+              />
               </div>
             ))
           )}
@@ -1260,6 +1287,12 @@ const AdminLiveManager = () => {
                     )}
                   </div>
                 )}
+                <PublicLinkControl
+                  live={live}
+                  togglingPublicId={togglingPublicId}
+                  setTogglingPublicId={setTogglingPublicId}
+                  onUpdated={updated => setEndedLives(prev => prev.map(l => l.id === updated.id ? updated : l))}
+                />
               </div>
             ))
           )}

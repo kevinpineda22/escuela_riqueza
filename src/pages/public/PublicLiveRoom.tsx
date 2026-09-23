@@ -5,7 +5,7 @@ import { Clock, Tv, Radio, Loader2, VideoOff, ArrowLeft, Volume2, Users, Video }
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toaster";
-import { getPublicLive, fetchRecordingUrl, type LiveEvent } from "@/lib/api/stream/lives";
+import { getPublicLive, fetchRecordingUrl, publicLiveHasRecording, type LiveEvent } from "@/lib/api/stream/lives";
 import { canWatchReplay } from "@/lib/plans";
 import { useIsDesktop } from "@/hooks/useMediaQuery";
 import LiveHLSPlayer, { type LiveHLSPlayerHandle, type QualityLevel } from "@/components/feature/LiveHLSPlayer";
@@ -90,6 +90,8 @@ const PublicLiveRoom = () => {
   const anonIdRef = useRef<string>(getOrCreateAnonId());
   const [r2RecordingUrl, setR2RecordingUrl] = useState<string | null>(null);
   const [r2RecordingLoading, setR2RecordingLoading] = useState(false);
+  // null = todavía no se consultó (o no aplica); true/false = respuesta de la RPC.
+  const [hasRecordingRpc, setHasRecordingRpc] = useState<boolean | null>(null);
 
   const isLive = live?.status === "live" && !live?.is_paused;
   const isEnded = live?.status === "ended";
@@ -110,7 +112,12 @@ const PublicLiveRoom = () => {
   // sql/migrate-public-live-replay-paid.sql.
   const canReplay = canWatchReplay(sessionUser?.plan, sessionUser?.role);
   const isReplay = isEnded && hasRecording && canReplay;
-  const showReplayPaywall = isEnded && hasRecording && !canReplay;
+  // `get_public_live` anula recording_stream_uid/recording_r2_key para quien
+  // no tiene plan pago, así que `hasRecording` (derivado de esas columnas)
+  // siempre da false para un visitante sin entitlement — no sirve para saber
+  // si HAY grabación bloqueada. Para eso se pide `publicLiveHasRecording`
+  // (boolean puro, no revela el id) — ver sql/migrate-public-live-has-recording.sql.
+  const showReplayPaywall = isEnded && !canReplay && hasRecordingRpc === true;
 
   const loginPath = token ? `/login?returnTo=${encodeURIComponent(`/live/${token}`)}` : "/login";
 
@@ -311,6 +318,23 @@ const PublicLiveRoom = () => {
       active = false;
     };
   }, [isR2Recording, canReplay, live?.id]);
+
+  // Paywall de repetición: solo hace falta saber SI hay grabación, no cuál —
+  // `get_public_live` nunca manda el id/key a quien no tiene plan pago.
+  useEffect(() => {
+    if (!token || !isEnded || canReplay) {
+      setHasRecordingRpc(null);
+      return;
+    }
+    let active = true;
+    publicLiveHasRecording(token).then((result) => {
+      if (!active) return;
+      setHasRecordingRpc(result);
+    });
+    return () => {
+      active = false;
+    };
+  }, [token, isEnded, canReplay]);
 
   if (loading) {
     return (
@@ -607,17 +631,28 @@ const PublicLiveRoom = () => {
               <motion.div key="replay-paywall" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full h-full flex items-center justify-center bg-black/80 relative">
                 <div className="text-center p-8 z-10 max-w-md">
                   <Video size={64} className="mx-auto text-brand/60 mb-6" />
-                  <h2 className="text-2xl font-bold text-foreground-strong mb-2">La repetición es solo para alumnos</h2>
+                  <p className="text-xs uppercase tracking-widest text-foreground-muted font-bold mb-2 truncate">
+                    {live.title || "Sesión de Riqueza"}
+                  </p>
+                  <h2 className="text-2xl font-bold text-foreground-strong mb-2">La repetición es para alumnos</h2>
                   <p className="text-foreground-muted mb-8">
-                    Este en vivo estuvo abierto para todos, pero la grabación es contenido de los planes Individual y VIP.
+                    Este en vivo estuvo abierto para todos. La grabación completa de la clase queda disponible para alumnos con plan Individual o VIP.
                   </p>
                   {!sessionUser ? (
-                    <button
-                      onClick={() => navigate(loginPath)}
-                      className="px-6 py-3 rounded-full bg-brand hover:bg-brand-hover text-on-brand font-black tracking-wide transition-colors"
-                    >
-                      Inicia sesión
-                    </button>
+                    <div className="flex flex-col items-center gap-3">
+                      <button
+                        onClick={() => navigate(loginPath)}
+                        className="px-6 py-3 rounded-full bg-brand hover:bg-brand-hover text-on-brand font-black tracking-wide transition-colors"
+                      >
+                        Inicia sesión
+                      </button>
+                      <button
+                        onClick={() => navigate("/planes")}
+                        className="text-sm text-foreground-muted hover:text-accent underline underline-offset-4 transition-colors"
+                      >
+                        Ver planes
+                      </button>
+                    </div>
                   ) : (
                     <button
                       onClick={() => navigate("/planes")}
