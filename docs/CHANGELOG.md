@@ -12,6 +12,8 @@
 - **Causa**: `savePosition` guardaba la posición cada 5 s SIEMPRE, incluso mirando al filo del vivo. Al volver más tarde el filo había avanzado, la posición guardada caía dentro de la ventana y se restauraba sola. Ahora solo se guarda si el alumno está a más de 30 s del filo (retroceso deliberado); si estaba en vivo, la entrada se borra.
 - **Síntoma 2**: navegar con la barra se sentía tosco y lento.
 - **Causa**: el spinner de buffering espera 1.5 s a propósito (evita parpadeos con las micropausas del HLS) y el evento `seeking` no lo dispara, así que al soltar la barra quedaban hasta ~2 s sin ninguna señal visual. Ahora `seeking` muestra el spinner en el acto y `seeked` lo oculta.
+- **Medición del salto (producción, 1080p, ventana de 70 min)**: 0.6 s / 2.3 s / 2.6 s / 4.0 s / 5.1 s — promedio ~3 s. Causa medida: la playlist de DVR trae TODA la clase (57 KB y 2107 segmentos a los 70 min, contra 5 KB y 8 segmentos de la playlist normal) y el player la re-descarga cada pocos segundos; además cada fragmento de 1080p tarda ~2 s en bajar (para 2 s de video). A 3h40 la playlist rondaría los 180 KB — esto es exactamente la "degradación después de 3 h" que documenta Cloudflare.
+- **Descartado**: bajar `maxStarvationDelay`/`maxLoadingDelay` a 2 s en modo dvr. Probado en vivo: el ABR sí caía a 240p tras cada seek, pero el tiempo hasta ver imagen no mejoró (3.5 s vs 3.7 s). Perder calidad sin ganar velocidad — revertido. El costo está del lado de Cloudflare, no en nuestra configuración.
 
 
 ### Live — "Activar sonido" requería varios toques
