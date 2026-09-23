@@ -151,10 +151,22 @@ const LivePlayerControls = ({
     return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
   };
 
-  const handleDvrSeek = (e: ChangeEvent<HTMLInputElement>) => {
-    if (!dvrRange) return;
-    const value = parseFloat(e.target.value);
-    playerRef.current?.seekTo(dvrRange.start + value);
+  // Scrubbing tipo YouTube: mientras el usuario arrastra SOLO se mueve el
+  // indicador (estado local). El seek real se hace una sola vez al soltar.
+  // Antes se llamaba a `seekTo` en cada `change` del range — un arrastre
+  // disparaba decenas de seeks y cada uno tira el buffer y vuelve a pedir
+  // fragmentos, de ahí los tirones.
+  const [scrubValue, setScrubValue] = useState<number | null>(null);
+
+  const handleDvrScrub = (e: ChangeEvent<HTMLInputElement>) => {
+    setScrubValue(parseFloat(e.target.value));
+    wakeControls();
+  };
+
+  const commitDvrScrub = () => {
+    if (scrubValue === null || !dvrRange) return;
+    playerRef.current?.seekTo(dvrRange.start + scrubValue);
+    setScrubValue(null);
     wakeControls();
   };
 
@@ -455,15 +467,21 @@ const LivePlayerControls = ({
             {latencyMode === "dvr" && dvrRange && (
               <div className="flex items-center gap-2 sm:gap-3 pointer-events-auto mb-2 sm:mb-3">
                 <span className="text-[10px] sm:text-xs font-black tabular-nums text-foreground-strong/80 shrink-0">
-                  {formatElapsed(dvrCurrentTime - dvrRange.start)}
+                  {formatElapsed(scrubValue ?? dvrCurrentTime - dvrRange.start)}
                 </span>
                 <input
                   type="range"
                   min={0}
                   max={Math.max(0, dvrRange.end - dvrRange.start)}
                   step={1}
-                  value={Math.min(Math.max(0, dvrCurrentTime - dvrRange.start), dvrRange.end - dvrRange.start)}
-                  onChange={handleDvrSeek}
+                  value={
+                    scrubValue ??
+                    Math.min(Math.max(0, dvrCurrentTime - dvrRange.start), dvrRange.end - dvrRange.start)
+                  }
+                  onChange={handleDvrScrub}
+                  onPointerUp={commitDvrScrub}
+                  onKeyUp={commitDvrScrub}
+                  onBlur={commitDvrScrub}
                   onMouseDown={wakeControls}
                   onTouchStart={wakeControls}
                   className="flex-1 accent-gold cursor-pointer"

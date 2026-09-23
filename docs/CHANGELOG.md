@@ -81,6 +81,14 @@ Dos correcciones sobre la primera implementación, encontradas probando en vivo:
   todavía está vacío, así que nunca restauraba. Ahora se reintenta en `LEVEL_UPDATED`,
   antes del seek al filo.
 
+**Scrubbing (2026-09-23):** la barra llamaba a `seekTo` en cada evento `change` del
+`<input type="range">` — React mapea ese evento al `input` nativo, así que un arrastre
+disparaba un seek por cada movimiento del puntero y cada uno tira el buffer y vuelve a
+pedir fragmentos (se sentía a tirones). Ahora, como YouTube: mientras se arrastra solo
+se mueve el indicador (estado local `scrubValue`) y el seek se hace una sola vez al
+soltar (`pointerup` / `keyup` / `blur`). Verificado en vivo: 25 movimientos de arrastre
+→ 0 seeks durante el arrastre, 1 al soltar (antes: 25).
+
 ### Modo claro — fase 6: selector publicado
 - `src/lib/theme.ts`: `APPEARANCE_SELECTOR_ENABLED` pasa de `import.meta.env.DEV` a `true`. El default sigue siendo oscuro; claro y Sistema quedan disponibles desde el selector del header.
 - Merge de `origin/master`: `LiveViewersDialog` y el replay del link público llegaron con la paleta vieja (`bg-darker`, `text-gold`, `textMuted`) y un "Probá"; se pasaron a tokens y a tú al resolver.
