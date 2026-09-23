@@ -5,6 +5,16 @@
 
 ---
 
+## 2026-09-23
+
+### Live público — fix del paywall de repetición y link público en "Finalizados"
+- **Bug 1 — el paywall de repetición nunca aparecía**: `get_public_live` (ver `sql/migrate-public-live-replay-paid.sql`, cambio del 2026-09-22) anula `recording_stream_uid`/`recording_r2_key` para quien no tiene plan pago. `PublicLiveRoom.tsx` derivaba `hasRecording` de esas mismas columnas, así que para un visitante anónimo/Free `hasRecording` siempre daba `false` y nunca se llegaba a `showReplayPaywall` — se mostraba la pantalla genérica de "transmisión finalizada" en vez del paywall.
+  - **Fix**: nueva RPC `public.public_live_has_recording(p_token)` (`sql/migrate-public-live-has-recording.sql`) que devuelve solo un `boolean` (nunca el id/key) indicando si la sala tiene grabación vinculada, sin depender del plan del caller. Nuevo helper `publicLiveHasRecording(token)` en `src/lib/api/stream/lives.ts`. `PublicLiveRoom.tsx` la consulta una vez que el live termina y el visitante no tiene `canReplay`, y arma `showReplayPaywall` con ese boolean en vez de con `hasRecording`.
+  - **Copy del paywall actualizado** (pedido explícito del cliente, redacción muy seca): título del live visible arriba, encabezado "La repetición es para alumnos", cuerpo de dos oraciones explicando que el en vivo fue abierto para todos y que la grabación completa queda para alumnos con plan Individual o VIP. Botón primario "Inicia sesión" (anónimo) → login, o "Ver planes" (logueado sin plan pago) → `/planes`. Para anónimos se agrega además un link secundario "Ver planes" bajo el botón principal, para llegar a la oferta sin necesidad de loguearse antes.
+- **Bug 2 — el toggle de link público desaparecía al finalizar la sala**: `AdminLiveManager.tsx` solo renderizaba el control "Link público" (toggle + URL + "Copiar") en la pestaña de salas activas. `fetchLives()` filtra `.neq("status","ended")`, así que al "Finalizar" una sala pasa a "Finalizados" (`fetchEndedLives()`), donde ese control no existía — el admin no podía ver ni reactivar el link público para compartir la repetición.
+  - **Fix**: el bloque se extrajo a un componente local `PublicLinkControl` (misma UI, sin duplicar JSX) y se reutiliza en ambas pestañas. En "Finalizados" actualiza `endedLives` en vez de `lives` al togglear.
+- **Aplicar en Supabase**: correr `sql/migrate-public-live-has-recording.sql` (idempotente).
+
 ## 2026-09-22
 
 ### Live público — la repetición pasa a ser contenido pago

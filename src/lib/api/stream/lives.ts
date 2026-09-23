@@ -263,6 +263,27 @@ export async function getPublicLive(token: string): Promise<LiveEvent | null> {
   return null;
 }
 
+/**
+ * Indica si una sala pública ya tiene grabación vinculada, sin revelar el id
+ * (Stream) ni la key (R2) de esa grabación. `get_public_live` anula esas
+ * columnas para quien no tiene plan pago, así que el frontend no puede
+ * distinguir "sin grabación todavía" de "grabación bloqueada por plan" salvo
+ * con este boolean — ver sql/migrate-public-live-has-recording.sql.
+ */
+export async function publicLiveHasRecording(token: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabase.rpc("public_live_has_recording", { p_token: token });
+    if (error) {
+      console.error("[publicLiveHasRecording] Supabase error:", error);
+      return false;
+    }
+    return Boolean(data);
+  } catch (err) {
+    console.error("[publicLiveHasRecording] error:", err);
+    return false;
+  }
+}
+
 export interface PublicChatMessage {
   id: string;
   user_id: string;
