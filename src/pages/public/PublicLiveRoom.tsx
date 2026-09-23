@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { Clock, Tv, Radio, Loader2, VideoOff, ArrowLeft, Volume2, Users, Video } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
-import { getPublicLive, fetchPublicRecordingUrl, type LiveEvent } from "@/lib/api/stream/lives";
+import { getPublicLive, fetchRecordingUrl, type LiveEvent } from "@/lib/api/stream/lives";
+import { canWatchReplay } from "@/lib/plans";
 import { useIsDesktop } from "@/hooks/useMediaQuery";
 import LiveHLSPlayer, { type LiveHLSPlayerHandle, type QualityLevel } from "@/components/feature/LiveHLSPlayer";
 import LivePlayerControls from "@/components/feature/LivePlayerControls";
@@ -44,9 +45,18 @@ function getOrCreateAnonId(): string {
  * compartida con VIPLiveRoom) — con sesión iniciada, la identidad se trackea
  * igual que en la sala VIP. El estado de la sala se obtiene únicamente vía
  * polling de `get_public_live` — Realtime en `lives` no está garantizado para
- * clientes anónimos. Finalizado el en vivo, si hay grabación se muestra el
- * replay (sin chat ni presencia); la única llamada autenticada de `/api/stream/*`
- * que existe para anónimos es `recording-url` vía `share_token` (sin JWT).
+ * clientes anónimos.
+ *
+ * El EN VIVO es público para cualquiera. La REPETICIÓN no: es contenido de
+ * los planes Individual/VIP (`canWatchReplay`). Finalizado el en vivo, si hay
+ * grabación y el visitante está habilitado se muestra el replay (sin chat ni
+ * presencia); si no está habilitado (anónimo o Free) se muestra un paywall en
+ * su lugar. `get_public_live` ya anula `recording_stream_uid` /
+ * `recording_r2_key` para quien no está habilitado (ver
+ * sql/migrate-public-live-replay-paid.sql), y la URL firmada de R2 para el
+ * replay se pide con sesión vía `/api/stream/recording-url` (`live_id` + JWT,
+ * misma rama que usa el dashboard) — ya no existe una rama anónima por
+ * `share_token` para firmar grabaciones.
  */
 const PublicLiveRoom = () => {
   const { token } = useParams<{ token: string }>();
@@ -93,7 +103,13 @@ const PublicLiveRoom = () => {
   const isR2Recording = isEnded && live?.recording_storage === "r2" && Boolean(live?.recording_r2_key);
   const isStreamRecording = isEnded && !isR2Recording && Boolean(live?.recording_stream_uid);
   const hasRecording = isR2Recording || isStreamRecording;
-  const isReplay = isEnded && hasRecording;
+  // Repetición: contenido pago. `get_public_live` ya anula `recording_stream_uid`
+  // / `recording_r2_key` para quien no está habilitado, pero igual chequeamos el
+  // plan acá para decidir qué pantalla mostrar (replay vs. paywall) — ver
+  // sql/migrate-public-live-replay-paid.sql.
+  const canReplay = canWatchReplay(sessionUser?.plan, sessionUser?.role);
+  const isReplay = isEnded && hasRecording && canReplay;
+  const showReplayPaywall = isEnded && hasRecording && !canReplay;
 
   const loginPath = token ? `/login?returnTo=${encodeURIComponent(`/live/${token}`)}` : "/login";
 
@@ -264,13 +280,14 @@ const PublicLiveRoom = () => {
     };
   }, [live?.id, isEnded, sessionUser?.id, sessionUser?.fullName, sessionUser?.avatarUrl, sessionUser?.plan]);
 
-  // Replay R2: pide la URL firmada de vida corta vía el link público
-  // (`share_token`, sin JWT) apenas se detecta que la grabación está en R2.
+  // Replay R2: pide la URL firmada de vida corta vía el endpoint autenticado
+  // (`live_id` + JWT) — requiere sesión y plan pago, igual que el dashboard.
+  // Si no hay `canReplay` no se pide nada: se muestra el paywall en su lugar.
   useEffect(() => {
-    if (!isR2Recording || !token) return;
+    if (!isR2Recording || !canReplay || !live?.id) return;
     let active = true;
     setR2RecordingLoading(true);
-    fetchPublicRecordingUrl(token).then((url) => {
+    fetchRecordingUrl(live.id).then((url) => {
       if (!active) return;
       setR2RecordingUrl(url);
       setR2RecordingLoading(false);
@@ -278,7 +295,7 @@ const PublicLiveRoom = () => {
     return () => {
       active = false;
     };
-  }, [isR2Recording, token]);
+  }, [isR2Recording, canReplay, live?.id]);
 
   if (loading) {
     return (
@@ -317,8 +334,10 @@ const PublicLiveRoom = () => {
 
   // Con sesión iniciada (llegó por el link y se logueó para participar) se usa
   // el chat completo, que ya sabe escribir; sin sesión, el de solo lectura.
-  // En replay (grabación) no hay chat ni presencia — layout simple: header + player.
-  const chatNode = !token || isReplay ? null : sessionUser ? (
+  // En replay (grabación) y en el paywall de repetición no hay chat ni
+  // presencia — layout simple: header + contenido.
+  const hideChatLayout = isReplay || showReplayPaywall;
+  const chatNode = !token || hideChatLayout ? null : sessionUser ? (
     <LiveChat liveId={live.id} showWelcome={live.status === "scheduled"} />
   ) : (
     <PublicLiveChat token={token} loginPath={loginPath} showWelcome={live.status === "scheduled"} />
@@ -330,7 +349,7 @@ const PublicLiveRoom = () => {
     <div className="h-[100dvh] bg-black light:bg-surface-page text-foreground flex flex-col md:flex-row overflow-hidden font-sans">
       {/* Isla oscura: escenario, intro, countdown, replay y controles son iguales en ambos
           temas (spec §3.4). El chat y la lista de conectados, afuera, sí se adaptan. */}
-      <div data-theme="dark" className={cn("flex flex-col relative", isReplay || isDesktop ? "flex-1 md:h-screen" : mobileVideoHeightClass)}>
+      <div data-theme="dark" className={cn("flex flex-col relative", hideChatLayout || isDesktop ? "flex-1 md:h-screen" : mobileVideoHeightClass)}>
         {/* Header */}
         <motion.div
           initial={{ y: -100 }}
@@ -567,6 +586,31 @@ const PublicLiveRoom = () => {
                   </div>
                 )}
               </motion.div>
+            ) : showReplayPaywall ? (
+              <motion.div key="replay-paywall" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full h-full flex items-center justify-center bg-black/80 relative">
+                <div className="text-center p-8 z-10 max-w-md">
+                  <Video size={64} className="mx-auto text-brand/60 mb-6" />
+                  <h2 className="text-2xl font-bold text-foreground-strong mb-2">La repetición es solo para alumnos</h2>
+                  <p className="text-foreground-muted mb-8">
+                    Este en vivo estuvo abierto para todos, pero la grabación es contenido de los planes Individual y VIP.
+                  </p>
+                  {!sessionUser ? (
+                    <button
+                      onClick={() => navigate(loginPath)}
+                      className="px-6 py-3 rounded-full bg-brand hover:bg-brand-hover text-on-brand font-black tracking-wide transition-colors"
+                    >
+                      Inicia sesión
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => navigate("/planes")}
+                      className="px-6 py-3 rounded-full bg-brand hover:bg-brand-hover text-on-brand font-black tracking-wide transition-colors"
+                    >
+                      Ver planes
+                    </button>
+                  )}
+                </div>
+              </motion.div>
             ) : isEnded ? (
               <motion.div key="ended" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full h-full flex items-center justify-center bg-black/80 relative">
                 <div className="text-center p-8 z-10">
@@ -647,7 +691,7 @@ const PublicLiveRoom = () => {
           </AnimatePresence>
         </div>
 
-        {isDesktop && !isReplay && (
+        {isDesktop && !hideChatLayout && (
           <button
             onClick={() => setIsChatVisibleDesktop((v) => !v)}
             aria-label={isChatVisibleDesktop ? "Ocultar chat" : "Mostrar chat"}
@@ -658,7 +702,7 @@ const PublicLiveRoom = () => {
         )}
       </div>
 
-      {!isReplay && (isDesktop ? (
+      {!hideChatLayout && (isDesktop ? (
         <div
           className={cn(
             "md:h-screen bg-surface-page shrink-0 z-50 overflow-hidden transition-[width,opacity] duration-300 ease-in-out",

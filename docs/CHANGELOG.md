@@ -5,6 +5,16 @@
 
 ---
 
+## 2026-09-22
+
+### Live público — la repetición pasa a ser contenido pago
+- **Decisión de producto**: el en vivo en `/live/<token>` sigue siendo público para cualquiera (anon incluido), pero la repetición (grabación) ahora es solo para planes Individual/VIP y admin. Free y anónimos ven el en vivo completo, pero al finalizar ven un paywall en vez de la grabación.
+- **`src/lib/plans.ts`**: nuevo helper `canWatchReplay(plan, role)` (admin/individual/vip → true), con tests en `plans.test.ts`.
+- **SQL** (`sql/migrate-public-live-replay-paid.sql`, aplicar manualmente en Supabase): `get_public_live` sigue devolviendo la fila completa del live público, pero anula `recording_stream_uid` y `recording_r2_key` a menos que `auth.uid()` corresponda a un perfil `role='admin'` o `plan IN ('individual','vip')` (nuevo helper `can_watch_live_replay(uuid)`). El resto de columnas no cambia.
+- **`api/stream/recording-url.ts`**: se eliminó la rama anónima por `share_token` — firmaba una URL de R2 para cualquier caller con el token, sin validar plan. El endpoint ahora solo acepta `{ live_id }` con JWT (rama que ya validaba `allowed_plans`); la sala pública reusa esta misma rama con sesión iniciada. Se retiraron `getClientIp` y el cliente Supabase anónimo del handler (quedaron sin uso).
+- **`src/pages/public/PublicLiveRoom.tsx`**: `isReplay` ahora requiere `canWatchReplay(sessionUser?.plan, sessionUser?.role)` además de `isEnded && hasRecording`. Sin ese permiso se muestra una pantalla "La repetición es solo para alumnos" con botón "Inicia sesión" (anónimo) o "Ver planes" (Free logueado). El fetch de la URL firmada de R2 pasa de `fetchPublicRecordingUrl(token)` a `fetchRecordingUrl(live.id)` (autenticado). `src/lib/api/stream/lives.ts` perdió `fetchPublicRecordingUrl` (sin más usos).
+- **Límite conocido**: la grabación de Cloudflare Stream se sirve por iframe/manifest público sin firmar — alguien que ya haya extraído un `recording_stream_uid` de una sesión previa (por ejemplo, de la network tab) podría seguir reproduciéndolo directo. Anular el uid en la RPC cierra el camino fácil; el cierre real requeriría `requireSignedURLs` de Cloudflare Stream (pendiente, fuera de este cambio).
+
 ## 2026-09-21
 
 ### Comunidad — Free en modo lectura, Certificado oculto para Free

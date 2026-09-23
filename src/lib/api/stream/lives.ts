@@ -329,23 +329,3 @@ export async function fetchRecordingUrl(liveId: string): Promise<string | null> 
   }
 }
 
-/**
- * Variante pública (sin sesión) de `fetchRecordingUrl`: usa el `share_token`
- * del link público en vez del JWT — el endpoint valida el token contra
- * `get_public_live` en vez de `requireAuth`.
- */
-export async function fetchPublicRecordingUrl(shareToken: string): Promise<string | null> {
-  try {
-    const res = await fetch("/api/stream/recording-url", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ share_token: shareToken }),
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data?.url || null;
-  } catch (err) {
-    console.error("Error fetching public recording URL:", err);
-    return null;
-  }
-}

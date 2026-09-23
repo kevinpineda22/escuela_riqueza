@@ -28,3 +28,13 @@ export function canAccessCertificates(plan: Plan | null | undefined, role: UserR
   if (isAdmin(role)) return true;
   return plan === PLANS.INDIVIDUAL || plan === PLANS.VIP;
 }
+
+/**
+ * El en vivo público (`/live/<token>`) es abierto para cualquiera, pero la
+ * repetición (grabación) es contenido pago: solo Individual, VIP y admin.
+ * Free y anónimos ven el en vivo pero no la repetición.
+ */
+export function canWatchReplay(plan: Plan | null | undefined, role: UserRole | null | undefined): boolean {
+  if (isAdmin(role)) return true;
+  return plan === PLANS.INDIVIDUAL || plan === PLANS.VIP;
+}
