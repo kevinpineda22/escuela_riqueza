@@ -5,6 +5,18 @@
 
 ---
 
+## 2026-09-24
+
+### Live público — repetición abierta a todos, opt-in por sala
+- **Pedido del cliente**: la repetición de un live público (`/live/<token>`) es paga por defecto (Individual/VIP/admin, ver 2026-09-22), pero el admin ahora puede abrirla a cualquiera, sin cuenta ni plan, para una clase puntual — el resto de las salas sigue paga por defecto.
+- **SQL** (`sql/migrate-public-live-open-replay.sql`, aplicar manualmente en Supabase): nueva columna `lives.replay_is_public boolean NOT NULL DEFAULT false`. `get_public_live` revela `recording_stream_uid`/`recording_r2_key` cuando `can_watch_live_replay(auth.uid())` **o** `replay_is_public = true` (antes solo el primero). Sin policy nueva: la escritura ya es admin-only vía las RLS de `lives`.
+- **`api/stream/recording-url.ts`**: se reintrodujo la rama pública por `share_token` (había sido eliminada el 2026-09-22 por firmar sin chequeo de plan). Ahora está estrictamente gateada: llama a `get_public_live` con un cliente anon, y **solo firma si `replay_is_public === true`** en la fila devuelta — 404 si el token no corresponde a ninguna sala pública, 403 si la repetición no está abierta, 409 si la grabación no está archivada en R2. Rate limit propio por IP (`recording-url-public`, 20 req/min), reutilizando `getClientIp` y `signR2RecordingUrl` sin duplicar lógica. La rama autenticada (`live_id` + JWT + `allowed_plans`) queda intacta.
+- **`src/lib/api/stream/lives.ts`**: `LiveEvent.replay_is_public`; `setLiveReplayPublic(id, isOpen)` (mismo patrón que `setLivePublic`); `fetchPublicRecordingUrl(token)` — pide la URL firmada sin sesión (`fetch` crudo, no `authedFetch`), devuelve `null` en cualquier respuesta no-OK.
+- **`src/pages/public/PublicLiveRoom.tsx`**: `canReplay` ahora es `canWatchReplay(plan, role) || live.replay_is_public`. Con entitlement de plan sigue pidiendo la URL por `fetchRecordingUrl(live.id)` (autenticado); habilitado solo por `replay_is_public`, pide `fetchPublicRecordingUrl(token)`. El paywall no aparece en ninguno de los dos casos.
+- **`src/pages/admin/AdminLiveManager.tsx`**: `PublicLinkControl` suma un segundo toggle "Repetición abierta a todos" (solo visible con el link público activo), con su propio estado de carga y toast, conectado a `setLiveReplayPublic`.
+- **Tests**: `api/stream/recording-url.test.ts` (rama pública: firma si `replay_is_public`, 403 si no, 404 sin sala, 400 con token corto; rama autenticada sigue exigiendo JWT) y `src/lib/api/stream/lives.test.ts` (`setLiveReplayPublic`).
+- **Aplicar en Supabase**: correr `sql/migrate-public-live-open-replay.sql` (idempotente, requiere que `sql/migrate-public-live-replay-paid.sql` ya esté aplicada).
+
 ## 2026-09-23
 
 ### Clase completa — "Retomamos donde lo dejaste" salía sin razón, y el seek sin feedback

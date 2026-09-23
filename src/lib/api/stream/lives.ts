@@ -26,6 +26,8 @@ export interface LiveEvent {
   created_at: string;
   is_public: boolean;
   share_token: string | null;
+  /** Opt-in por sala: si es true, la repetición es abierta a cualquiera (sin cuenta, sin plan). Default false. */
+  replay_is_public: boolean;
 }
 
 function sanitize(live: Record<string, unknown>): Record<string, unknown> {
@@ -248,6 +250,26 @@ export async function setLivePublic(id: string, isPublic: boolean, currentToken?
   return data as LiveEvent;
 }
 
+/**
+ * Activa/desactiva la repetición abierta a todos para una sala puntual.
+ * Por defecto la repetición es paga (Individual/VIP/admin) — esto la abre a
+ * cualquier visitante con el link, sin cuenta ni plan, solo para esa sala.
+ */
+export async function setLiveReplayPublic(id: string, isOpen: boolean): Promise<LiveEvent> {
+  const { data, error } = await supabase
+    .from("lives")
+    .update({ replay_is_public: isOpen })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("[setLiveReplayPublic] Supabase error:", error);
+    throw error;
+  }
+  return data as LiveEvent;
+}
+
 /** Arma la URL pública compartible a partir del token de la sala. */
 export function buildPublicLiveUrl(token: string): string {
   return `${window.location.origin}/live/${token}`;
@@ -346,6 +368,29 @@ export async function fetchRecordingUrl(liveId: string): Promise<string | null> 
     return data?.url || null;
   } catch (err) {
     console.error("Error fetching recording URL:", err);
+    return null;
+  }
+}
+
+/**
+ * Pide una URL firmada de vida corta para una repetición ABIERTA A TODOS
+ * (`replay_is_public = true`), sin sesión. A diferencia de `fetchRecordingUrl`
+ * usa `fetch` crudo (no `authedFetch`): un visitante anónimo no tiene JWT que
+ * mandar. El servidor vuelve a validar `replay_is_public` antes de firmar
+ * nada — ver api/stream/recording-url.ts.
+ */
+export async function fetchPublicRecordingUrl(token: string): Promise<string | null> {
+  try {
+    const res = await fetch("/api/stream/recording-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ share_token: token }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.url || null;
+  } catch (err) {
+    console.error("Error fetching public recording URL:", err);
     return null;
   }
 }

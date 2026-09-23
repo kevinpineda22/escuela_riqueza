@@ -5,7 +5,7 @@ import { Clock, Tv, Radio, Loader2, VideoOff, ArrowLeft, Volume2, Users, Video }
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toaster";
-import { getPublicLive, fetchRecordingUrl, publicLiveHasRecording, type LiveEvent } from "@/lib/api/stream/lives";
+import { getPublicLive, fetchRecordingUrl, fetchPublicRecordingUrl, publicLiveHasRecording, type LiveEvent } from "@/lib/api/stream/lives";
 import { canWatchReplay } from "@/lib/plans";
 import { useIsDesktop } from "@/hooks/useMediaQuery";
 import LiveHLSPlayer, { type LiveHLSPlayerHandle, type QualityLevel } from "@/components/feature/LiveHLSPlayer";
@@ -106,12 +106,19 @@ const PublicLiveRoom = () => {
   const isR2Recording = isEnded && live?.recording_storage === "r2" && Boolean(live?.recording_r2_key);
   const isStreamRecording = isEnded && !isR2Recording && Boolean(live?.recording_stream_uid);
   const hasRecording = isR2Recording || isStreamRecording;
-  // Repetición: contenido pago. `get_public_live` ya anula `recording_stream_uid`
-  // / `recording_r2_key` para quien no está habilitado, pero igual chequeamos el
-  // plan acá para decidir qué pantalla mostrar (replay vs. paywall) — ver
-  // sql/migrate-public-live-replay-paid.sql.
-  const canReplay = canWatchReplay(sessionUser?.plan, sessionUser?.role);
+  // Repetición: contenido pago por defecto, salvo que el admin haya abierto
+  // ESTA sala puntual con `replay_is_public` (opt-in, ver
+  // sql/migrate-public-live-open-replay.sql). `get_public_live` ya anula
+  // `recording_stream_uid` / `recording_r2_key` para quien no está habilitado
+  // por ninguna de las dos vías, pero igual chequeamos acá para decidir qué
+  // pantalla mostrar (replay vs. paywall) — ver sql/migrate-public-live-replay-paid.sql.
+  const canReplay = canWatchReplay(sessionUser?.plan, sessionUser?.role) || live?.replay_is_public === true;
   const isReplay = isEnded && hasRecording && canReplay;
+  // Distingue por qué puede ver la repetición: entitlement de plan (pide la
+  // URL con sesión) vs. sala abierta a todos (pide la URL anónima). Alguien
+  // con plan pago en una sala abierta sigue usando la rama autenticada — es
+  // la más específica y no depende del token.
+  const isEntitledByPlan = canWatchReplay(sessionUser?.plan, sessionUser?.role);
   // `get_public_live` anula recording_stream_uid/recording_r2_key para quien
   // no tiene plan pago, así que `hasRecording` (derivado de esas columnas)
   // siempre da false para un visitante sin entitlement — no sirve para saber
@@ -317,14 +324,22 @@ const PublicLiveRoom = () => {
     };
   }, [live?.id, isEnded, sessionUser?.id, sessionUser?.fullName, sessionUser?.avatarUrl, sessionUser?.plan]);
 
-  // Replay R2: pide la URL firmada de vida corta vía el endpoint autenticado
-  // (`live_id` + JWT) — requiere sesión y plan pago, igual que el dashboard.
-  // Si no hay `canReplay` no se pide nada: se muestra el paywall en su lugar.
+  // Replay R2: pide la URL firmada de vida corta. Con entitlement de plan usa
+  // el endpoint autenticado (`live_id` + JWT), igual que el dashboard. Sin
+  // plan pero con la sala abierta a todos (`replay_is_public`), usa el
+  // endpoint anónimo por `share_token` — el servidor vuelve a validar
+  // `replay_is_public` antes de firmar. Si no hay `canReplay` no se pide
+  // nada: se muestra el paywall en su lugar.
   useEffect(() => {
     if (!isR2Recording || !canReplay || !live?.id) return;
     let active = true;
     setR2RecordingLoading(true);
-    fetchRecordingUrl(live.id).then((url) => {
+    const request = isEntitledByPlan
+      ? fetchRecordingUrl(live.id)
+      : token
+      ? fetchPublicRecordingUrl(token)
+      : Promise.resolve(null);
+    request.then((url) => {
       if (!active) return;
       setR2RecordingUrl(url);
       setR2RecordingLoading(false);
@@ -332,7 +347,7 @@ const PublicLiveRoom = () => {
     return () => {
       active = false;
     };
-  }, [isR2Recording, canReplay, live?.id]);
+  }, [isR2Recording, canReplay, isEntitledByPlan, live?.id, token]);
 
   // Paywall de repetición: solo hace falta saber SI hay grabación, no cuál —
   // `get_public_live` nunca manda el id/key a quien no tiene plan pago.
