@@ -12,6 +12,7 @@ import PublicLiveChat from "@/components/feature/PublicLiveChat";
 import LiveChat from "@/components/feature/LiveChat";
 import LiveViewersDialog from "@/components/feature/LiveViewersDialog";
 import { useAuthStore } from "@/stores/auth.store";
+import { usePreferencesStore } from "@/stores/preferences.store";
 import type { ViewerInfo } from "@/types/live";
 
 const CF_RECORDING_CUSTOMER_CODE =
@@ -51,6 +52,9 @@ const PublicLiveRoom = () => {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
   const sessionUser = useAuthStore((state) => state.user);
+  // Misma preferencia persistida que la sala VIP: el invitado también puede elegir baja latencia.
+  const liveLatencyMode = usePreferencesStore((state) => state.liveLatencyMode);
+  const setLiveLatencyMode = usePreferencesStore((state) => state.setLiveLatencyMode);
   const [live, setLive] = useState<LiveEvent | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -426,7 +430,7 @@ const PublicLiveRoom = () => {
                     customerCode={CF_CUSTOMER_CODE}
                     muted={isMuted}
                     autoPlay
-                    latencyMode="smooth"
+                    latencyMode={liveLatencyMode}
                     roomPaused={isPaused}
                     className="w-full h-full object-contain bg-black"
                     onPlay={() => { setIsPlaying(true); setIsBuffering(false); }}
@@ -446,11 +450,11 @@ const PublicLiveRoom = () => {
                     isMuted={isMuted}
                     levels={qualityLevels}
                     currentLevel={currentQualityLevel}
-                    latencyMode="smooth"
+                    latencyMode={liveLatencyMode}
                     onTogglePlay={handleTogglePlay}
                     onToggleMute={handleToggleMute}
                     onSelectLevel={handleSelectQualityLevel}
-                    onSelectLatencyMode={() => {}}
+                    onSelectLatencyMode={setLiveLatencyMode}
                   />
 
                   <AnimatePresence>

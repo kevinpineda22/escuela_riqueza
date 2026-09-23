@@ -25,6 +25,24 @@
 - **Regla operativa**: una vez al aire, no tocar Detener/Iniciar en OBS; dejar que reconecte solo.
 - **Pendiente**: feature "Unir grabaciones" en el panel (concatenar varios UIDs del mismo input con ffmpeg en el pipeline de R2) para recuperar lives fragmentados como el del 19-09.
 
+### Live — baja latencia via LL-HLS
+- **Antes**: el modo "Baja latencia" seguía siendo HLS estándar con `liveSyncDuration` más chico (3s) — sin parts LL-HLS, el piso físico de Cloudflare es ~targetduration (≈3s), así que no bajaba de ahí.
+- **Cambio**: `LiveHLSPlayer` pide el manifest con `?protocol=llhls` cuando `latencyMode === "low"` (Cloudflare Stream Low-Latency HLS — **beta** de Cloudflare). El manifest LL-HLS trae `PART-TARGET`/`PART-HOLD-BACK` y partes de 0.5s; hls.js corre con `lowLatencyMode: true` y deriva su propio target de latencia de esos tags (ya NO se fija `liveSyncDuration`/`liveMaxLatencyDuration` en este modo — fijarlos pisa el cálculo automático). Esperado: ~2-4s del edge, contra ~6-10s antes.
+- **"Fluidez" no cambia**: sigue siendo HLS estándar sin el flag, `lowLatencyMode: false`, `liveSyncDuration: 8`. Es el fallback si LL-HLS da problemas en algún live real.
+- **OBS recomendado para "Baja latencia"**: keyframe 1-2s, **B-frames desactivados** (Cloudflare exige esto para LL-HLS). WHIP/WebRTC queda pendiente solo si alguna vez se necesita latencia sub-segundo.
+- Nuevo método en `LiveHLSPlayerHandle`: `getLiveSyncPosition()` — expone `hls.liveSyncPosition` para que `LivePlayerControls.handleGoLive` salte exactamente al target de LL-HLS en vez de restar un offset fijo al edge (con fallback al cálculo anterior si no hay instancia hls.js, ej. Safari nativo).
+- **Catch-up de latencia (medido en vivo real)**: con la config LL-HLS, `targetLatency` reporta ≈1.5s correctamente, pero el reproductor arrancaba ~7-8s atrás del edge y no convergía solo (no seteamos `liveMaxLatencyDuration`, a propósito, así que hls.js no fuerza el seek). Se agregó un catch-up manual en modo "low": al primer `playing` tras `MANIFEST_PARSED` (cubre montaje y cada recarga por recuperación) y en un chequeo cada 10s, si `hls.latency > targetLatency + 3` se hace `video.currentTime = hls.liveSyncPosition`. El chequeo periódico además exige ≥1s de buffer hacia adelante (nunca saltar a zona sin precargar) y respeta un cooldown de 30s entre saltos automáticos. Verificado en vivo: estabiliza en ~2.3s con buffer 1.5-2s y cero starvation en 30s (antes: 13.8s en modo estándar).
+
+**Medición en vivo real (2026-09-22, Chrome desktop, OBS transmitiendo, player de producción en dev):**
+
+| Modo | Latencia p50 | Buffer medio | Muestras sin datos |
+|---|---|---|---|
+| Fluidez (HLS estándar) | 10.2 s | 7.8 s | 0 / 27 |
+| Baja latencia (LL-HLS) | 3.4 s (min 1.9, max 4.2) | 2.7 s | 1 / 60 |
+
+Nota de medición: si la pestaña queda en segundo plano el navegador ralentiza el
+player y la latencia se dispara; el catch-up la corrige al volver, pero cualquier
+medición futura debe hacerse con la pestaña activa.
 
 ### Modo claro — fase 6: selector publicado
 - `src/lib/theme.ts`: `APPEARANCE_SELECTOR_ENABLED` pasa de `import.meta.env.DEV` a `true`. El default sigue siendo oscuro; claro y Sistema quedan disponibles desde el selector del header.
