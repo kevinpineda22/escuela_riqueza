@@ -8,6 +8,7 @@ import { usePlayerStore } from "@/stores/player.store";
 import { useAuthStore } from "@/stores/auth.store";
 import { usePreferencesStore } from "@/stores/preferences.store";
 import { supabase } from "@/lib/supabase";
+import { toast } from "@/components/ui/toaster";
 import { fetchActiveLive, checkLiveInputStatus, type LiveEvent } from "@/lib/api/stream/lives";
 import { useIsDesktop } from "@/hooks/useMediaQuery";
 import LiveHLSPlayer, { type LiveHLSPlayerHandle, type QualityLevel } from "@/components/feature/LiveHLSPlayer";
@@ -80,17 +81,29 @@ const VIPLiveRoom = () => {
     const video = livePlayerRef.current?.video;
     if (!video) return;
     setAudioRetryHint(false);
+    // `muted` es prop CONTROLADA del <video> (LiveHLSPlayer). Si solo se toca
+    // `video.muted` a mano, el siguiente re-render con `isMuted` todavía en
+    // true revierte el cambio y el alumno tiene que volver a tocar el botón.
+    // Por eso el estado de React se actualiza ANTES de pedir el play.
+    setIsMuted(false);
+    video.muted = false;
+    video.volume = 1;
     try {
-      video.muted = false;
-      video.volume = 1;
       // H9: esperamos la promesa real de play() antes de ocultar el aviso —
-      // antes se ocultaba optimistamente y un rechazo (bloqueo del browser,
-      // error de media) dejaba al alumno sin sonido y sin explicación.
+      // ocultarlo optimistamente dejaba al alumno sin sonido y sin explicación
+      // cuando el navegador rechazaba la reproducción.
       await video.play();
-      setIsMuted(false);
       setAudioPromptDismissed(true);
     } catch (e) {
-      console.warn("[VIPLiveRoom] No se pudo activar el audio:", e);
+      // AbortError = otro play()/pause() del player interrumpió a este (pausa
+      // de sala, catch-up de latencia, vuelta de background). El audio ya
+      // quedó activo: revertir a mudo acá era lo que obligaba a insistir.
+      if (e instanceof DOMException && e.name === "AbortError") {
+        setAudioPromptDismissed(true);
+        return;
+      }
+      console.warn("VIPLiveRoom No se pudo activar el audio:", e);
+      setIsMuted(true);
       video.muted = true;
       setAudioRetryHint(true);
     }
@@ -136,6 +149,20 @@ const VIPLiveRoom = () => {
   const handleSelectQualityLevel = (index: number) => {
     livePlayerRef.current?.setQualityLevel(index);
     setCurrentQualityLevel(index);
+  };
+
+  // Modo "dvr": aviso único al retomar una posición guardada, con acción
+  // rápida para volver al filo del vivo (mismo cálculo que el botón "EN VIVO").
+  const handleDvrResumed = () => {
+    toast("Retomamos donde lo dejaste", {
+      action: {
+        label: "Ir al vivo",
+        onClick: () => {
+          const range = livePlayerRef.current?.getSeekableRange();
+          if (range) livePlayerRef.current?.seekTo(range.end - 8);
+        },
+      },
+    });
   };
 
   const isLive = live?.status === "live" && !live?.is_paused;
@@ -471,6 +498,8 @@ const VIPLiveRoom = () => {
                     autoPlay
                     latencyMode={liveLatencyMode}
                     roomPaused={isPaused}
+                    resumeKey={live.id}
+                    onResumed={handleDvrResumed}
                     className="w-full h-full object-contain bg-black"
                     onPlay={() => { setIsPlaying(true); setIsBuffering(false); }}
                     onPause={() => setIsPlaying(false)}

@@ -5,15 +5,18 @@ import { AwsClient } from 'aws4fetch';
 import { applyCors, requireAuth } from '../_lib/auth.js';
 import { applyRateLimit } from '../_lib/ratelimit.js';
 
-// Rama autenticada (dashboard / admin): identifica el live por `live_id` y
-// autoriza contra `allowed_plans` del usuario logueado.
+// Rama autenticada (dashboard / admin, y repetición paga del link público
+// con sesión iniciada): identifica el live por `live_id` y autoriza contra
+// `allowed_plans` del usuario logueado.
 const AuthedBodySchema = z.object({
   live_id: z.string().uuid(),
 });
 
-// Rama del link público (`/live/:token`, sin sesión): identifica el live por
-// `share_token` y se autoriza únicamente porque `get_public_live` (RPC
-// SECURITY DEFINER) solo devuelve fila si `is_public = true`.
+// Rama pública (`/live/:token`, sin sesión): identifica el live por
+// `share_token`. Solo firma si la sala tiene `replay_is_public = true` —
+// ver sql/migrate-public-live-open-replay.sql. Una rama anónima anterior sin
+// ese chequeo fue eliminada porque firmaba sin validar plan ni opt-in (ver
+// docs/CHANGELOG.md 2026-09-22); esta la reintroduce con el gate explícito.
 const PublicBodySchema = z.object({
   share_token: z.string().trim().min(10).max(128),
 });
@@ -45,9 +48,8 @@ function getR2Credentials(): R2Credentials | null {
 
 /**
  * Firma una URL GET de vida corta contra el endpoint S3-compatible de R2 para
- * el `key` dado. Extraída como función pura (sin `req`/`res`) para que ambas
- * ramas (autenticada y pública) reutilicen exactamente la misma lógica de
- * firma, y para poder testearla sin mockear Vercel.
+ * el `key` dado. Extraída como función pura (sin `req`/`res`) para poder
+ * testearla sin mockear Vercel.
  */
 export async function signR2RecordingUrl(
   creds: R2Credentials,
@@ -102,8 +104,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: 'Almacenamiento de grabaciones no configurado' });
   }
 
-  // ---- Rama pública: link compartible, sin JWT ----
+  // ---- Rama pública: repetición abierta por opt-in del admin, sin JWT ----
   if ('share_token' in parsed.data) {
+    if (!SUPABASE_ANON_KEY) {
+      console.error('Missing SUPABASE_ANON_KEY for public recording-url branch');
+      return res.status(500).json({ error: 'Backend mal configurado' });
+    }
+
     const { share_token } = parsed.data;
 
     const ok = await applyRateLimit(req, res, getClientIp(req), {
@@ -113,7 +120,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
     if (!ok) return;
 
-    const anonSupabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY!, {
+    const anonSupabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
@@ -125,6 +132,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const row = Array.isArray(live) ? live[0] : null;
     if (!row) {
       return res.status(404).json({ error: 'Link inválido o sala no pública' });
+    }
+    // Gate explícito: `get_public_live` YA anula recording_stream_uid/recording_r2_key
+    // salvo entitlement pago o `replay_is_public = true`, pero volvemos a chequear
+    // acá porque este endpoint firma una URL real (no solo la muestra) — nunca
+    // confiar en una sola capa para firmar contenido.
+    if (row.replay_is_public !== true) {
+      return res.status(403).json({ error: 'La repetición de este en vivo no está abierta a todos' });
     }
     if (row.recording_storage !== 'r2' || !row.recording_r2_key) {
       return res.status(409).json({ error: 'Esta grabación aún no está archivada en R2' });
@@ -139,7 +153,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // ---- Rama autenticada: dashboard / admin ----
+  // ---- Rama autenticada: dashboard / admin, y repetición paga con sesión ----
   const user = await requireAuth(req, res);
   if (!user) return;
 

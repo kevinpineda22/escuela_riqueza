@@ -4,7 +4,9 @@ import { motion, AnimatePresence } from "motion/react";
 import { Clock, Tv, Radio, Loader2, VideoOff, ArrowLeft, Volume2, Users, Video } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
-import { getPublicLive, fetchPublicRecordingUrl, type LiveEvent } from "@/lib/api/stream/lives";
+import { toast } from "@/components/ui/toaster";
+import { getPublicLive, fetchRecordingUrl, fetchPublicRecordingUrl, publicLiveHasRecording, type LiveEvent } from "@/lib/api/stream/lives";
+import { canWatchReplay } from "@/lib/plans";
 import { useIsDesktop } from "@/hooks/useMediaQuery";
 import LiveHLSPlayer, { type LiveHLSPlayerHandle, type QualityLevel } from "@/components/feature/LiveHLSPlayer";
 import LivePlayerControls from "@/components/feature/LivePlayerControls";
@@ -12,6 +14,7 @@ import PublicLiveChat from "@/components/feature/PublicLiveChat";
 import LiveChat from "@/components/feature/LiveChat";
 import LiveViewersDialog from "@/components/feature/LiveViewersDialog";
 import { useAuthStore } from "@/stores/auth.store";
+import { usePreferencesStore } from "@/stores/preferences.store";
 import type { ViewerInfo } from "@/types/live";
 
 const CF_RECORDING_CUSTOMER_CODE =
@@ -43,14 +46,26 @@ function getOrCreateAnonId(): string {
  * compartida con VIPLiveRoom) — con sesión iniciada, la identidad se trackea
  * igual que en la sala VIP. El estado de la sala se obtiene únicamente vía
  * polling de `get_public_live` — Realtime en `lives` no está garantizado para
- * clientes anónimos. Finalizado el en vivo, si hay grabación se muestra el
- * replay (sin chat ni presencia); la única llamada autenticada de `/api/stream/*`
- * que existe para anónimos es `recording-url` vía `share_token` (sin JWT).
+ * clientes anónimos.
+ *
+ * El EN VIVO es público para cualquiera. La REPETICIÓN no: es contenido de
+ * los planes Individual/VIP (`canWatchReplay`). Finalizado el en vivo, si hay
+ * grabación y el visitante está habilitado se muestra el replay (sin chat ni
+ * presencia); si no está habilitado (anónimo o Free) se muestra un paywall en
+ * su lugar. `get_public_live` ya anula `recording_stream_uid` /
+ * `recording_r2_key` para quien no está habilitado (ver
+ * sql/migrate-public-live-replay-paid.sql), y la URL firmada de R2 para el
+ * replay se pide con sesión vía `/api/stream/recording-url` (`live_id` + JWT,
+ * misma rama que usa el dashboard) — ya no existe una rama anónima por
+ * `share_token` para firmar grabaciones.
  */
 const PublicLiveRoom = () => {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
   const sessionUser = useAuthStore((state) => state.user);
+  // Misma preferencia persistida que la sala VIP: el invitado también puede elegir baja latencia.
+  const liveLatencyMode = usePreferencesStore((state) => state.liveLatencyMode);
+  const setLiveLatencyMode = usePreferencesStore((state) => state.setLiveLatencyMode);
   const [live, setLive] = useState<LiveEvent | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -75,6 +90,8 @@ const PublicLiveRoom = () => {
   const anonIdRef = useRef<string>(getOrCreateAnonId());
   const [r2RecordingUrl, setR2RecordingUrl] = useState<string | null>(null);
   const [r2RecordingLoading, setR2RecordingLoading] = useState(false);
+  // null = todavía no se consultó (o no aplica); true/false = respuesta de la RPC.
+  const [hasRecordingRpc, setHasRecordingRpc] = useState<boolean | null>(null);
 
   const isLive = live?.status === "live" && !live?.is_paused;
   const isEnded = live?.status === "ended";
@@ -89,7 +106,25 @@ const PublicLiveRoom = () => {
   const isR2Recording = isEnded && live?.recording_storage === "r2" && Boolean(live?.recording_r2_key);
   const isStreamRecording = isEnded && !isR2Recording && Boolean(live?.recording_stream_uid);
   const hasRecording = isR2Recording || isStreamRecording;
-  const isReplay = isEnded && hasRecording;
+  // Repetición: contenido pago por defecto, salvo que el admin haya abierto
+  // ESTA sala puntual con `replay_is_public` (opt-in, ver
+  // sql/migrate-public-live-open-replay.sql). `get_public_live` ya anula
+  // `recording_stream_uid` / `recording_r2_key` para quien no está habilitado
+  // por ninguna de las dos vías, pero igual chequeamos acá para decidir qué
+  // pantalla mostrar (replay vs. paywall) — ver sql/migrate-public-live-replay-paid.sql.
+  const canReplay = canWatchReplay(sessionUser?.plan, sessionUser?.role) || live?.replay_is_public === true;
+  const isReplay = isEnded && hasRecording && canReplay;
+  // Distingue por qué puede ver la repetición: entitlement de plan (pide la
+  // URL con sesión) vs. sala abierta a todos (pide la URL anónima). Alguien
+  // con plan pago en una sala abierta sigue usando la rama autenticada — es
+  // la más específica y no depende del token.
+  const isEntitledByPlan = canWatchReplay(sessionUser?.plan, sessionUser?.role);
+  // `get_public_live` anula recording_stream_uid/recording_r2_key para quien
+  // no tiene plan pago, así que `hasRecording` (derivado de esas columnas)
+  // siempre da false para un visitante sin entitlement — no sirve para saber
+  // si HAY grabación bloqueada. Para eso se pide `publicLiveHasRecording`
+  // (boolean puro, no revela el id) — ver sql/migrate-public-live-has-recording.sql.
+  const showReplayPaywall = isEnded && !canReplay && hasRecordingRpc === true;
 
   const loginPath = token ? `/login?returnTo=${encodeURIComponent(`/live/${token}`)}` : "/login";
 
@@ -97,14 +132,29 @@ const PublicLiveRoom = () => {
     const video = livePlayerRef.current?.video;
     if (!video) return;
     setAudioRetryHint(false);
+    // `muted` es prop CONTROLADA del <video> (LiveHLSPlayer). Si solo se toca
+    // `video.muted` a mano, el siguiente re-render con `isMuted` todavía en
+    // true revierte el cambio y el alumno tiene que volver a tocar el botón.
+    // Por eso el estado de React se actualiza ANTES de pedir el play.
+    setIsMuted(false);
+    video.muted = false;
+    video.volume = 1;
     try {
-      video.muted = false;
-      video.volume = 1;
+      // H9: esperamos la promesa real de play() antes de ocultar el aviso —
+      // ocultarlo optimistamente dejaba al alumno sin sonido y sin explicación
+      // cuando el navegador rechazaba la reproducción.
       await video.play();
-      setIsMuted(false);
       setAudioPromptDismissed(true);
     } catch (e) {
-      console.warn("[PublicLiveRoom] No se pudo activar el audio:", e);
+      // AbortError = otro play()/pause() del player interrumpió a este (pausa
+      // de sala, catch-up de latencia, vuelta de background). El audio ya
+      // quedó activo: revertir a mudo acá era lo que obligaba a insistir.
+      if (e instanceof DOMException && e.name === "AbortError") {
+        setAudioPromptDismissed(true);
+        return;
+      }
+      console.warn("PublicLiveRoom No se pudo activar el audio:", e);
+      setIsMuted(true);
       video.muted = true;
       setAudioRetryHint(true);
     }
@@ -148,6 +198,20 @@ const PublicLiveRoom = () => {
   const handleSelectQualityLevel = (index: number) => {
     livePlayerRef.current?.setQualityLevel(index);
     setCurrentQualityLevel(index);
+  };
+
+  // Modo "dvr": aviso único al retomar una posición guardada, con acción
+  // rápida para volver al filo del vivo (mismo cálculo que el botón "EN VIVO").
+  const handleDvrResumed = () => {
+    toast("Retomamos donde lo dejaste", {
+      action: {
+        label: "Ir al vivo",
+        onClick: () => {
+          const range = livePlayerRef.current?.getSeekableRange();
+          if (range) livePlayerRef.current?.seekTo(range.end - 8);
+        },
+      },
+    });
   };
 
   // Fetch inicial + polling: única fuente de verdad del estado de la sala.
@@ -260,13 +324,22 @@ const PublicLiveRoom = () => {
     };
   }, [live?.id, isEnded, sessionUser?.id, sessionUser?.fullName, sessionUser?.avatarUrl, sessionUser?.plan]);
 
-  // Replay R2: pide la URL firmada de vida corta vía el link público
-  // (`share_token`, sin JWT) apenas se detecta que la grabación está en R2.
+  // Replay R2: pide la URL firmada de vida corta. Con entitlement de plan usa
+  // el endpoint autenticado (`live_id` + JWT), igual que el dashboard. Sin
+  // plan pero con la sala abierta a todos (`replay_is_public`), usa el
+  // endpoint anónimo por `share_token` — el servidor vuelve a validar
+  // `replay_is_public` antes de firmar. Si no hay `canReplay` no se pide
+  // nada: se muestra el paywall en su lugar.
   useEffect(() => {
-    if (!isR2Recording || !token) return;
+    if (!isR2Recording || !canReplay || !live?.id) return;
     let active = true;
     setR2RecordingLoading(true);
-    fetchPublicRecordingUrl(token).then((url) => {
+    const request = isEntitledByPlan
+      ? fetchRecordingUrl(live.id)
+      : token
+      ? fetchPublicRecordingUrl(token)
+      : Promise.resolve(null);
+    request.then((url) => {
       if (!active) return;
       setR2RecordingUrl(url);
       setR2RecordingLoading(false);
@@ -274,7 +347,24 @@ const PublicLiveRoom = () => {
     return () => {
       active = false;
     };
-  }, [isR2Recording, token]);
+  }, [isR2Recording, canReplay, isEntitledByPlan, live?.id, token]);
+
+  // Paywall de repetición: solo hace falta saber SI hay grabación, no cuál —
+  // `get_public_live` nunca manda el id/key a quien no tiene plan pago.
+  useEffect(() => {
+    if (!token || !isEnded || canReplay) {
+      setHasRecordingRpc(null);
+      return;
+    }
+    let active = true;
+    publicLiveHasRecording(token).then((result) => {
+      if (!active) return;
+      setHasRecordingRpc(result);
+    });
+    return () => {
+      active = false;
+    };
+  }, [token, isEnded, canReplay]);
 
   if (loading) {
     return (
@@ -313,8 +403,10 @@ const PublicLiveRoom = () => {
 
   // Con sesión iniciada (llegó por el link y se logueó para participar) se usa
   // el chat completo, que ya sabe escribir; sin sesión, el de solo lectura.
-  // En replay (grabación) no hay chat ni presencia — layout simple: header + player.
-  const chatNode = !token || isReplay ? null : sessionUser ? (
+  // En replay (grabación) y en el paywall de repetición no hay chat ni
+  // presencia — layout simple: header + contenido.
+  const hideChatLayout = isReplay || showReplayPaywall;
+  const chatNode = !token || hideChatLayout ? null : sessionUser ? (
     <LiveChat liveId={live.id} showWelcome={live.status === "scheduled"} />
   ) : (
     <PublicLiveChat token={token} loginPath={loginPath} showWelcome={live.status === "scheduled"} />
@@ -326,7 +418,7 @@ const PublicLiveRoom = () => {
     <div className="h-[100dvh] bg-black light:bg-surface-page text-foreground flex flex-col md:flex-row overflow-hidden font-sans">
       {/* Isla oscura: escenario, intro, countdown, replay y controles son iguales en ambos
           temas (spec §3.4). El chat y la lista de conectados, afuera, sí se adaptan. */}
-      <div data-theme="dark" className={cn("flex flex-col relative", isReplay || isDesktop ? "flex-1 md:h-screen" : mobileVideoHeightClass)}>
+      <div data-theme="dark" className={cn("flex flex-col relative", hideChatLayout || isDesktop ? "flex-1 md:h-screen" : mobileVideoHeightClass)}>
         {/* Header */}
         <motion.div
           initial={{ y: -100 }}
@@ -426,8 +518,10 @@ const PublicLiveRoom = () => {
                     customerCode={CF_CUSTOMER_CODE}
                     muted={isMuted}
                     autoPlay
-                    latencyMode="smooth"
+                    latencyMode={liveLatencyMode}
                     roomPaused={isPaused}
+                    resumeKey={live.id}
+                    onResumed={handleDvrResumed}
                     className="w-full h-full object-contain bg-black"
                     onPlay={() => { setIsPlaying(true); setIsBuffering(false); }}
                     onPause={() => setIsPlaying(false)}
@@ -446,11 +540,11 @@ const PublicLiveRoom = () => {
                     isMuted={isMuted}
                     levels={qualityLevels}
                     currentLevel={currentQualityLevel}
-                    latencyMode="smooth"
+                    latencyMode={liveLatencyMode}
                     onTogglePlay={handleTogglePlay}
                     onToggleMute={handleToggleMute}
                     onSelectLevel={handleSelectQualityLevel}
-                    onSelectLatencyMode={() => {}}
+                    onSelectLatencyMode={setLiveLatencyMode}
                   />
 
                   <AnimatePresence>
@@ -563,6 +657,42 @@ const PublicLiveRoom = () => {
                   </div>
                 )}
               </motion.div>
+            ) : showReplayPaywall ? (
+              <motion.div key="replay-paywall" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full h-full flex items-center justify-center bg-black/80 relative">
+                <div className="text-center p-8 z-10 max-w-md">
+                  <Video size={64} className="mx-auto text-brand/60 mb-6" />
+                  <p className="text-xs uppercase tracking-widest text-foreground-muted font-bold mb-2 truncate">
+                    {live.title || "Sesión de Riqueza"}
+                  </p>
+                  <h2 className="text-2xl font-bold text-foreground-strong mb-2">La repetición es para alumnos</h2>
+                  <p className="text-foreground-muted mb-8">
+                    Este en vivo estuvo abierto para todos. La grabación completa de la clase queda disponible para alumnos con plan Individual o VIP.
+                  </p>
+                  {!sessionUser ? (
+                    <div className="flex flex-col items-center gap-3">
+                      <button
+                        onClick={() => navigate(loginPath)}
+                        className="px-6 py-3 rounded-full bg-brand hover:bg-brand-hover text-on-brand font-black tracking-wide transition-colors"
+                      >
+                        Inicia sesión
+                      </button>
+                      <button
+                        onClick={() => navigate("/planes")}
+                        className="text-sm text-foreground-muted hover:text-accent underline underline-offset-4 transition-colors"
+                      >
+                        Ver planes
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => navigate("/planes")}
+                      className="px-6 py-3 rounded-full bg-brand hover:bg-brand-hover text-on-brand font-black tracking-wide transition-colors"
+                    >
+                      Ver planes
+                    </button>
+                  )}
+                </div>
+              </motion.div>
             ) : isEnded ? (
               <motion.div key="ended" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full h-full flex items-center justify-center bg-black/80 relative">
                 <div className="text-center p-8 z-10">
@@ -643,7 +773,7 @@ const PublicLiveRoom = () => {
           </AnimatePresence>
         </div>
 
-        {isDesktop && !isReplay && (
+        {isDesktop && !hideChatLayout && (
           <button
             onClick={() => setIsChatVisibleDesktop((v) => !v)}
             aria-label={isChatVisibleDesktop ? "Ocultar chat" : "Mostrar chat"}
@@ -654,7 +784,7 @@ const PublicLiveRoom = () => {
         )}
       </div>
 
-      {!isReplay && (isDesktop ? (
+      {!hideChatLayout && (isDesktop ? (
         <div
           className={cn(
             "md:h-screen bg-surface-page shrink-0 z-50 overflow-hidden transition-[width,opacity] duration-300 ease-in-out",

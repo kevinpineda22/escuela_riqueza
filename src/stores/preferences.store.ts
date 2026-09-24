@@ -7,7 +7,7 @@ import {
   type ThemePreference,
 } from "@/lib/theme";
 
-export type LiveLatencyMode = "smooth" | "low";
+export type LiveLatencyMode = "smooth" | "low" | "dvr";
 
 interface PreferencesState {
   animationsEnabled: boolean;
@@ -16,6 +16,9 @@ interface PreferencesState {
   // Modo de latencia del player de lives. "smooth" (default): ~6-10s atrás del
   // edge, buffer 20s, ideal para conexiones residenciales/mobile. "low": ~3-5s
   // atrás del edge, buffer 10s, requiere red estable o aparecen latigazos.
+  // "dvr": ventana DVR completa de Cloudflare (~14.6s de latencia, ventana
+  // seekable que crece con la transmisión) con timeline scrubbable y resume
+  // de posición.
   liveLatencyMode: LiveLatencyMode;
   setLiveLatencyMode: (mode: LiveLatencyMode) => void;
   // Apariencia local del navegador. "system" es una preferencia, no un tercer
