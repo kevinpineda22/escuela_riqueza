@@ -36,6 +36,7 @@ Si tuvieras que recrear la base desde cero, un orden razonable es:
 | `sync_signup.sql` | Trigger `handle_new_user`: al registrarse, crea el perfil + la suscripción. |
 | `sync_profiles.sql` | Trigger `handle_user_update`: mantiene el email sincronizado en `profiles`. |
 | `sync_progress.sql` | Tabla `user_lesson_progress` + RLS + trigger (progreso por lección). |
+| `migrate-single-session.sql` | Sesión única por cuenta: tabla `user_active_sessions` + RPC `claim_active_session()` (gana la sesión más nueva; aplica a todas las cuentas, admins incluidos). |
 
 ### Lives y grabaciones
 | Archivo | Qué hace |

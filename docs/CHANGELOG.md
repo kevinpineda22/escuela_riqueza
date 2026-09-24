@@ -5,6 +5,16 @@
 
 ---
 
+## 2026-09-24
+
+### Auth — sesión única por cuenta (anti-cuentas compartidas)
+- **Decisión de producto**: **toda** cuenta (free, individual, VIP y admin) solo puede estar abierta en un dispositivo a la vez. Gana la sesión **más nueva**; la anterior se cierra con el aviso "Tu cuenta se abrió en otro dispositivo". Sin excepción para admins: abrir la app en el celular cierra el panel de la PC.
+- **Por qué no la opción del dashboard**: "Single session per user" de Supabase solo existe en el plan Pro y actúa al ritmo del vencimiento del JWT (hasta ~1 h), sin avisarle nada al usuario.
+- **SQL** (`sql/migrate-single-session.sql`, aplicar manualmente en Supabase): tabla `user_active_sessions` (RLS: cada uno lee su fila; sin escritura directa) en la publicación de Realtime, y RPC `claim_active_session()`. La RPC compara `auth.sessions.created_at` de la sesión que llama (claim `session_id` del JWT) con la registrada. Si es más nueva, la registra y borra las demás de `auth.sessions` (sus refresh tokens caen en cascada). Si es más vieja, se revoca a sí misma y devuelve `false`. Se decide por la fecha de creación y no por "el último que llamó" para que un F5 en el dispositivo viejo no le robe la sesión al nuevo.
+- **Frontend**: `src/lib/api/session.ts` (`claimActiveSession` → `active`/`superseded`/`unknown`) y `src/components/providers/SessionGuard.tsx` (montado en `App.tsx`). Verifica al entrar, al volver a la pestaña y ante cambios de su fila por Realtime. Con `superseded` hace `signOut({ scope: "local" })` y muestra un toast. **Fail-open**: si la RPC falla (red, migración sin aplicar) no expulsa a nadie, así que el front puede desplegarse antes que el SQL.
+- **Límites conocidos**: un access token ya emitido vale hasta su vencimiento. El cierre inmediato lo hace el cliente, y un cliente manipulado podría estirar hasta ~1 h. Evita el uso **simultáneo**, no el uso por turnos. Endurecimiento posible a futuro: exigir en RLS que `auth.jwt()->>'session_id'` coincida con la sesión activa.
+- **Tests**: `session.test.ts` (5) y `SessionGuard.test.tsx` (7).
+
 ## 2026-09-21
 
 ### Comunidad — Free en modo lectura, Certificado oculto para Free
