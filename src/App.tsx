@@ -2,6 +2,7 @@ import { BrowserRouter } from "react-router-dom";
 import AppRoutes from "@/routes";
 import GlobalPodcastPlayer from "@/components/feature/GlobalPodcastPlayer";
 import { Toaster } from "@/components/ui/toaster";
+import SessionGuard from "@/components/providers/SessionGuard";
 
 function App() {
   return (
@@ -9,6 +10,7 @@ function App() {
       <AppRoutes />
       <GlobalPodcastPlayer />
       <Toaster />
+      <SessionGuard />
     </BrowserRouter>
   );
 }
