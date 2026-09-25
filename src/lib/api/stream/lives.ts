@@ -75,6 +75,27 @@ export async function fetchActiveLive(): Promise<LiveEvent | null> {
   return null;
 }
 
+/**
+ * Sala que debe mostrar la vista VIP mientras el alumno está adentro.
+ * `fetchActiveLive` descarta las finalizadas: sin este paso, al finalizar la
+ * clase la sala "desaparecía" y el alumno pasaba de golpe a "No hay eventos
+ * programados" (docs/LIVE_UX_REDESIGN_AUDIT.md F33). Si ya no hay sala activa
+ * y la que estaba mirando terminó, se devuelve esa para mostrar el cierre.
+ */
+export async function fetchLiveForRoom(currentLiveId: string | null): Promise<LiveEvent | null> {
+  const active = await fetchActiveLive();
+  if (active || !currentLiveId) return active;
+
+  const { data, error } = await supabase
+    .from("lives")
+    .select("*")
+    .eq("id", currentLiveId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data?.status === "ended" ? (data as LiveEvent) : null;
+}
+
 export async function createLive(live: Partial<LiveEvent>): Promise<LiveEvent> {
   const { data, error } = await supabase
     .from("lives")

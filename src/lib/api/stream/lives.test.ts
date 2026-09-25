@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { setLivePublic, publicLiveHasRecording, setLiveReplayPublic } from "./lives";
+import { setLivePublic, fetchLiveForRoom, publicLiveHasRecording, setLiveReplayPublic } from "./lives";
 import { supabase } from "@/lib/supabase";
 
 vi.mock("@/lib/supabase", () => ({
@@ -58,6 +58,59 @@ describe("setLivePublic", () => {
   it("throws when Supabase returns an error", async () => {
     single.mockResolvedValue({ data: null, error: new Error("boom") });
     await expect(setLivePublic("live-1", true, null)).rejects.toThrow();
+  });
+});
+
+describe("fetchLiveForRoom", () => {
+  // Cada llamada a `from("lives")` arma su propia cadena: la primera es
+  // `fetchActiveLive` (termina en `limit`), la segunda la búsqueda por id
+  // (termina en `maybeSingle`).
+  const mockActive = (rows: unknown[]) => ({
+    select: () => ({ eq: () => ({ in: () => ({ order: () => ({ limit: () => Promise.resolve({ data: rows, error: null }) }) }) }) }),
+  });
+  const byIdEq = vi.fn();
+  const mockById = (row: unknown) => {
+    byIdEq.mockReturnValue({ maybeSingle: () => Promise.resolve({ data: row, error: null }) });
+    return { select: () => ({ eq: byIdEq }) };
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("devuelve la sala activa sin buscar por id", async () => {
+    (supabase.from as any).mockReturnValueOnce(mockActive([{ id: "live-1", status: "live" }]));
+
+    const live = await fetchLiveForRoom("live-1");
+
+    expect(live).toEqual({ id: "live-1", status: "live" });
+    expect(supabase.from).toHaveBeenCalledTimes(1);
+  });
+
+  it("devuelve la sala que se estaba viendo cuando se finaliza (F33)", async () => {
+    (supabase.from as any)
+      .mockReturnValueOnce(mockActive([]))
+      .mockReturnValueOnce(mockById({ id: "live-1", status: "ended" }));
+
+    const live = await fetchLiveForRoom("live-1");
+
+    expect(live).toEqual({ id: "live-1", status: "ended" });
+    expect(byIdEq).toHaveBeenCalledWith("id", "live-1");
+  });
+
+  it("devuelve null si la sala que se veía ya no está finalizada ni activa", async () => {
+    (supabase.from as any)
+      .mockReturnValueOnce(mockActive([]))
+      .mockReturnValueOnce(mockById({ id: "live-1", status: "scheduled" }));
+
+    expect(await fetchLiveForRoom("live-1")).toBeNull();
+  });
+
+  it("devuelve null sin buscar por id cuando no había sala en pantalla", async () => {
+    (supabase.from as any).mockReturnValueOnce(mockActive([]));
+
+    expect(await fetchLiveForRoom(null)).toBeNull();
+    expect(supabase.from).toHaveBeenCalledTimes(1);
   });
 });
 

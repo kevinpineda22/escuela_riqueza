@@ -5,6 +5,8 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/stores/auth.store";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ChatJumpToLatest } from "@/components/feature/ChatJumpToLatest";
+import { useChatScroll } from "@/hooks/useChatScroll";
 
 export interface ChatMessage {
   id: string;
@@ -36,30 +38,18 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [newMessage, setNewMessage] = useState("");
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState(false);
   const onIncomingMessageRef = useRef(onIncomingMessage);
+  const visibleMessages = showWelcome ? messages : messages.filter((m) => m.id !== SYSTEM_MESSAGE.id);
+  // F19: antes cada mensaje nuevo arrastraba al final aunque el alumno
+  // estuviera leyendo más arriba.
+  const { listRef, handleScroll, unseenCount, jumpToLatest } = useChatScroll(visibleMessages.length, !loading);
 
   // Mantener el callback siempre actualizado sin reabrir la suscripción Realtime
   useEffect(() => {
     onIncomingMessageRef.current = onIncomingMessage;
   }, [onIncomingMessage]);
-
-  // Auto-scroll al último mensaje.
-  // Safari iOS < 16 puede tirar al usar { behavior: "smooth" } si el elemento
-  // está dentro de un contenedor que cambió de tamaño recientemente.
-  const scrollToBottom = () => {
-    try {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-    } catch {
-      messagesEndRef.current?.scrollIntoView(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!loading) {
-      scrollToBottom();
-    }
-  }, [messages, loading]);
 
   // Cargar mensajes iniciales y suscribirse a nuevos
   useEffect(() => {
@@ -166,21 +156,40 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
 
   const handleSendMessage = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!newMessage.trim() || !user) return;
+    if (sending || !newMessage.trim() || !user) return;
 
     const messageText = newMessage.trim();
-    setNewMessage("");
+    setSending(true);
+    setSendError(false);
 
-    // Insertar en Supabase
-    const { error } = await supabase.from("live_messages").insert({
-      live_id: liveId,
-      user_id: user.id,
-      content: messageText,
-    });
-
-    if (error) {
-      console.error("Error enviando mensaje:", error);
+    // F22: el texto se queda en el campo hasta que Supabase confirme. Antes se
+    // borraba antes del insert y un fallo solo iba a consola: el alumno perdía
+    // lo que escribió y creía que lo había enviado.
+    let failed = false;
+    try {
+      const { error } = await supabase.from("live_messages").insert({
+        live_id: liveId,
+        user_id: user.id,
+        content: messageText,
+      });
+      if (error) {
+        failed = true;
+        console.error("Error enviando mensaje:", error);
+      }
+    } catch (err) {
+      failed = true;
+      console.error("Error enviando mensaje:", err);
     }
+    setSending(false);
+
+    if (failed) {
+      setSendError(true);
+      return;
+    }
+    // Solo se limpia si el alumno no siguió escribiendo mientras se enviaba.
+    setNewMessage((current) => (current.trim() === messageText ? "" : current));
+    // Quien escribe quiere ver su mensaje: vuelve al final aunque estuviera leyendo.
+    jumpToLatest();
   };
 
   return (
@@ -202,70 +211,74 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
       </div>
 
       {/* Messages Area */}
-      <div 
-        className="flex-1 min-h-0 p-4 overflow-y-auto space-y-4 scroll-smooth"
-        data-lenis-prevent="true"
-      >
-        {loading ? (
-          <div className="space-y-4">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="flex flex-col gap-2">
-                <Skeleton className="w-24 h-3 rounded-full opacity-20" />
-                <Skeleton className="w-full h-12 rounded-xl opacity-10" />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <AnimatePresence initial={false}>
-            {(showWelcome ? messages : messages.filter((m) => m.id !== SYSTEM_MESSAGE.id)).map((msg) => (
-              <motion.div
-                key={msg.id}
-                initial={{ opacity: 0, x: msg.user_id === user?.id && !msg.isSystem ? 20 : -20, scale: 0.95 }}
-                animate={{ opacity: 1, x: 0, scale: 1 }}
-                transition={{ duration: 0.2 }}
-                className={cn(
-                  "flex flex-col",
-                  msg.user_id === user?.id && !msg.isSystem ? "items-end" : "items-start"
-                )}
-              >
-                <div className="flex items-center gap-2 mb-1 px-1">
-                  <span className={cn(
-                    "text-[10px] font-bold uppercase tracking-wider",
-                    msg.isSystem ? "text-accent" : "text-foreground-muted"
-                  )}>
-                    {msg.user_id === user?.id && !msg.isSystem ? "Tú" : msg.user_name}
-                  </span>
-                  {msg.isSystem && <ShieldCheck size={10} className="text-accent" />}
-                  {!msg.isSystem && (
-                    <span className="text-[9px] font-medium text-fg-30 light:text-fg-50 tracking-wide tabular-nums">
-                      {new Date(msg.created_at).toLocaleTimeString(undefined, {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                  )}
+      <div className="relative flex-1 min-h-0">
+        <div
+          ref={listRef}
+          onScroll={handleScroll}
+          className="h-full p-4 overflow-y-auto space-y-4"
+          data-lenis-prevent="true"
+        >
+          {loading ? (
+            <div className="space-y-4">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="flex flex-col gap-2">
+                  <Skeleton className="w-24 h-3 rounded-full opacity-20" />
+                  <Skeleton className="w-full h-12 rounded-xl opacity-10" />
                 </div>
-                
-                <div
+              ))}
+            </div>
+          ) : (
+            <AnimatePresence initial={false}>
+              {visibleMessages.map((msg) => (
+                <motion.div
+                  key={msg.id}
+                  initial={{ opacity: 0, x: msg.user_id === user?.id && !msg.isSystem ? 20 : -20, scale: 0.95 }}
+                  animate={{ opacity: 1, x: 0, scale: 1 }}
+                  transition={{ duration: 0.2 }}
                   className={cn(
-                    "px-4 py-2.5 rounded-2xl max-w-[90%] text-sm break-words relative overflow-hidden",
-                    msg.isSystem
-                      ? "bg-brand/10 text-accent border border-brand/30 shadow-[0_0_20px_rgba(204,164,59,0.1)]"
-                      : msg.user_id === user?.id
-                        ? "bg-brand text-on-brand font-medium shadow-lg"
-                        : "bg-ink/5 text-foreground border border-ink/5 light:bg-surface-panel light:border-line-subtle light:shadow-sm"
+                    "flex flex-col",
+                    msg.user_id === user?.id && !msg.isSystem ? "items-end" : "items-start"
                   )}
                 >
-                  {msg.isSystem && (
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" />
-                  )}
-                  {msg.content}
-                </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        )}
-        <div ref={messagesEndRef} />
+                  <div className="flex items-center gap-2 mb-1 px-1">
+                    <span className={cn(
+                      "text-[10px] font-bold uppercase tracking-wider",
+                      msg.isSystem ? "text-accent" : "text-foreground-muted"
+                    )}>
+                      {msg.user_id === user?.id && !msg.isSystem ? "Tú" : msg.user_name}
+                    </span>
+                    {msg.isSystem && <ShieldCheck size={10} className="text-accent" />}
+                    {!msg.isSystem && (
+                      <span className="text-[9px] font-medium text-fg-30 light:text-fg-50 tracking-wide tabular-nums">
+                        {new Date(msg.created_at).toLocaleTimeString(undefined, {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div
+                    className={cn(
+                      "px-4 py-2.5 rounded-2xl max-w-[90%] text-sm break-words relative overflow-hidden",
+                      msg.isSystem
+                        ? "bg-brand/10 text-accent border border-brand/30 shadow-[0_0_20px_rgba(204,164,59,0.1)]"
+                        : msg.user_id === user?.id
+                          ? "bg-brand text-on-brand font-medium shadow-lg"
+                          : "bg-ink/5 text-foreground border border-ink/5 light:bg-surface-panel light:border-line-subtle light:shadow-sm"
+                    )}
+                  >
+                    {msg.isSystem && (
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" />
+                    )}
+                    {msg.content}
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          )}
+        </div>
+        <ChatJumpToLatest count={unseenCount} onClick={jumpToLatest} />
       </div>
 
       {/* Input Area */}
@@ -275,21 +288,43 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
             <input
               type="text"
               value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
+              onChange={(e) => {
+                setNewMessage(e.target.value);
+                if (sendError) setSendError(false);
+              }}
+              // Enter que confirma una composición IME (acentos, otros idiomas)
+              // no es "enviar": algunos navegadores igual disparaban el submit.
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && e.nativeEvent.isComposing) e.preventDefault();
+              }}
+              enterKeyHint="send"
+              autoComplete="off"
               placeholder={user ? "Escribe a la comunidad..." : "Inicia sesión para participar"}
+              aria-label="Mensaje para la comunidad"
+              aria-invalid={sendError || undefined}
+              aria-describedby={sendError ? "live-chat-send-error" : undefined}
               disabled={!user}
-              className="w-full bg-ink/5 border border-line-subtle text-foreground-strong rounded-xl px-4 py-3 text-sm light:bg-surface-input light:border-line-control/50 light:placeholder:text-foreground-placeholder focus:outline-none focus:border-brand/50 focus:ring-1 focus:ring-focus/50 transition-all placeholder:text-fg-20 disabled:opacity-50"
+              // 16 px (text-base): con menos, Safari de iOS agranda la página al
+              // enfocar y la sala queda descuadrada al cerrar el teclado (F15/F23).
+              className="w-full bg-ink/5 border border-line-subtle text-foreground-strong rounded-xl px-4 py-3 text-base light:bg-surface-input light:border-line-control/50 light:placeholder:text-foreground-placeholder focus:outline-none focus:border-brand/50 focus:ring-1 focus:ring-focus/50 transition-all placeholder:text-fg-20 disabled:opacity-50"
             />
           </div>
           <button
             type="submit"
-            disabled={!user || !newMessage.trim()}
+            disabled={!user || !newMessage.trim() || sending}
+            aria-label={sending ? "Enviando mensaje" : "Enviar mensaje"}
             className="bg-brand hover:bg-brand-hover text-on-brand px-4 py-3 rounded-xl transition-all font-bold disabled:opacity-50 disabled:grayscale flex items-center justify-center hover:scale-105 active:scale-95 shadow-lg shadow-brand/20"
           >
             <Send size={18} />
           </button>
         </form>
-        <p className="text-[9px] text-center text-foreground-muted mt-3 uppercase tracking-[0.2em] opacity-50">
+        {sendError && (
+          <p id="live-chat-send-error" role="alert" className="text-xs text-danger mt-2 px-1">
+            No se pudo enviar tu mensaje. Revisa tu conexión e inténtalo de nuevo.
+          </p>
+        )}
+        {/* Decorativa: con poca altura (horizontal, teclado abierto) cede su lugar. */}
+        <p className="text-[9px] text-center text-foreground-muted mt-3 uppercase tracking-[0.2em] opacity-50 [@media(max-height:500px)]:hidden">
           Encuentro exclusivo • Escuela de la Riqueza
         </p>
       </div>

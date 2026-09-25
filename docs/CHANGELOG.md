@@ -5,7 +5,64 @@
 
 ---
 
+## 2026-09-25
+
+### Live — merge con `master`: lo de la rama `juan` portado a la sala unificada
+- **Contexto**: `master` traía 19 commits de la sala en vivo (PR #94–#98) escritos sobre las salas **anteriores** a la unificación (F37), así que Git no podía aplicarlos: su código vivía en archivos que ya no tenían esa forma. Se portó a mano a `src/components/feature/live-room/`:
+  - **"Activar sonido" al primer toque** → `useLivePlayback.enableAudio`: `setIsMuted(false)` antes del `play()` (`muted` es prop controlada; tocar solo `video.muted` se revertía en el siguiente render) y `AbortError` = el audio ya quedó activo, no se revierte.
+  - **Clase completa (DVR)**: `resumeKey`/`onResumed` + toast "Retomamos donde lo dejaste" / "Ir al vivo" → `LivePlayerStage`, así lo tienen ambas salas.
+  - **Repetición paga** (`canWatchReplay`, `replay_is_public`) → `PublicLiveRoom`. `LiveReplay` pide la URL con sesión si el plan lo habilita, o anónima por `share_token` si la sala la abrió. Nuevo `LiveReplayPaywall`, que entra por la prop `endedNotice` de `LiveRoom`. El chequeo de `publicLiveHasRecording` guarda la respuesta junto a su token, en lugar de resetear estado dentro de un efecto.
+- **Mezcla automática revisada**: `LivePlayerControls` (el toque de F03 más la barra de Clase completa, en zonas distintas), `lives.ts` (funciones de ambos lados) y `lives.test.ts` (se conservaron los tests de los dos).
+- **Tests**: 224/224, suma de ambos lados más 1 del aviso de sala finalizada.
+
 ## 2026-09-24
+
+### Live — teclado del chat: la parte determinista (auditoría UX: F15, con F23 y T13)
+- **Zoom de iOS al enfocar**: el campo del chat pasa de `text-sm` (14 px) a `text-base` (16 px). Con menos de 16 px, Safari de iOS agranda la página al enfocar y la sala queda descuadrada al cerrar el teclado. No se bloquea el zoom del viewport, que es una necesidad de accesibilidad.
+- **Teclado virtual**: `enterKeyHint="send"` (la tecla dice "Enviar") y `autoComplete="off"`.
+- **IME (T13)**: un Enter que confirma una composición (`isComposing`) ya no envía el mensaje a medias.
+- **Chat anclado al cambiar de alto**: `useChatScroll` observa la lista (`ResizeObserver`). Si el lector estaba al final y la lista se achica (teclado, rotación, panel), lo mantiene en el final. Achicarse no dispara `scroll`, así que antes los últimos mensajes quedaban tapados hasta que llegaba el siguiente. Leyendo arriba, se desconecta y no lo mueve.
+- **Poca altura**: la leyenda decorativa bajo el composer ("Encuentro exclusivo…") se oculta con `max-height: 500px` en ambos chats.
+- **Decidido NO tocar sin dispositivo**: `viewport-fit=cover` (sin él, iOS ya deja el contenido fuera del notch y del indicador; activarlo obliga a paddear toda la app), `interactive-widget` (cambio global del viewport en Android) y `VisualViewport`. Por defecto iOS y Android desplazan la vista para que el campo enfocado quede visible, lo que ya cumple la auditoría ("el video puede salir del área visible, pero no reiniciarse"). Queda pendiente confirmarlo en iPhone y Android: vertical, horizontal, abrir/cerrar teclado y rotar con borrador.
+- **Tests**: +2 en `useChatScroll.test.tsx` y +3 en `LiveChat.test.tsx`. Suite 201/201.
+
+### Live — celular en horizontal: layout compacto por altura (auditoría UX: F12 segunda tanda, F42, F25 parcial)
+- **Problema**: el layout se decidía solo por ancho (`min-width: 768px`). Un 844×390 heredaba el de escritorio: chat fijo de 320 px, header con 32 px de padding sobre el video, cuenta regresiva con cajas de 176 px, y `md:h-screen` (100vh) más alto que lo visible en Safari, que cortaba los controles (F42). Un 667×375 caía en el apilado, con el video topeado en 225 px y ~100 px de chat.
+- **Tres layouts** (`getLiveRoomLayout`, puro): `stacked` (celular vertical), `side` (pantalla amplia) y `compact`: horizontal con ≤500 px de alto (`useIsShortLandscape`), **sin importar el ancho**. La altura manda sobre el ancho.
+- **Compacto**: el video ocupa la pantalla y el chat arranca **cerrado**; se abre como panel lateral (`min(20rem, 45vw)`) con la pestaña y el contador de no leídos de escritorio. El header queda en volver + estado + conectados (`variant="compact"`), sin logo ni título encima de la clase; el título sigue como `h1` `sr-only`. La cuenta regresiva usa tamaños de celular (`LiveCountdownView compact`) y se centra con `m-auto` para poder scrollear si no entra.
+- **Estado del chat por layout**: `sideChatOpen` y `compactChatOpen` por separado. Al rotar a horizontal el chat arranca cerrado, y al volver a pantalla amplia conserva lo que eligió el alumno. Sin efectos que sincronicen.
+- **F42**: lado a lado, la isla y el panel toman el alto de la fila (`100dvh`) en vez de `md:h-screen`. La dirección de la fila la decide el layout (JS), ya no `md:flex-row`.
+- **F25 (parcial)**: el panel de chat cerrado queda `inert`: no se enfoca ni lo recorre un lector de pantalla, y sigue montado para contar no leídos. Contenedor extraído a `LiveChatPanel`.
+- **Pendiente**: el teclado en horizontal (deja ~150 px) no tiene tratamiento propio (F15). No se probó en un dispositivo físico.
+- **Tests**: `liveRoomLayout.test.ts` (3) y +4 en `LiveRoom.test.tsx`. Suite 196/196.
+
+### Live — rediseño mínimo: audio compacto, video a su proporción y chat que respeta la lectura (auditoría UX: F01, F12, F19 + F02/F03)
+- **F01 · audio**: el aviso "Activar sonido" ya no es una capa con blur sobre todo el player. Es una píldora en la esquina inferior izquierda (espejo del selector de calidad) con **Activar sonido** y una ✕ "Seguir sin sonido". El video se ve nítido sin audio y el aviso no vuelve una vez que el alumno elige, desde el aviso o activando el sonido en la barra. Se oculta si el audio ya está activo o hay error. `useLivePlayback` suma `dismissAudioPrompt`. **F02** queda resuelto: el contenedor ya no repite el clic del botón.
+- **F03 · toque en el video** (necesario para F01): con el aviso chico, el primer toque en el celular caía en la superficie del video, que **pausaba**. Ahora, con el dedo, tocar el video solo muestra los controles, y pausar queda en la barra. Con mouse o teclado, el clic sigue pausando. Se distingue por `pointerType` en `LivePlayerControls`.
+- **F12 · layout móvil**: con el video al aire, el escenario toma la proporción 16:9 (`aspect-video`, tope `60dvh`) en lugar de `50dvh` fijo, y el chat se queda con el resto. En un 390×844 eran ~200 px de franja negra. En celular el header pasa a ser una barra propia arriba del video (`LiveRoomHeader variant="bar"`), porque flotando taparía la clase ahora que no hay franja negra. Sin video al aire (espera, finalizada) se mantiene `50dvh`. Escritorio sin cambios.
+- **F19 · scroll del chat**: `LiveChat` forzaba `scrollIntoView` en cada mensaje, arrastrando al alumno que leía arriba (y a la página). Nuevo `useChatScroll` (`src/hooks/`), compartido por `LiveChat` y `PublicLiveChat`: sigue el final solo si el lector está cerca (80 px), cuenta lo que llega mientras lee y muestra **"N mensajes nuevos"** (`ChatJumpToLatest`) para volver. Desplaza solo la lista. Enviar un mensaje vuelve al final.
+- **Pendiente de probar en dispositivo real**: jsdom no hace layout, así que la proporción del video, la barra del header, la píldora sobre videos claros y el gesto táctil solo están cubiertos por lógica, no por imagen. Celular horizontal (≥768 px de ancho) sigue usando el layout de escritorio: queda para la segunda tanda de F12 (decidir también por altura).
+- **Tests**: `useChatScroll.test.tsx` (4), `LiveAudioPrompt.test.tsx` (4). Suite 189/189.
+
+### Live — sala unificada: VIP y pública comparten `LiveRoom` (auditoría UX: F37)
+- **Por qué**: `VIPLiveRoom` (787 líneas) y `PublicLiveRoom` (683) eran copias que ya habían divergido (latencia inoperante solo en la pública, no leídos solo en la VIP, F33 arreglado solo en una). Cualquier rediseño se iba a hacer dos veces. Se unifican **antes** de rediseñar.
+- **Estructura**: `src/components/feature/live-room/`. `LiveRoom` compone layout, chat plegable y presencia. `LiveStage` decide el escenario (player / replay / finalizada / pausa / sin señal / espera). `LivePlayerStage` es el player con sus overlays. Además `LiveRoomHeader` + `LiveStatusBadge`, `LiveCountdownView`, `LiveIntroOverlay`, `LiveReplay`, `LiveChatToggle`, `LiveAudioPrompt`, `LiveStageMessage`. Hooks: `useLivePlayback` (devuelve `[playerRef, playback]`), `useLivePresence`, `useCountdown`. `getLiveRoomStatus` (puro) centraliza `showPlayer`/`isLive`/`isEnded`/`isPaused`.
+- **Las páginas quedan en lo que difiere**: VIP (143 líneas) resuelve la sala activa, el plan, Realtime + polling y la señal de OBS. Pública (163) resuelve el token + polling, el "no disponible" y el origen del replay. Las diferencias de presentación son props (`branding`, `backTo`, `signalConnected`, `cinematicIntro`, `replay`, `renderChat`).
+- **Cambios de comportamiento que trae unificar** (se tomó la versión más completa de cada lado):
+  - Pública: el selector de latencia ahora funciona (usa la misma preferencia que la VIP). Antes era `smooth` fijo con un callback vacío (**F10/H6**). Cambiar de modo recrea `Hls`, igual que en la VIP.
+  - Pública con sesión: contador de no leídos con el chat oculto, e icono de panel en lugar de `›`/`‹`.
+  - Pública: fade-in del player, segundo anillo del botón de audio y brillo de las cajas del countdown, como en la VIP.
+  - VIP: "Señal no configurada" usa el texto de la pública, sin mencionar Cloudflare. Se quitó la textura de `transparenttextures.com` (**F39**). Se borró la rama "Esperando señal…", que era inalcanzable.
+  - Ambas: sin presencia en una sala finalizada (el badge ya estaba oculto). La intro se dispara en cada transición a en vivo, y su timer ya no puede quedar colgado. El countdown calcula al montar, sin mostrar `00:00:00` el primer segundo. Los no leídos se reinician al mostrar/ocultar el chat.
+- **Fuera de alcance**: el chat sigue siendo dos componentes (`LiveChat` con Realtime y escritura; `PublicLiveChat` solo lectura por polling), porque su transporte es distinto. `clearPlayer()` del podcast sigue solo en la VIP (**F41**, a decidir con `PODCAST_ARCHITECTURE.md`).
+- **Lint**: los archivos de la sala quedan en 0 avisos (antes 5, entre `exhaustive-deps` y `set-state-in-effect`).
+- **Tests**: `LiveRoom.test.tsx` (7) y `liveRoomStatus.test.ts` (4), los primeros de las salas. Suite completa 181/181.
+
+### Live — tres fallas de pérdida de información (auditoría UX: F21, F22, F33)
+- **F21 · chat público congelado a partir del mensaje 101**: `get_public_live_messages` ordenaba `ASC` con `LIMIT`, así que devolvía los **primeros** N mensajes aunque el comentario decía "últimos". Ahora una subconsulta toma los más nuevos (`DESC, id DESC` + `LIMIT`) y los devuelve en orden de lectura. **SQL** (`sql/migrate-lives-public-link.sql`, aplicar manualmente en Supabase: basta con re-ejecutar el bloque `CREATE OR REPLACE FUNCTION public.get_public_live_messages` + su `REVOKE`/`GRANT`). Sin cambios en el cliente: `mergeMessagesById` ya conserva lo que sale de la ventana.
+- **F22 · el chat VIP perdía el mensaje si fallaba el envío**: `LiveChat` borraba el campo antes del `insert` y el error solo iba a consola. Ahora el texto queda hasta que Supabase confirma, un fallo muestra "No se pudo enviar tu mensaje…" (`role="alert"`, asociado al campo) y el botón se bloquea mientras se envía para evitar el doble clic. Si el alumno siguió escribiendo durante el envío, no se le borra lo nuevo. Límite conocido: si el insert llegó a la base pero la respuesta se perdió, reenviar duplica el mensaje.
+- **F33 · al finalizar, la sala VIP decía "No hay eventos programados"**: `fetchActiveLive` descarta las salas `ended`, así que la sala desaparecía y la vista de "Transmisión finalizada" nunca se alcanzaba. Nuevo `fetchLiveForRoom(currentLiveId)` en `lives.ts`: si no hay sala activa y la que se estaba viendo terminó, la devuelve. `VIPLiveRoom` lo usa en Realtime y en el polling (el montaje sigue con `fetchActiveLive`: entrar después del cierre muestra el estado vacío, como antes). Además `showIframe` ahora excluye las finalizadas, para que el cierre se vea aunque OBS siga conectado.
+- **Tests**: `LiveChat.test.tsx` (5, nuevo) y `lives.test.ts` (+4 de `fetchLiveForRoom`).
 
 ### Auth — sesión única por cuenta (anti-cuentas compartidas)
 - **Decisión de producto**: **toda** cuenta (free, individual, VIP y admin) solo puede estar abierta en un dispositivo a la vez. Gana la sesión **más nueva**; la anterior se cierra con el aviso "Tu cuenta se abrió en otro dispositivo". Sin excepción para admins: abrir la app en el celular cierra el panel de la PC.
