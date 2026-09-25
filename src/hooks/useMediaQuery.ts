@@ -22,4 +22,6 @@ export function useMediaQuery(query: string): boolean {
 }
 
 export const useIsDesktop = () => useMediaQuery("(min-width: 768px)");
+/** Celular (o ventana) en horizontal con poca altura: el ancho no alcanza para decidir el layout. */
+export const useIsShortLandscape = () => useMediaQuery("(orientation: landscape) and (max-height: 500px)");
 export const usePrefersReducedMotion = () => useMediaQuery("(prefers-reduced-motion: reduce)");

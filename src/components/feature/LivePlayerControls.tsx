@@ -56,6 +56,8 @@ const LivePlayerControls = ({
   // jitter normal de 2-7s.
   const [isBehind, setIsBehind] = useState(false);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // F03: con el dedo, tocar el video es "mostrame los controles", no "pausá".
+  const lastPointerTypeRef = useRef("mouse");
   const bufferTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const scheduleHide = useCallback(() => {
@@ -271,9 +273,18 @@ const LivePlayerControls = ({
 
   return (
     <>
+      {/* Superficie del video. Con mouse o teclado, un clic pausa/reanuda.
+          Con el dedo solo muestra los controles: antes el mismo toque que
+          buscaba la barra pausaba la clase (F03); pausar queda en la barra.
+          `detail === 0` es un clic de teclado, que no pasa por pointerdown. */}
       <button
         type="button"
-        onClick={() => { onTogglePlay(); wakeControls(); }}
+        onPointerDown={(e) => { lastPointerTypeRef.current = e.pointerType; }}
+        onClick={(e) => {
+          const isTouch = lastPointerTypeRef.current === "touch" && e.detail !== 0;
+          if (!isTouch) onTogglePlay();
+          wakeControls();
+        }}
         onMouseMove={wakeControls}
         onTouchStart={wakeControls}
         className="absolute inset-0 z-10 cursor-pointer bg-transparent"
