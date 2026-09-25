@@ -7,6 +7,7 @@ import { useAuthStore } from "@/stores/auth.store";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChatJumpToLatest } from "@/components/feature/ChatJumpToLatest";
 import { useChatScroll } from "@/hooks/useChatScroll";
+import { mergeMessagesById } from "@/lib/chat/mergeMessagesById";
 
 export interface ChatMessage {
   id: string;
@@ -29,9 +30,22 @@ const SYSTEM_MESSAGE: ChatMessage = {
   user_id: "system",
   user_name: "Iván Mazo",
   content: "¡Bienvenidos a este encuentro exclusivo! Iniciamos en instantes.",
-  created_at: new Date().toISOString(),
+  // Época 0: al ordenar por fecha queda siempre primero (no muestra hora).
+  created_at: new Date(0).toISOString(),
   isSystem: true,
 };
+
+// Código de Postgres para clave duplicada.
+const UNIQUE_VIOLATION = "23505";
+// Mensajes recientes que se cargan al entrar (F20).
+const HISTORY_LIMIT = 200;
+
+interface MessageRow {
+  id: string;
+  content: string;
+  created_at: string;
+  user_id: string;
+}
 
 const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingMessage, showWelcome = true }: LiveChatProps) => {
   const { user } = useAuthStore();
@@ -40,7 +54,11 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
   const [newMessage, setNewMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState(false);
+  const [historyError, setHistoryError] = useState(false);
+  const [connection, setConnection] = useState<"connecting" | "connected" | "reconnecting">("connecting");
   const onIncomingMessageRef = useRef(onIncomingMessage);
+  // Mensaje enviado sin confirmar: su id se reusa si se reintenta el mismo texto.
+  const pendingSendRef = useRef<{ id: string; text: string } | null>(null);
   const visibleMessages = showWelcome ? messages : messages.filter((m) => m.id !== SYSTEM_MESSAGE.id);
   // F19: antes cada mensaje nuevo arrastraba al final aunque el alumno
   // estuviera leyendo más arriba.
@@ -54,98 +72,102 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
   // Cargar mensajes iniciales y suscribirse a nuevos
   useEffect(() => {
     let isActive = true;
+    // Nombres ya conocidos: un mensaje de alguien que ya habló no vuelve a
+    // consultar `profiles`. Antes cada mensaje entrante disparaba una
+    // consulta en CADA espectador (F38).
+    const names = new Map<string, string>();
+
+    const resolveName = async (userId: string): Promise<string> => {
+      const known = names.get(userId);
+      if (known) return known;
+      const { data } = await supabase.from("profiles").select("full_name").eq("id", userId).maybeSingle();
+      const name = data?.full_name || "Usuario";
+      names.set(userId, name);
+      return name;
+    };
 
     const fetchHistory = async () => {
       setLoading(true);
+      setHistoryError(false);
       // Esperar a que Supabase recupere la sesión local antes de conectarse a Realtime
       await supabase.auth.getSession();
 
-      // 1. Cargar el historial de mensajes de este live
-      const { data: msgsData, error } = await supabase
+      // 1. Los ÚLTIMOS mensajes (DESC + limit), después en orden de lectura.
+      // Antes traía el historial completo de la clase.
+      const { data: rows, error } = await supabase
         .from("live_messages")
         .select("id, content, created_at, user_id")
         .eq("live_id", liveId)
-        .order("created_at", { ascending: true });
+        .order("created_at", { ascending: false })
+        .limit(HISTORY_LIMIT);
 
       if (!isActive) return;
 
-      if (msgsData && !error) {
-        // Obtener perfiles de los usuarios que comentaron
-        const userIds = [...new Set(msgsData.map((m) => m.user_id))];
-        const profilesMap: Record<string, string> = {};
-        
-        if (userIds.length > 0) {
-          const { data: profilesData } = await supabase
-            .from("profiles")
-            .select("id, full_name")
-            .in("id", userIds);
-            
-          if (profilesData) {
-            profilesData.forEach((p) => {
-              profilesMap[p.id] = p.full_name;
-            });
-          }
+      if (rows && !error) {
+        const history = (rows as MessageRow[]).slice().reverse();
+        const unknownIds = [...new Set(history.map((m) => m.user_id))].filter((id) => !names.has(id));
+        if (unknownIds.length > 0) {
+          const { data: profiles } = await supabase.from("profiles").select("id, full_name").in("id", unknownIds);
+          profiles?.forEach((p) => names.set(p.id, p.full_name));
         }
-
         if (!isActive) return;
 
-        const history: ChatMessage[] = msgsData.map((msg: any) => ({
+        const loaded: ChatMessage[] = history.map((msg) => ({
           id: msg.id,
           user_id: msg.user_id,
-          user_name: profilesMap[msg.user_id] || "Usuario",
+          user_name: names.get(msg.user_id) || "Usuario",
           content: msg.content,
           created_at: msg.created_at,
         }));
-        setMessages([SYSTEM_MESSAGE, ...history]);
+        // F20: MEZCLAR, no reemplazar. Lo que llegó por Realtime mientras
+        // cargaba el historial ya está en `prev` y antes se perdía.
+        setMessages((prev) => mergeMessagesById(prev, [SYSTEM_MESSAGE, ...loaded]));
       } else {
-        setMessages([SYSTEM_MESSAGE]);
+        console.error("[LiveChat] error cargando el historial:", error);
+        setHistoryError(true);
+        setMessages((prev) => mergeMessagesById(prev, [SYSTEM_MESSAGE]));
       }
       setLoading(false);
     };
 
     fetchHistory();
 
-    // 2. Suscribirse a nuevos mensajes (Realtime) 
-    // Lo hacemos desde el inicio sin esperar el fetch, para no perder mensajes concurrentes y 
-    // evitar race conditions con el unmount de React Strict Mode.
+    // 2. Suscribirse a nuevos mensajes (Realtime) desde el inicio, sin esperar
+    // el historial, para no perder mensajes concurrentes.
     const channel = supabase.channel(`live_messages_${liveId}`);
-    
+
     channel.on(
       "postgres_changes",
       { event: "INSERT", schema: "public", table: "live_messages", filter: `live_id=eq.${liveId}` },
-      async (payload: any) => {
+      async (payload: { new: MessageRow }) => {
         const newMsg = payload.new;
-        
-        const { data: profileData } = await supabase
-          .from("profiles")
-          .select("full_name")
-          .eq("id", newMsg.user_id)
-          .maybeSingle();
-
         const incomingMessage: ChatMessage = {
           id: newMsg.id,
           user_id: newMsg.user_id,
-          user_name: profileData?.full_name || "Usuario",
+          user_name: await resolveName(newMsg.user_id),
           content: newMsg.content,
           created_at: newMsg.created_at,
         };
+        if (!isActive) return;
 
-        if (isActive) {
-          let isDuplicate = false;
-          setMessages((prev) => {
-             // Evitar duplicados si el realtime se adelantó al fetch
-             if (prev.some(m => m.id === incomingMessage.id)) {
-               isDuplicate = true;
-               return prev;
-             }
-             return [...prev, incomingMessage];
-          });
-          if (!isDuplicate) {
-            onIncomingMessageRef.current?.(incomingMessage);
+        let isDuplicate = false;
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === incomingMessage.id)) {
+            isDuplicate = true;
+            return prev;
           }
+          // Orden por `created_at`: las consultas de nombre pueden resolver en
+          // otro orden que el de llegada.
+          return mergeMessagesById(prev, [incomingMessage]);
+        });
+        if (!isDuplicate) {
+          onIncomingMessageRef.current?.(incomingMessage);
         }
       }
-    ).subscribe();
+    ).subscribe((status) => {
+      // F23: el indicador refleja la suscripción real, no es decorativo.
+      if (isActive) setConnection(status === "SUBSCRIBED" ? "connected" : "reconnecting");
+    });
 
     // Cleanup de la suscripción al desmontar
     return () => {
@@ -162,17 +184,30 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
     setSending(true);
     setSendError(false);
 
-    // F22: el texto se queda en el campo hasta que Supabase confirme. Antes se
+    // F22: el id lo genera el cliente y un reintento del MISMO texto lo reusa.
+    // Si el primer intento llegó a la base pero se perdió la respuesta, el
+    // reintento choca con la clave primaria en vez de duplicar el mensaje.
+    // Otro texto es otro mensaje: id nuevo.
+    const pending =
+      pendingSendRef.current?.text === messageText
+        ? pendingSendRef.current
+        : { id: crypto.randomUUID(), text: messageText };
+    pendingSendRef.current = pending;
+
+    // El texto se queda en el campo hasta que Supabase confirme. Antes se
     // borraba antes del insert y un fallo solo iba a consola: el alumno perdía
     // lo que escribió y creía que lo había enviado.
     let failed = false;
     try {
       const { error } = await supabase.from("live_messages").insert({
+        id: pending.id,
         live_id: liveId,
         user_id: user.id,
         content: messageText,
       });
-      if (error) {
+      // 23505 (unique_violation) en un reintento = el intento anterior sí
+      // llegó. El mensaje ya está enviado: no es un error.
+      if (error && error.code !== UNIQUE_VIOLATION) {
         failed = true;
         console.error("Error enviando mensaje:", error);
       }
@@ -186,6 +221,7 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
       setSendError(true);
       return;
     }
+    pendingSendRef.current = null;
     // Solo se limpia si el alumno no siguió escribiendo mientras se enviaba.
     setNewMessage((current) => (current.trim() === messageText ? "" : current));
     // Quien escribe quiere ver su mensaje: vuelve al final aunque estuviera leyendo.
@@ -203,8 +239,15 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
           <div>
             <h3 className="text-sm font-bold text-foreground-strong tracking-wide">COMUNIDAD VIP</h3>
             <div className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-[10px] text-foreground-muted uppercase font-bold tracking-widest">Chat en tiempo real</span>
+              <span
+                className={cn(
+                  "w-1.5 h-1.5 rounded-full",
+                  connection === "connected" ? "bg-green-500 animate-pulse" : "bg-amber-500"
+                )}
+              />
+              <span role="status" className="text-[10px] text-foreground-muted uppercase font-bold tracking-widest">
+                {connection === "connected" ? "Chat en tiempo real" : connection === "connecting" ? "Conectando…" : "Reconectando…"}
+              </span>
             </div>
           </div>
         </div>
@@ -218,6 +261,12 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
           className="h-full p-4 overflow-y-auto space-y-4"
           data-lenis-prevent="true"
         >
+          {/* F23: un historial que no cargó no se disfraza de "sin mensajes". */}
+          {historyError && (
+            <p role="alert" className="text-xs text-center text-foreground-muted px-2">
+              No pudimos cargar los mensajes anteriores. Los nuevos sí van a aparecer.
+            </p>
+          )}
           {loading ? (
             <div className="space-y-4">
               {[1, 2, 3, 4, 5].map((i) => (

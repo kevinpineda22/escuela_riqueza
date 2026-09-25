@@ -72,6 +72,7 @@ export function LivePlayerStage({ liveInputId, resumeKey, isPaused, playerRef, p
           isMuted={playback.isMuted}
           levels={playback.qualityLevels}
           currentLevel={playback.currentQualityLevel}
+          activeLevel={playback.activeQualityLevel}
           latencyMode={latencyMode}
           onTogglePlay={playback.togglePlay}
           onToggleMute={playback.toggleMute}

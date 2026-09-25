@@ -7,6 +7,44 @@
 
 ## 2026-09-25
 
+### Live — resto determinista de la auditoría UX (F05, F07, F08, F14, F17, F20, F23, F30, F31, F35, F38, F40, F43)
+- **Chat** (`LiveChat`):
+  - **F20**: el historial ya no **reemplaza** la lista, se mezcla por `id` (`mergeMessagesById`), así que un mensaje llegado por Realtime mientras cargaba el historial ya no se pierde. Los mensajes de Realtime se ordenan por `created_at`, no por orden de respuesta. Carga los **últimos 200** (DESC + reverse) en vez del historial completo. El mensaje de bienvenida pasa a `created_at` época 0 para quedar primero.
+  - **F38**: caché de nombres por suscripción, así que un mensaje de alguien que ya habló no consulta `profiles`. Antes era una consulta por mensaje en cada espectador.
+  - **F23**: el punto "Chat en tiempo real" refleja el estado real de la suscripción ("Conectando…" / "Reconectando…" en ámbar). Un historial que no cargó lo dice en lugar de mostrarse vacío. Filas tipadas (`MessageRow`): se van los dos `any`.
+- **Controles** (`LivePlayerControls`):
+  - **F05**: la barra no se oculta con el menú de ajustes abierto, con foco de teclado adentro (solo `:focus-visible`, para que un clic de mouse no la trabe visible) ni mientras se arrastra la línea de tiempo. Llegar con Tab al video la muestra.
+  - **F07**: botones de 44 px de área táctil (`size-11 -my-2`, sin engordar la barra). "Desmutear/Mutear" pasa a "Activar sonido/Silenciar" y "renditions" a "Sin otras calidades disponibles".
+  - **F08**: preferencia de calidad y calidad activa separadas (`currentLevel` / `activeLevel`): con Auto el selector muestra **"Auto · 720p"** en vez de parecer una elección manual. Reintentar el player vuelve la preferencia a Auto.
+  - **F43**: al filo, "EN VIVO" rojo con pulso; atrasado, **"VOLVER AL VIVO -12 s"** como acción, sin rojo ni pulso. Ya no depende de un `title`.
+- **Sala**:
+  - **F14**: intro de 2,5 s (antes 3,5), con **"Saltar"** o clic para cerrarla; no aparece con movimiento reducido ni con las animaciones apagadas. Sin `autoFocus`, para no robar el foco a quien escribe en el chat.
+  - **F17**: `LiveRoom` va con `key={live.id}`: otra sala arranca con estado nuevo (audio, calidad, no leídos, player).
+  - **F35**: pasada la hora sin señal, "Comenzará en instantes" en vez de un contador clavado en 00:00:00.
+  - **F38**: `isSameLive`: un poll que trae la misma fila conserva la referencia, así que la sala ya no se re-renderiza cada 3 s. Aplica en ambas salas.
+- **Global y admin**:
+  - **F40**: `<html lang="es">`, para que los lectores de pantalla pronuncien en español.
+  - **F30**: copiar (link público, servidor RTMPS) confirma solo si el portapapeles aceptó; si no, avisa.
+  - **F31**: `PROJECT_STATE.md` ya no describe un reproductor WebRTC de menos de 1 s.
+- **Tests**: `LivePlayerControls.test.tsx` (9, nuevo; mockea `motion/react` porque en jsdom la salida animada queda a medias), `LiveIntroOverlay.test.tsx` (4), +4 en `LiveChat.test.tsx`, +3 `isSameLive`, +1 F35. Suite 255/255.
+- **No abordados** (necesitan otra cosa que código): F06/F11 (fullscreen, volumen/PiP: teléfono), F09/F39 (player HLS, que se trabaja en paralelo en la rama `juan`), F18/F26/F27/F36 (decisiones de producto: replay VIP, moderación, datos de conectados, cambio de plan en vivo), F34 (depende del webhook H3), F24 (rediseño visual del chat), F28 (reorganizar el admin), F41 (convivencia con el podcast, requiere `PODCAST_ARCHITECTURE.md`).
+
+### Live — errores de carga honestos y controles del admin sin ambigüedad (auditoría UX: F16, F29)
+- **F16 · sala VIP**: si la primera carga fallaba, el error iba a consola y el alumno veía **"No hay eventos programados"** aunque la clase estuviera ocurriendo. Ahora hay un estado de error propio ("No pudimos cargar la sala", con **Reintentar**) que tiene prioridad sobre "sin eventos". Realtime y polling pasan por `refreshLive`: una respuesta buena reemplaza la sala y apaga el error (se recupera solo), y un fallo transitorio conserva la última sala conocida en vez de dejar una promesa rechazada sin capturar. Es el mismo criterio que la sala pública.
+- **F29 · panel admin**: "Detener" pausaba la sala (no OBS) y compartía ícono con Finalizar. Ahora es **Pausar** (`PauseCircle`) y **Finalizar clase**, con `title` y un texto de estado que aclaran que OBS sigue emitiendo. **Finalizar también está disponible en pausa**, donde antes solo aparecía Reanudar: el handler inline se extrajo a `handleFinalize`. La confirmación explica qué ven los alumnos, y el error ya no es un "Error" a secas.
+- **Tests**: `VIPLiveRoom.test.tsx` (5, los primeros de la página). El panel admin no tiene tests: verificado con typecheck y lint. Suite 234/234.
+
+### Live — título de la clase visible en celular (auditoría UX: F13)
+- **Problema**: en la barra del celular vertical el título estaba en un `hidden md:block`; el alumno no veía qué clase miraba. El botón de volver medía ~34 px.
+- **Cambio** (`LiveRoomHeader variant="bar"`): el logo, que es marca y no información, deja su lugar al título en una línea (`truncate`, con el sufijo "VIP" si corresponde). Volver pasa a 44 px (`w-11 h-11`). Escritorio y horizontal compacto sin cambios.
+- **Tests**: +1 en `LiveRoom.test.tsx`. Suite 229/229.
+
+### Live — chat: reintentar ya no duplica el mensaje (auditoría UX: F22, resto)
+- **Problema**: si el insert llegaba a la base pero se perdía la respuesta (4G inestable), el alumno veía "No se pudo enviar", reintentaba, y el mensaje salía dos veces.
+- **Cambio** (`LiveChat`): el cliente genera el `id` (`crypto.randomUUID()`) y un reintento del **mismo** texto lo reusa (`pendingSendRef`). Si el intento anterior sí había llegado, el reintento choca con la clave primaria: `23505` se toma como "ya enviado" y limpia el campo sin error. Otro texto, o un envío después de uno exitoso, lleva `id` nuevo. El eco de Realtime ya deduplicaba por `id`.
+- **Supuesto**: `live_messages.id` es `uuid` y acepta un valor explícito (el `CREATE TABLE` no está en el repo; lo confirma el tipo de `get_public_live_messages`). Si la columna se hubiera creado como `GENERATED ALWAYS`, el envío fallaría con un error visible, no en silencio. Verificar con un envío real.
+- **Tests**: +4 en `LiveChat.test.tsx`. Suite 228/228.
+
 ### Live — merge con `master`: lo de la rama `juan` portado a la sala unificada
 - **Contexto**: `master` traía 19 commits de la sala en vivo (PR #94–#98) escritos sobre las salas **anteriores** a la unificación (F37), así que Git no podía aplicarlos: su código vivía en archivos que ya no tenían esa forma. Se portó a mano a `src/components/feature/live-room/`:
   - **"Activar sonido" al primer toque** → `useLivePlayback.enableAudio`: `setIsMuted(false)` antes del `play()` (`muted` es prop controlada; tocar solo `video.muted` se revertía en el siguiente render) y `AbortError` = el audio ya quedó activo, no se revierte.

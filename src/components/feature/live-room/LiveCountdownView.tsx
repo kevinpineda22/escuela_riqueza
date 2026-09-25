@@ -59,7 +59,13 @@ export function LiveCountdownView({ live, label, titleFallback, compact = false 
         </p>
       )}
 
-      {live.starts_at ? (
+      {live.starts_at && timeLeft.isPast ? (
+        // F35: pasada la hora y sin señal, un mensaje que no parezca un error.
+        <div role="status">
+          <p className={cn("font-bold text-accent", compact ? "text-lg" : "text-xl sm:text-2xl")}>Comenzará en instantes</p>
+          <p className="text-sm text-foreground-muted mt-2">La clase arranca apenas llegue la señal. No hace falta recargar.</p>
+        </div>
+      ) : live.starts_at ? (
         <div className={cn("flex justify-center", compact ? "gap-2" : "gap-2 sm:gap-4 md:gap-10")}>
           {[
             { val: timeLeft.hours, label: "Horas" },

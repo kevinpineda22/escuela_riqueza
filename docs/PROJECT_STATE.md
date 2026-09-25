@@ -36,8 +36,10 @@
 
 **Lives**
 - `AdminLiveManager.tsx`: CRUD de salas con schema real (`starts_at`, `status`, `stream_live_input_id`, `allowed_plans`, `required_plan`, `is_active`). Timezone auto-detected con badge. Drag & drop de imagen de fondo a Supabase Storage (bucket `backgrounds`). Botón "Forzar EN VIVO" con mutex. Botón Activar/Inactivar por sala (columna `is_active`). Guía OBS estabilidad-primero (ethernet, keyframe 2, bitrate según upload). Botón "Archivar en R2" + replay firmado; las grabaciones se **auto-archivan a R2** vía Worker cron (ver `docs/RECORDINGS_ARCHITECTURE.md`).
-- `VIPLiveRoom.tsx`: countdown desde `starts_at`, intro cinemática al activarse, reproductor WebRTC via `<iframe mode=webrtc>` para latencia <1s. Suscripción Realtime a TODA la tabla `lives` + polling 3s. Acceso dinámico: valida `allowed_plans` del active live (sin plan fijo en ruta). Si el plan del usuario no está en `allowed_plans`, redirige al dashboard.
-- `LiveChat.tsx`: chat funcional con scroll y broadcast en tiempo real (Supabase Realtime).
+- **Sala en vivo** (`src/components/feature/live-room/`, compartida por la sala VIP y la pública desde F37): `LiveRoom` compone el layout (`stacked` celular vertical / `side` pantalla amplia / `compact` horizontal con poca altura), el escenario (`LiveStage`: player, replay, finalizada, pausa, espera), el header, el chat plegable y la presencia. Reproductor **HLS** (`LiveHLSPlayer`, hls.js) con tres modos: Fluidez (~8 s), Baja latencia (LL-HLS, ~2-4 s) y Clase completa (DVR con retomar posición). No hay WebRTC ni latencia menor a 1 s. Ver `docs/LIVE_UX_REDESIGN_AUDIT.md`.
+- `VIPLiveRoom.tsx`: resuelve la sala activa del plan del alumno (Realtime sobre `lives` + polling 3 s, errores de carga con reintento) y la señal de OBS; la presentación es `LiveRoom`. Valida `allowed_plans` al entrar y redirige al dashboard si el plan no está.
+- `PublicLiveRoom.tsx`: link público por `share_token`, solo polling; repetición paga salvo `replay_is_public`.
+- `LiveChat.tsx`: chat en tiempo real (Supabase Realtime) con historial de los últimos 200, seguimiento del final que respeta la lectura, borrador que no se pierde y reintento sin duplicados.
 - `CommunityFeed.tsx` (Foro VIP): Foro tipo Reddit con categorias (pregunta, discusión, recurso), ordenamiento (reciente/popular), anidamiento de comentarios de 1 nivel, botones de "Me gusta". Usa `sql/sync_community.sql` (RLS para que solo VIP y Admins puedan interactuar).
 
 **Admin shell**
@@ -72,8 +74,8 @@
 - `AdminLayout.tsx` y `AdminVideoUpload.tsx`.
 - `AdminMetrics.tsx`, `AdminUsers.tsx`, `AdminSettings.tsx` (Fase 3 completada con recharts y mocks).
 - `StudentDashboard.tsx` (Fase 4 completada con progreso real, módulos conectados a DB, insignias y certificados por módulo).
-- `VIPLiveRoom.tsx` (flujo completo: countdown → intro cinemática → WebRTC <1s + chat real).
-- `AdminLiveManager.tsx` (CRUD completo con schema real, drag-drop imagen, timezone Colombia, guía OBS + WebRTC).
+- `VIPLiveRoom.tsx` (flujo completo: countdown → intro cinemática → reproductor HLS + chat real).
+- `AdminLiveManager.tsx` (CRUD completo con schema real, drag-drop imagen, timezone Colombia, guía OBS).
 - `Plans.tsx` (página pública `/planes` completa con FAQ interactivo y tabla comparativa).
 - `HistoryPage.tsx` (página `/historia` con video Cloudflare Stream embebido y copia profesional).
 - `TermsPage.tsx` y `PrivacyPage.tsx` (páginas legales profesionales con contactos formales).
@@ -175,8 +177,8 @@ El selector de apariencia está publicado: `APPEARANCE_SELECTOR_ENABLED = true` 
 
 **✅ Fase 4 — Polish DECENT pages (Completada salvo "está escribiendo")**
 - ✅ `StudentDashboard.tsx`: Rediseño UX mobile-first, sticky nav, drill-down (grid -> player), `AnimatePresence` en tabs, Skeletons implementados, global toaster. Integrada pestaña de Comunidad VIP.
-- ✅ `VIPLiveRoom.tsx`: flujo completo (countdown → intro cinemática → WebRTC <1s + chat real).
-- ✅ `AdminLiveManager.tsx`: CRUD completo, drag-drop imagen, timezone Colombia, guía OBS + WebRTC.
+- ✅ `VIPLiveRoom.tsx`: flujo completo (countdown → intro cinemática → reproductor HLS + chat real).
+- ✅ `AdminLiveManager.tsx`: CRUD completo, drag-drop imagen, timezone Colombia, guía OBS.
 - ✅ `LiveChat.tsx`: entrance de mensajes con AnimatePresence, input premium con focus dorado, Skeleton al cargar. Falta solo "está escribiendo".
 - ✅ `Header.tsx`: `<Sheet>` mobile funcional con user card + drill-down completo.
 - ✅ `Footer.tsx`: gradient dorado, glow radial, 4 redes, tagline cinemático.

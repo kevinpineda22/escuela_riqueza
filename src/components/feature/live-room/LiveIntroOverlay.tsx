@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { usePrefersReducedMotion } from "@/hooks/useMediaQuery";
+import { usePreferencesStore } from "@/stores/preferences.store";
 import { LIVE_LOGO_URL } from "./constants";
 import type { LiveStatus } from "@/lib/api/stream/lives";
 
@@ -8,21 +10,30 @@ interface LiveIntroOverlayProps {
   status: LiveStatus;
 }
 
-/** Intro cinemática de 3,5 s cuando la sala pasa a en vivo (sala VIP). */
+// F14: era de 3,5 s y no se podía saltar; tapaba video y chat en el momento
+// en que empieza la clase.
+const INTRO_MS = 2500;
+
+/** Intro cinemática breve cuando la sala pasa a en vivo (sala VIP). Se puede saltar. */
 export function LiveIntroOverlay({ liveId, status }: LiveIntroOverlayProps) {
   const [showIntro, setShowIntro] = useState(false);
   const [seen, setSeen] = useState<{ liveId: string; status: LiveStatus } | null>(null);
+  // Mismo criterio que MotionProvider: el SO pide menos movimiento o el alumno
+  // apagó las animaciones. En ese caso la intro no aparece.
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const animationsEnabled = usePreferencesStore((s) => s.animationsEnabled);
+  const reduceMotion = prefersReducedMotion || !animationsEnabled;
 
   // Se dispara en el render al detectar la transición a "live" (o al entrar a
   // una sala que ya está en vivo), sin un efecto que encadene otro render.
   if (seen?.liveId !== liveId || seen.status !== status) {
     setSeen({ liveId, status });
-    if (status === "live") setShowIntro(true);
+    if (status === "live" && !reduceMotion) setShowIntro(true);
   }
 
   useEffect(() => {
     if (!showIntro) return;
-    const t = setTimeout(() => setShowIntro(false), 3500);
+    const t = setTimeout(() => setShowIntro(false), INTRO_MS);
     return () => clearTimeout(t);
   }, [showIntro]);
 
@@ -33,8 +44,18 @@ export function LiveIntroOverlay({ liveId, status }: LiveIntroOverlayProps) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center overflow-hidden"
+          onClick={() => setShowIntro(false)}
+          className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center overflow-hidden cursor-pointer"
         >
+          <button
+            type="button"
+            onClick={() => setShowIntro(false)}
+            // Sin autoFocus: la intro aparece cuando la sala pasa a en vivo, y
+            // el alumno puede estar escribiendo en el chat.
+            className="absolute bottom-8 right-8 z-20 px-4 py-2 min-h-11 rounded-full bg-ink/10 hover:bg-ink/20 text-fg-80 text-sm font-bold transition-colors"
+          >
+            Saltar
+          </button>
           <motion.div
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1.1, opacity: 1 }}

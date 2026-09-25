@@ -46,11 +46,15 @@ export function LiveRoomHeader({ title, titleSuffix, subtitle, backTo, badge, vi
         <button
           onClick={() => navigate(backTo.path)}
           aria-label={backTo.label}
-          className="p-2 sm:p-2.5 bg-black/50 backdrop-blur-md border border-line-subtle rounded-xl sm:rounded-2xl text-fg-80 hover:text-foreground-strong hover:bg-black/70 transition-colors shrink-0"
+          className={cn(
+            "flex items-center justify-center bg-black/50 backdrop-blur-md border border-line-subtle text-fg-80 hover:text-foreground-strong hover:bg-black/70 transition-colors shrink-0",
+            // En la barra del celular, objetivo táctil de 44 px (F13).
+            variant === "bar" ? "w-11 h-11 rounded-xl" : "p-2 sm:p-2.5 rounded-xl sm:rounded-2xl"
+          )}
         >
           <ArrowLeft size={18} />
         </button>
-        {!isCompact && (
+        {variant === "overlay" && (
           <div className="p-2 sm:p-2.5 bg-black/40 backdrop-blur-md border border-line-subtle rounded-xl sm:rounded-2xl shrink-0">
             <img src={LIVE_LOGO_URL} alt="Logo" className="h-7 sm:h-10 object-contain" />
           </div>
@@ -58,6 +62,13 @@ export function LiveRoomHeader({ title, titleSuffix, subtitle, backTo, badge, vi
         {isCompact ? (
           // El título no entra en compacto: queda disponible para lectores.
           <h1 className="sr-only">{title}</h1>
+        ) : variant === "bar" ? (
+          // F13: en celular el título estaba oculto y el alumno no veía qué
+          // clase miraba. Ocupa el lugar del logo, en una línea.
+          <h1 className="min-w-0 truncate text-sm font-bold leading-tight text-foreground-strong">
+            {title}
+            {titleSuffix && <> <span className="text-accent">{titleSuffix}</span></>}
+          </h1>
         ) : (
           <div className="hidden md:block min-w-0">
             <h1 className="font-extrabold text-base lg:text-xl leading-tight text-foreground-strong tracking-tight drop-shadow-2xl truncate">

@@ -23,7 +23,11 @@ export function useLivePlayback() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
   const [qualityLevels, setQualityLevels] = useState<QualityLevel[]>([]);
+  // F08: la PREFERENCIA del alumno (-1 = Auto) y la calidad que el player usa
+  // ahora van separadas. Antes `LEVEL_SWITCHED` pisaba la preferencia y, con
+  // Auto, el selector mostraba "720p" como si el alumno la hubiera elegido.
   const [currentQualityLevel, setCurrentQualityLevel] = useState(-1);
+  const [activeQualityLevel, setActiveQualityLevel] = useState(-1);
   // H8: sin reintentos automáticos disponibles — la UI muestra error + botón
   // manual. `playerKey` fuerza el remount (nuevo `Hls`, contador en 0).
   const [playerError, setPlayerError] = useState(false);
@@ -70,6 +74,9 @@ export function useLivePlayback() {
   const retryPlayer = () => {
     setPlayerError(false);
     setPlayerKey((k) => k + 1);
+    // El player nuevo arranca en automática: la preferencia vuelve a Auto.
+    setCurrentQualityLevel(-1);
+    setActiveQualityLevel(-1);
   };
 
   const togglePlay = () => {
@@ -118,6 +125,7 @@ export function useLivePlayback() {
     isBuffering,
     qualityLevels,
     currentQualityLevel,
+    activeQualityLevel,
     audioPromptDismissed,
     audioRetryHint,
     playerError,
@@ -135,7 +143,7 @@ export function useLivePlayback() {
       onPlaying: () => { setIsBuffering(false); setIsPlaying(true); },
       onLevelsChange: (levels: QualityLevel[], current: number) => {
         setQualityLevels(levels);
-        setCurrentQualityLevel(current);
+        setActiveQualityLevel(current);
       },
       onFatalError: () => setPlayerError(true),
     },

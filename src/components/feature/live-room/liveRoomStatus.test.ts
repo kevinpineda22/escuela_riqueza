@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getLiveRoomStatus } from "./liveRoomStatus";
+import { getLiveRoomStatus, isSameLive } from "./liveRoomStatus";
 import type { LiveEvent } from "@/lib/api/stream/lives";
 
 const liveWith = (fields: Partial<LiveEvent>) => ({ status: "scheduled", is_paused: false, ...fields }) as LiveEvent;
@@ -24,5 +24,20 @@ describe("getLiveRoomStatus", () => {
     const status = getLiveRoomStatus(liveWith({ status: "ended" }), true);
     expect(status.isEnded).toBe(true);
     expect(status.showPlayer).toBe(false);
+  });
+});
+
+describe("isSameLive (F38)", () => {
+  it("misma fila con otro objeto: igual (no hace falta re-renderizar)", () => {
+    expect(isSameLive(liveWith({ id: "a", title: "x" }), liveWith({ id: "a", title: "x" }))).toBe(true);
+  });
+
+  it("un campo distinto: distinta", () => {
+    expect(isSameLive(liveWith({ id: "a", is_paused: false }), liveWith({ id: "a", is_paused: true }))).toBe(false);
+  });
+
+  it("con null de un lado: distinta; los dos null: igual", () => {
+    expect(isSameLive(null, liveWith({}))).toBe(false);
+    expect(isSameLive(null, null)).toBe(true);
   });
 });
