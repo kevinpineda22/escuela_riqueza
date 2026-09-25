@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Radio, Image as ImageIcon, Settings2, Save, Plus, Trash2, PlayCircle, StopCircle, Calendar, Clock, Monitor, Copy, Upload, Download, Video, Info, Archive, Pencil, Check, X, Link2 } from "lucide-react";
+import { Radio, Image as ImageIcon, Settings2, Save, Plus, Trash2, PlayCircle, PauseCircle, StopCircle, Calendar, Clock, Monitor, Copy, Upload, Download, Video, Info, Archive, Pencil, Check, X, Link2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fetchLives, fetchEndedLives, fetchRecording, createLive, updateLive, deleteLive, setActiveLive as apiSetActiveLive, deactivateAllLives, checkLiveInputStatus, archiveRecording, fetchRecordingUrl, setLivePublic, setLiveReplayPublic, buildPublicLiveUrl, type LiveEvent, type StreamRecording } from "@/lib/api/stream/lives";
 import { supabase } from "@/lib/supabase";
@@ -28,6 +28,22 @@ function isoToLocalDatetime(iso: string | null | undefined): string {
  * la duración máxima). Queda en Stream, reproducible, y no tiene sentido reintentar.
  * Es la marca que deja el Worker: `archived_at` cargado con `recording_storage` en 'stream'.
  */
+/**
+ * Copia y confirma SOLO si el portapapeles aceptó (F30). `writeText` es una
+ * promesa que puede rechazarse (sin permiso, contexto no seguro) y antes se
+ * mostraba "copiado" igual.
+ */
+async function copyText(text: string, label: string): Promise<void> {
+  try {
+    if (!navigator.clipboard) throw new Error("Portapapeles no disponible");
+    await navigator.clipboard.writeText(text);
+    toast.success(`${label} copiado`);
+  } catch (err) {
+    console.error("[AdminLiveManager] no se pudo copiar:", err);
+    toast.error(`No se pudo copiar (${label}). Selecciona el texto y cópialo a mano.`);
+  }
+}
+
 function isKeptInStream(live: LiveEvent): boolean {
   return live.recording_storage === "stream" && !!live.archived_at && !!live.recording_stream_uid;
 }
@@ -102,8 +118,7 @@ function PublicLinkControl({
             <button
               onClick={e => {
                 e.stopPropagation();
-                navigator.clipboard.writeText(buildPublicLiveUrl(live.share_token!));
-                toast.success("Link copiado");
+                void copyText(buildPublicLiveUrl(live.share_token!), "Link");
               }}
               className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-brand/15 text-accent border border-brand/30 hover:bg-brand/25 transition-colors"
             >
@@ -542,6 +557,36 @@ const AdminLiveManager = () => {
     }
   };
 
+  // Finalizar: disponible en vivo y en pausa (F29). Los alumnos pasan a ver
+  // "Transmisión finalizada" (F33); OBS no se corta desde acá.
+  const handleFinalize = async () => {
+    if (!activeLive) return;
+    if (!window.confirm(
+      "¿Finalizar la clase?\n\nLos alumnos verán «Transmisión finalizada» y la sala pasa a Finalizados. " +
+      "OBS sigue emitiendo hasta que lo detengas."
+    )) return;
+    try {
+      const recordingUid = activeLive.stream_live_input_id
+        ? (await fetchRecording(activeLive.stream_live_input_id, { startsAt: activeLive.starts_at })).recording_uid
+        : null;
+      const updated = await updateLive(activeLive.id, { status: "ended", recording_stream_uid: recordingUid || formData.recording_stream_uid });
+      setLives(prev => prev.map(l => l.id === updated.id ? updated : l).filter(l => l.status !== "ended"));
+      setActiveLive(null);
+      setFormData({ title: "", description: "", stream_live_input_id: PRESET_INPUT_IDS[0]?.value || "", recording_stream_uid: "", starts_at: "", background_image_url: "", allowed_plans: ["vip"], status: "scheduled", required_plan: "vip", duration_minutes: null, is_active: false });
+      const ended = await fetchEndedLives();
+      setEndedLives(ended);
+      setActiveTab("ended");
+      if (recordingUid) {
+        toast.success("Sala finalizada y grabación vinculada automáticamente");
+      } else {
+        toast.success("Sala finalizada. Usa 'Obtener grabación' en el editor si la grabación no se vinculó automáticamente.");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("No se pudo finalizar la sala. Revisa la conexión e inténtalo de nuevo.");
+    }
+  };
+
   const handlePauseResume = async (pause: boolean) => {
     if (!activeLive) return;
     try {
@@ -620,8 +665,7 @@ const AdminLiveManager = () => {
   };
 
   const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} copiado`);
+    void copyText(text, label);
   };
 
   if (loading) return (
@@ -955,7 +999,7 @@ const AdminLiveManager = () => {
                   {isLive
                     ? "La transmisión está activa. Los usuarios VIP pueden ver el evento en vivo."
                     : formData.is_paused
-                    ? "La transmisión está detenida temporalmente. Los usuarios verán un mensaje de pausa."
+                    ? "La sala está en pausa: los alumnos ven un aviso de pausa. OBS sigue emitiendo; la pausa es solo de la sala."
                     : "Activa la sala para que los usuarios vean la transmisión."}
                 </p>
               {formData.starts_at && !isLive && (
@@ -964,41 +1008,29 @@ const AdminLiveManager = () => {
                 </p>
               )}
             </div>
-            {isLive ? (
+            {/* F29: "Detener" pausaba la sala (no OBS) y compartía ícono con
+                Finalizar; desde la pausa no se podía finalizar. Ahora cada
+                acción dice qué hace y Finalizar está en vivo y en pausa. */}
+            {isLive || formData.is_paused ? (
               <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                <button onClick={() => handlePauseResume(true)}
-                  className="flex-1 sm:flex-none bg-yellow-600 hover:bg-yellow-700 text-white font-bold px-4 sm:px-6 py-3 rounded-xl flex items-center justify-center gap-2 whitespace-nowrap transition-colors">
-                  <StopCircle size={20} /> Detener
-                </button>
-                <button onClick={async () => {
-                  if (!window.confirm("¿Finalizar esta sala? Pasara a estado 'ended' y no aparecerá más como próxima sala.")) return;
-                  try {
-                    const recordingUid = activeLive!.stream_live_input_id
-                      ? (await fetchRecording(activeLive!.stream_live_input_id, { startsAt: activeLive!.starts_at })).recording_uid
-                      : null;
-                    const updated = await updateLive(activeLive!.id, { status: "ended", recording_stream_uid: recordingUid || formData.recording_stream_uid });
-                    setLives(prev => prev.map(l => l.id === updated.id ? updated : l).filter(l => l.status !== "ended"));
-                    setActiveLive(null);
-                    setFormData({ title: "", description: "", stream_live_input_id: PRESET_INPUT_IDS[0]?.value || "", recording_stream_uid: "", starts_at: "", background_image_url: "", allowed_plans: ["vip"], status: "scheduled", required_plan: "vip", duration_minutes: null, is_active: false });
-                    const ended = await fetchEndedLives();
-                    setEndedLives(ended);
-                    setActiveTab("ended");
-                    if (recordingUid) {
-                      toast.success("Sala finalizada y grabación vinculada automáticamente");
-                    } else {
-                      toast.success("Sala finalizada. Usa 'Obtener grabación' en el editor si la grabación no se vinculó automáticamente.");
-                    }
-                  } catch (err) { console.error(err); toast.error("Error"); }
-                }}
+                {isLive ? (
+                  <button onClick={() => handlePauseResume(true)}
+                    title="Los alumnos ven 'Transmisión en pausa'. OBS sigue emitiendo."
+                    className="flex-1 sm:flex-none bg-yellow-600 hover:bg-yellow-700 text-white font-bold px-4 sm:px-6 py-3 rounded-xl flex items-center justify-center gap-2 whitespace-nowrap transition-colors">
+                    <PauseCircle size={20} /> Pausar
+                  </button>
+                ) : (
+                  <button onClick={() => handlePauseResume(false)}
+                    className="flex-1 sm:flex-none bg-yellow-600 hover:bg-yellow-700 text-white font-bold px-4 sm:px-6 py-3 rounded-xl flex items-center justify-center gap-2 whitespace-nowrap shadow-lg shadow-yellow-900/50 transition-colors">
+                    <PlayCircle size={20} /> Reanudar
+                  </button>
+                )}
+                <button onClick={handleFinalize}
+                  title="Cierra la clase para los alumnos y la pasa a Finalizados."
                   className="flex-1 sm:flex-none bg-red-800/50 hover:bg-red-800 text-danger light:bg-red-700 light:hover:bg-red-800 light:text-white font-bold px-4 sm:px-6 py-3 rounded-xl flex items-center justify-center gap-2 whitespace-nowrap transition-colors border border-red-800/30">
-                  <StopCircle size={20} /> Finalizar
+                  <StopCircle size={20} /> Finalizar clase
                 </button>
               </div>
-            ) : formData.is_paused ? (
-              <button onClick={() => handlePauseResume(false)}
-                className="w-full sm:w-auto bg-yellow-600 hover:bg-yellow-700 text-white font-bold px-6 py-3 rounded-xl flex items-center justify-center gap-2 whitespace-nowrap shadow-lg shadow-yellow-900/50 transition-colors">
-                <PlayCircle size={20} /> Reanudar
-              </button>
             ) : (
               <button onClick={() => handleToggleLive(true)}
                 className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white font-bold px-4 sm:px-6 py-3 rounded-xl flex items-center justify-center gap-2 whitespace-nowrap shadow-lg shadow-red-900/50 transition-colors">

@@ -4,6 +4,7 @@ import { Radio } from "lucide-react";
 import LiveChat from "@/components/feature/LiveChat";
 import PublicLiveChat from "@/components/feature/PublicLiveChat";
 import { LiveRoom } from "@/components/feature/live-room/LiveRoom";
+import { isSameLive } from "@/components/feature/live-room/liveRoomStatus";
 import { LiveRoomLoading } from "@/components/feature/live-room/LiveRoomLoading";
 import { LiveReplay } from "@/components/feature/live-room/LiveReplay";
 import { LiveReplayPaywall } from "@/components/feature/live-room/LiveReplayPaywall";
@@ -107,7 +108,8 @@ const PublicLiveRoom = () => {
         } else {
           consecutiveMisses = 0;
           setNotFound(false);
-          setLive(result);
+          // F38: misma fila = misma referencia; la sala no se re-renderiza cada 3 s.
+          setLive((prev) => (isSameLive(prev, result) ? prev : result));
           setLoading(false);
         }
       } catch (err) {
@@ -173,6 +175,8 @@ const PublicLiveRoom = () => {
 
   return (
     <LiveRoom
+      // F17: otra sala = estado nuevo (audio, calidad, no leídos, player).
+      key={live.id}
       live={live}
       currentUser={sessionUser}
       backTo={{ path: "/", label: "Volver al inicio" }}

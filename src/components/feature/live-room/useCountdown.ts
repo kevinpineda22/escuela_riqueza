@@ -16,7 +16,7 @@ function timeLeftUntil(targetMs: number): TimeLeft {
 }
 
 /** Cuenta regresiva hasta `targetMs`, actualizada cada segundo. */
-export function useCountdown(targetMs: number): TimeLeft {
+export function useCountdown(targetMs: number): TimeLeft & { isPast: boolean } {
   const [timeLeft, setTimeLeft] = useState(() => timeLeftUntil(targetMs));
 
   useEffect(() => {
@@ -24,5 +24,8 @@ export function useCountdown(targetMs: number): TimeLeft {
     return () => clearInterval(timer);
   }, [targetMs]);
 
-  return timeLeft;
+  // Llegó la hora: todo en cero. F35: antes el contador quedaba clavado en
+  // 00:00:00 sin decir nada mientras se esperaba la señal.
+  const isPast = targetMs > 0 && timeLeft.hours === 0 && timeLeft.minutes === 0 && timeLeft.seconds === 0;
+  return { ...timeLeft, isPast };
 }

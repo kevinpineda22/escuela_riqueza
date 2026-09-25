@@ -72,6 +72,12 @@ describe("LiveRoom", () => {
     expect(screen.queryByTestId("hls-player")).not.toBeInTheDocument();
   });
 
+  it("pasada la hora sin señal, avisa que comienza en instantes en vez de un 00:00:00 (F35)", () => {
+    renderRoom({ live: { ...baseLive, starts_at: "2020-01-01T00:00:00Z" } });
+    expect(screen.getByText("Comenzará en instantes")).toBeInTheDocument();
+    expect(screen.queryByText("Segundos")).not.toBeInTheDocument();
+  });
+
   it("programada con señal de OBS: monta el player y avisa que está en espera", () => {
     renderRoom({ signalConnected: true });
     expect(screen.getByTestId("hls-player")).toBeInTheDocument();
@@ -119,6 +125,17 @@ describe("LiveRoom", () => {
     fireEvent.click(screen.getByRole("button", { name: "Mostrar chat" }));
     // El badge sale con animación: se desmonta al terminar el fade.
     await waitFor(() => expect(screen.queryByText("1")).not.toBeInTheDocument());
+  });
+
+  it("en celular el título de la clase se ve en la barra, en lugar del logo (F13)", () => {
+    (useIsDesktop as ReturnType<typeof vi.fn>).mockReturnValue(false);
+    renderRoom({ live: { ...baseLive, status: "live" } });
+
+    const title = screen.getByRole("heading", { level: 1, name: "Clase de inversión" });
+    // Antes el h1 existía pero dentro de un `hidden md:block`: invisible en celular.
+    // jsdom no aplica Tailwind, así que se verifica que ningún ancestro lo oculte.
+    expect(title.closest(".hidden")).toBeNull();
+    expect(screen.queryByAltText("Logo")).not.toBeInTheDocument();
   });
 
   it("en celular no hay toggle: el chat queda siempre debajo del video", () => {

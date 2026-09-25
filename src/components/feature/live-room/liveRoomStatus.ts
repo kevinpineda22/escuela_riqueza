@@ -9,6 +9,17 @@ export interface LiveRoomStatus {
 }
 
 /**
+ * El polling trae un objeto nuevo cada 3 s aunque nada haya cambiado, y la
+ * sala entera se re-renderizaba (F38). Comparar el contenido permite
+ * conservar la misma referencia cuando es la misma fila.
+ */
+export function isSameLive(a: LiveEvent | null, b: LiveEvent | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/**
  * Estado visible de la sala, común a la sala VIP y a la pública.
  * `signalConnected` es la señal de OBS que consulta la sala VIP (Cloudflare);
  * la pública no la tiene y pasa `false`.
