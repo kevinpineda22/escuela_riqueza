@@ -8,7 +8,7 @@ export interface QualityLevel {
   label: string;
 }
 
-export type LiveLatencyMode = "smooth" | "low";
+export type LiveLatencyMode = "smooth" | "low" | "dvr";
 
 export interface LiveHLSPlayerHandle {
   video: HTMLVideoElement | null;
@@ -21,6 +21,15 @@ export interface LiveHLSPlayerHandle {
   // del evento nativo 'pause' (una pausa por backgrounding de la pestaña,
   // interrupción del SO, o `ended` dispara 'pause' igual que un click).
   setUserPaused: (paused: boolean) => void;
+  // Posición del filo LL-HLS que hls.js calcula a partir de PART-HOLD-BACK
+  // (modo "low"). `null` si no hay instancia de hls.js (path nativo Safari)
+  // o si el manifest todavía no expone esa posición.
+  getLiveSyncPosition: () => number | null;
+  // Ventana seekable actual (modo "dvr" — crece con la transmisión). `null`
+  // si no hay datos seekable todavía.
+  getSeekableRange: () => { start: number; end: number } | null;
+  // Busca una posición dentro de la ventana seekable, clampada a sus límites.
+  seekTo: (position: number) => void;
 }
 
 interface LiveHLSPlayerProps {
@@ -30,13 +39,21 @@ interface LiveHLSPlayerProps {
   autoPlay?: boolean;
   // "smooth" (default): perfil tipo Twitch/YouTube clásico — ~8s atrás del
   // edge con buffer 20s, fluidez asegurada. "low": ~3s del edge con buffer 10s,
-  // baja latencia pero requiere red estable.
+  // baja latencia pero requiere red estable. "dvr": ventana DVR completa de
+  // Cloudflare (`?dvrEnabled=true`) — misma config hls.js que "smooth", sin
+  // catch-up de latencia, pero con timeline scrubbable y resume de posición.
   latencyMode?: LiveLatencyMode;
   // Pausa de sala (admin marcó `is_paused`). El player se mantiene montado
   // pero pausa el <video>; al reanudar solo retoma si el usuario no había
   // pausado manualmente antes.
   roomPaused?: boolean;
   className?: string;
+  // Clave de resume (modo "dvr" solamente) — típicamente el id de la fila
+  // `lives`. Persiste la posición de reproducción en localStorage bajo
+  // `live-position:<resumeKey>` y la retoma al volver a entrar.
+  resumeKey?: string;
+  // Se llama cuando el player retomó una posición guardada (modo "dvr").
+  onResumed?: (position: number) => void;
   onPlay?: () => void;
   onPause?: () => void;
   onWaiting?: () => void;
@@ -58,6 +75,8 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       latencyMode = "smooth",
       roomPaused = false,
       className,
+      resumeKey,
+      onResumed,
       onPlay,
       onPause,
       onWaiting,
@@ -80,6 +99,13 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
     // autoplay tras reconexión y el resume tras una pausa de sala.
     const userPausedRef = useRef(false);
     const [levels, setLevels] = useState<QualityLevel[]>([]);
+    // Refs para leer siempre el valor más reciente de `resumeKey`/`onResumed`
+    // desde dentro del efecto principal sin tener que agregarlos a sus deps
+    // (evitaría recrear la instancia de Hls innecesariamente).
+    const resumeKeyRef = useRef(resumeKey);
+    resumeKeyRef.current = resumeKey;
+    const onResumedRef = useRef(onResumed);
+    onResumedRef.current = onResumed;
 
     useImperativeHandle(ref, () => ({
       video: videoRef.current,
@@ -133,26 +159,91 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       setUserPaused: (paused: boolean) => {
         userPausedRef.current = paused;
       },
+      getLiveSyncPosition: () => hlsRef.current?.liveSyncPosition ?? null,
+      getSeekableRange: () => {
+        const video = videoRef.current;
+        if (!video || !video.seekable.length) return null;
+        return { start: video.seekable.start(0), end: video.seekable.end(video.seekable.length - 1) };
+      },
+      seekTo: (position: number) => {
+        const video = videoRef.current;
+        if (!video || !video.seekable.length) return;
+        const start = video.seekable.start(0);
+        const end = video.seekable.end(video.seekable.length - 1);
+        const clamped = Math.min(Math.max(position, start), end);
+        try { video.currentTime = clamped; } catch { /* seekable todavía no listo */ }
+      },
     }));
 
     useEffect(() => {
       const video = videoRef.current;
       if (!video || !liveInputId || !customerCode) return;
 
-      // Dos perfiles. Ninguno usa LL-HLS: los parts de Cloudflare Stream son
-      // 5xx intermitentes y reintroducen los latigazos. Sin LL-HLS, el piso
-      // de latencia con CF es ~targetduration (≈3s) — `liveSyncDuration:2`
-      // se sienta justo ahí.
-      //
-      // - "smooth" (default): ~8s del edge, buffer 20s. Tipo Twitch clásico.
-      // - "low": ~2s del edge. La latencia la fija liveSyncDuration; los
-      //   stalls dependen del buffer + ABR + catchup. Para minimizar latigazos
-      //   SIN tocar el delay: subimos maxBufferLength (más colchón forward),
-      //   suavizamos el ABR (EWMA largo + factor conservador) y bajamos el
-      //   catchup a 1.04 (menos audible que 1.05).
-      const manifestUrl = `https://customer-${customerCode}.cloudflarestream.com/${liveInputId}/manifest/video.m3u8`;
-
+      // Dos perfiles:
+      // - "smooth" (default): HLS estándar (sin LL-HLS), ~8s del edge, buffer
+      //   20s. Tipo Twitch/YouTube clásico. Es el fallback si LL-HLS da
+      //   problemas — se mantiene intacto.
+      // - "low": LL-HLS real vía el flag `?protocol=llhls` de Cloudflare
+      //   Stream (beta). El manifest expone PART-TARGET/PART-HOLD-BACK y
+      //   partes de 0.5s; con `lowLatencyMode: true` hls.js deriva su propio
+      //   target de latencia de esos tags — por eso NO fijamos
+      //   liveSyncDuration/liveMaxLatencyDuration en este modo (fijarlos
+      //   pisa el cálculo automático y anula la ganancia de LL-HLS).
+      //   Esperado: ~2-4s del edge. Para minimizar latigazos sin tocar el
+      //   delay: subimos maxBufferLength (más colchón forward), suavizamos
+      //   el ABR (EWMA largo + factor conservador) y el catchup permite
+      //   hasta 1.1x (los "parts" LL-HLS son más chicos, hay más margen que
+      //   con segmentos enteros de 2s).
       const lowLatency = latencyMode === "low";
+      // "dvr": DVR de Cloudflare Stream vía `?dvrEnabled=true`. Medido en vivo
+      // real: HLS v8, latencia p50 14.6s, ventana seekable CRECE con la
+      // transmisión (88s → 144s en la prueba), 0 stalls, misma config hls.js
+      // que "smooth" (lowLatency queda en false). `?protocol=llhls&dvrEnabled=true`
+      // da HTTP 500 — DVR y LL-HLS son mutuamente excluyentes, nunca combinar.
+      const isDvr = latencyMode === "dvr";
+      const manifestUrl = lowLatency
+        ? `https://customer-${customerCode}.cloudflarestream.com/${liveInputId}/manifest/video.m3u8?protocol=llhls`
+        : isDvr
+        ? `https://customer-${customerCode}.cloudflarestream.com/${liveInputId}/manifest/video.m3u8?dvrEnabled=true`
+        : `https://customer-${customerCode}.cloudflarestream.com/${liveInputId}/manifest/video.m3u8`;
+
+      // Modo "dvr": persiste `video.currentTime` en localStorage cada 5s (y al
+      // pausar) para retomar donde quedó el alumno. Wrapped en try/catch —
+      // localStorage puede tirar en modo privado estricto de Safari.
+      const getPositionStorageKey = () => {
+        const key = resumeKeyRef.current;
+        return key ? `live-position:${key}` : null;
+      };
+      // Solo tiene sentido "retomar" si el alumno se había quedado ATRÁS a
+      // propósito. Guardar siempre (incluso mirando el vivo al filo) hacía que
+      // al volver más tarde —con el filo ya avanzado— la posición guardada
+      // cayera dentro de la ventana y se restaurara sola, mostrando
+      // "Retomamos donde lo dejaste" a alguien que nunca pidió retomar nada y
+      // dejándolo atrasado sin quererlo.
+      const LIVE_EDGE_THRESHOLD_S = 30;
+      const savePosition = () => {
+        if (!isDvr) return;
+        const key = getPositionStorageKey();
+        if (!key) return;
+        try {
+          const seekable = video.seekable;
+          const edge = seekable.length ? seekable.end(seekable.length - 1) : NaN;
+          const behind = Number.isFinite(edge) ? edge - video.currentTime : 0;
+          if (behind < LIVE_EDGE_THRESHOLD_S) {
+            // Estaba viendo en vivo: no hay nada que retomar la próxima vez.
+            localStorage.removeItem(key);
+            return;
+          }
+          localStorage.setItem(key, JSON.stringify({ position: video.currentTime, savedAt: Date.now() }));
+        } catch { /* localStorage no disponible (modo privado) */ }
+      };
+      let positionSaveInterval: number | null = null;
+      if (isDvr) {
+        positionSaveInterval = window.setInterval(() => {
+          if (!video.paused) savePosition();
+        }, 5000);
+        video.addEventListener("pause", savePosition);
+      }
 
       let hls: Hls | null = null;
       let mediaErrorRetries = 0;
@@ -162,29 +253,45 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       let reloadCooldownTimeout: number | null = null;
       let handlePlaybackRecovered: (() => void) | null = null;
       let clearStableTimer: (() => void) | null = null;
+      let llCatchUpInterval: number | null = null;
+      let handleLLCatchUpOnPlay: (() => void) | null = null;
 
       if (Hls.isSupported()) {
         hls = new Hls({
           enableWorker: true,
-          lowLatencyMode: false,
+          lowLatencyMode: lowLatency,
           backBufferLength: lowLatency ? 6 : 10,
           maxBufferLength: lowLatency ? 12 : 20,
           maxMaxBufferLength: lowLatency ? 24 : 40,
-          // Piso físico con HLS clásico + Cloudflare: targetduration ≈3s. Si te
-          // plantás MÁS cerca del edge, cualquier chunk lento te causa stall.
-          // 3s es el punto donde la matemática colapsa: margen suficiente para
-          // absorber jitter sin perder fluidez. Equivale a Twitch normal-latency.
-          liveSyncDuration: lowLatency ? 3 : 8,
-          // 2x el liveSyncDuration. Permite catchup suave; si excede, seek al edge.
-          liveMaxLatencyDuration: lowLatency ? 8 : 20,
+          // Solo para "smooth".
+          // - En "low" NO se fijan: hls.js los deriva de PART-HOLD-BACK del
+          //   manifest LL-HLS; fijarlos acá pisa ese cálculo y anula LL-HLS.
+          // - En "dvr" NO se fijan porque `liveMaxLatencyDuration` hace que
+          //   hls.js considere un error estar a más de N segundos del filo y
+          //   devuelva al usuario al vivo de un salto. En Clase completa el
+          //   espectador tiene que poder quedarse donde quiera de la ventana.
+          ...(lowLatency || isDvr
+            ? {}
+            : {
+                liveSyncDuration: 8,
+                // 2.5x el liveSyncDuration. Permite catchup suave; si excede, seek al edge.
+                liveMaxLatencyDuration: 20,
+              }),
           liveDurationInfinity: true,
           startLevel: -1,
-          // Catchup 5% — recupera el filo si se atrasa, inaudible al oído humano.
-          maxLiveSyncPlaybackRate: lowLatency ? 1.05 : 1.0,
+          // Catchup: 10% en low (partes LL-HLS más chicas dan más margen sin
+          // que se note), 0% (sin catchup) en smooth como antes.
+          maxLiveSyncPlaybackRate: lowLatency ? 1.1 : 1.0,
+          // NO bajar maxStarvationDelay/maxLoadingDelay en "dvr": se probó en
+          // vivo (2026-09-23) y el ABR sí caía a 240p tras cada seek, pero el
+          // tiempo hasta ver imagen no mejoró (3.5s vs 3.7s, dentro del ruido).
+          // El costo del seek está en el lado de Cloudflare (playlist DVR de
+          // ~57KB/2100 segmentos a los 70 min, que crece con la clase), no en
+          // el tamaño del fragmento. Era perder calidad sin ganar velocidad.
           abrBandWidthFactor: lowLatency ? 0.7 : 0.8,
           abrBandWidthUpFactor: lowLatency ? 0.5 : 0.7,
-          abrEwmaFastLive: lowLatency ? 3.0 : 3.0,
-          abrEwmaSlowLive: lowLatency ? 9.0 : 9.0,
+          abrEwmaFastLive: 3.0,
+          abrEwmaSlowLive: 9.0,
           fragLoadingMaxRetry: 6,
           manifestLoadingMaxRetry: 4,
           levelLoadingMaxRetry: 4,
@@ -206,6 +313,88 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
             label: lvl.height ? `${lvl.height}p` : `${Math.round((lvl.bitrate || 0) / 1000)} kbps`,
           }));
 
+        // LL-HLS catch-up (modo "low" solamente). Medido en vivo real: hls.js
+        // arranca con `targetLatency` correcto (≈1.5s, del PART-HOLD-BACK) pero
+        // el reproductor entra ~7-8s atrás del edge y `maxLatencyDuration` no
+        // está seteado (a propósito, ver arriba) — no hay seek forzado propio
+        // de hls.js. Sin este catch-up manual, el modo "low" queda pegado al
+        // atraso inicial y nunca converge a la latencia real de LL-HLS.
+        // Un seek único a `liveSyncPosition` en cuanto detectamos el atraso
+        // resuelve esto: se probó en vivo y estabiliza en ~2.3s sin stalls.
+        const LL_LATENCY_MARGIN = 3;
+        const LL_CATCHUP_COOLDOWN_MS = 30_000;
+        const LL_CHECK_INTERVAL_MS = 10_000;
+        let lastLLSeekAt = -Infinity;
+        let pendingLLCatchUpCheck = false;
+
+        const attemptLLCatchUp = (requireForwardBuffer: boolean) => {
+          if (!lowLatency || !hls) return;
+          if (userPausedRef.current || video.paused) return;
+
+          const latency = hls.latency;
+          const targetLatency = hls.targetLatency ?? 1.5;
+          const syncPosition = hls.liveSyncPosition;
+          if (!Number.isFinite(latency) || latency <= targetLatency + LL_LATENCY_MARGIN) return;
+          if (syncPosition == null || !Number.isFinite(syncPosition)) return;
+
+          if (requireForwardBuffer) {
+            const buffered = video.buffered;
+            if (!buffered.length) return;
+            const forwardBuffer = buffered.end(buffered.length - 1) - video.currentTime;
+            if (forwardBuffer < 1) return;
+          }
+
+          const now = Date.now();
+          if (now - lastLLSeekAt < LL_CATCHUP_COOLDOWN_MS) return;
+          lastLLSeekAt = now;
+
+          console.info("[LiveHLSPlayer] LL catch-up seek", { latency, targetLatency, seekTo: syncPosition });
+          try { video.currentTime = syncPosition; } catch { /* seekable todavía no listo */ }
+        };
+
+        if (lowLatency) {
+          handleLLCatchUpOnPlay = () => {
+            if (!pendingLLCatchUpCheck) return;
+            pendingLLCatchUpCheck = false;
+            attemptLLCatchUp(false);
+          };
+          video.addEventListener("playing", handleLLCatchUpOnPlay);
+          llCatchUpInterval = window.setInterval(() => attemptLLCatchUp(true), LL_CHECK_INTERVAL_MS);
+        }
+
+          // Modo "dvr": retoma la posición guardada (<12h) si cae dentro de la
+        // ventana navegable. Se intenta en MANIFEST_PARSED y de nuevo en
+        // LEVEL_UPDATED porque `video.seekable` suele estar vacío en el
+        // primero — sin el segundo intento el alumno siempre arrancaba en el
+        // filo del vivo y la posición guardada no servía de nada.
+        const tryRestoreSavedPosition = (): boolean => {
+          if (!isDvr || didSeekToLiveEdge) return false;
+          const key = getPositionStorageKey();
+          if (!key || !video.seekable.length) return false;
+          try {
+            const raw = localStorage.getItem(key);
+            if (!raw) return false;
+            const saved = JSON.parse(raw) as { position?: number; savedAt?: number };
+            const MAX_AGE_MS = 12 * 60 * 60 * 1000;
+            const isFresh =
+              Number.isFinite(saved.position) &&
+              Number.isFinite(saved.savedAt) &&
+              Date.now() - (saved.savedAt as number) < MAX_AGE_MS;
+            if (!isFresh) return false;
+            const start = video.seekable.start(0);
+            const end = video.seekable.end(video.seekable.length - 1);
+            const position = saved.position as number;
+            if (position < start || position > end - 2) return false;
+            video.currentTime = position;
+            didSeekToLiveEdge = true;
+            onResumedRef.current?.(position);
+            return true;
+          } catch {
+            // localStorage bloqueado o JSON inválido — arranca al filo como siempre.
+            return false;
+          }
+        };
+
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           // Este handler corre también tras cada recarga por recuperación
           // (H8). Si el usuario pausó a propósito, no lo reactivamos.
@@ -217,11 +406,24 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           const parsed = computeLevels(hls!);
           setLevels(parsed);
           onLevelsChange?.(parsed, hls!.currentLevel);
+
+        // Arma el catch-up de LL-HLS para el próximo 'playing': cubre tanto
+          // el montaje inicial como cualquier recarga por recuperación (H8),
+          // ya que executeReload vuelve a disparar MANIFEST_PARSED.
+          if (lowLatency) pendingLLCatchUpCheck = true;
+
+          // Modo "dvr": si hay una posición guardada fresca (<12h) y cae
+          // dentro de la ventana seekable actual, retomamos ahí en vez del
+          // filo del vivo. Si `video.seekable` todavía no tiene datos en este
+          // punto (puede pasar, MANIFEST_PARSED dispara antes de cargar
+          // fragmentos) simplemente no restauramos — el seek al filo del vivo
+          // de siempre (LEVEL_UPDATED, más abajo) sigue su curso normal.
+          if (isDvr) tryRestoreSavedPosition();
         });
 
         // Diagnóstico LL-HLS — TEMPORAL. Loggea una vez si el manifest expone los
-        // tags de Low-Latency HLS. Si no, latencia se queda en 6-10s aunque el
-        // cliente tenga lowLatencyMode: true.
+        // tags de Low-Latency HLS. Esperado "SÍ" en modo "low" (manifest con
+        // `?protocol=llhls`); "NO" en "smooth" (HLS estándar a propósito).
         let llhlsLogged = false;
         hls.on(Hls.Events.LEVEL_LOADED, (_, data) => {
           if (llhlsLogged) return;
@@ -245,12 +447,15 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           onLevelsChange?.(parsed, data.level);
         });
 
-        // Arrancá SIEMPRE en el borde en vivo, no desde el inicio del DVR. Sin esto,
+        // Arranca SIEMPRE en el borde en vivo, no desde el inicio del DVR. Sin esto,
         // tras una pausa (que remonta este player) la reproducción volvía al principio
         // de la grabación en vez de retomar el vivo. `liveSyncPosition` respeta el
         // perfil de latencia elegido (smooth ~8s / low ~2-3s del edge).
         hls.on(Hls.Events.LEVEL_UPDATED, () => {
           if (didSeekToLiveEdge || !hls) return;
+          // En "dvr" la posición guardada gana sobre el filo del vivo. Acá
+          // `video.seekable` ya tiene datos, a diferencia de MANIFEST_PARSED.
+          if (tryRestoreSavedPosition()) return;
           const edge = hls.liveSyncPosition;
           if (edge != null && Number.isFinite(edge)) {
             try { video.currentTime = edge; } catch { /* seekable todavía no listo */ }
@@ -395,6 +600,10 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       }
 
       return () => {
+        if (positionSaveInterval !== null) window.clearInterval(positionSaveInterval);
+        if (isDvr) video.removeEventListener("pause", savePosition);
+        if (llCatchUpInterval !== null) window.clearInterval(llCatchUpInterval);
+        if (handleLLCatchUpOnPlay) video.removeEventListener("playing", handleLLCatchUpOnPlay);
         if (stallTimer !== null) window.clearInterval(stallTimer);
         if (pendingReloadTimeout !== null) window.clearTimeout(pendingReloadTimeout);
         if (reloadCooldownTimeout !== null) window.clearTimeout(reloadCooldownTimeout);

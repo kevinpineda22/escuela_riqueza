@@ -28,6 +28,8 @@ interface LiveRoomProps {
   cinematicIntro?: boolean;
   /** Grabación a mostrar al finalizar; mientras se muestra no hay chat. */
   replay?: ReactNode;
+  /** Reemplaza el mensaje de sala finalizada (ej. paywall de la repetición). */
+  endedNotice?: ReactNode;
   /** `null` = sala sin chat. Recibe el callback que cuenta los no leídos. */
   renderChat: ((onIncomingMessage: (msg: ChatMessage) => void) => ReactNode) | null;
 }
@@ -46,6 +48,7 @@ export function LiveRoom({
   anonPresenceId,
   cinematicIntro = false,
   replay,
+  endedNotice,
   renderChat,
 }: LiveRoomProps) {
   const layout = getLiveRoomLayout(useIsDesktop(), useIsShortLandscape());
@@ -118,6 +121,7 @@ export function LiveRoom({
           playerRef={playerRef}
           playback={playback}
           replay={replay}
+          endedNotice={endedNotice}
           waitingLabel={branding.waitingLabel}
           waitingTitleFallback={branding.waitingTitleFallback ?? "Próximo encuentro"}
           fitToVideo={fitToVideo}

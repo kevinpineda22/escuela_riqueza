@@ -6,7 +6,9 @@ import PublicLiveChat from "@/components/feature/PublicLiveChat";
 import { LiveRoom } from "@/components/feature/live-room/LiveRoom";
 import { LiveRoomLoading } from "@/components/feature/live-room/LiveRoomLoading";
 import { LiveReplay } from "@/components/feature/live-room/LiveReplay";
-import { getPublicLive, type LiveEvent } from "@/lib/api/stream/lives";
+import { LiveReplayPaywall } from "@/components/feature/live-room/LiveReplayPaywall";
+import { getPublicLive, publicLiveHasRecording, type LiveEvent } from "@/lib/api/stream/lives";
+import { canWatchReplay } from "@/lib/plans";
 import { useAuthStore } from "@/stores/auth.store";
 
 const POLL_INTERVAL_MS = 3000;
@@ -30,9 +32,15 @@ function getOrCreateAnonId(): string {
  * es `LiveRoom`, compartida con la sala VIP. El estado se obtiene únicamente vía
  * polling de `get_public_live` — Realtime en `lives` no está garantizado para
  * clientes anónimos. Con sesión iniciada, la presencia y el chat son los de la
- * sala VIP. Finalizado el en vivo, si hay grabación se muestra el replay (sin
- * chat ni presencia); la única llamada de `/api/stream/*` para anónimos es
- * `recording-url` vía `share_token` (sin JWT).
+ * sala VIP.
+ *
+ * El EN VIVO es público para cualquiera. La REPETICIÓN no: es contenido de
+ * los planes Individual/VIP (`canWatchReplay`), salvo que el admin abra ESTA
+ * sala con `replay_is_public`. Finalizado el en vivo, si hay grabación y el
+ * visitante está habilitado se muestra el replay (sin chat ni presencia); si
+ * no, un paywall. `get_public_live` ya anula `recording_stream_uid` /
+ * `recording_r2_key` para quien no está habilitado (ver
+ * sql/migrate-public-live-replay-paid.sql).
  */
 const PublicLiveRoom = () => {
   const { token } = useParams<{ token: string }>();
@@ -42,6 +50,33 @@ const PublicLiveRoom = () => {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [anonId] = useState(getOrCreateAnonId);
+
+  const isEnded = live?.status === "ended";
+  // Distingue por qué puede ver la repetición: entitlement de plan (pide la
+  // URL con sesión) vs. sala abierta a todos (pide la URL anónima). Alguien
+  // con plan pago en una sala abierta usa la rama autenticada, la más específica.
+  const entitledByPlan = canWatchReplay(sessionUser?.plan, sessionUser?.role);
+  const canReplay = entitledByPlan || live?.replay_is_public === true;
+
+  // `get_public_live` anula las columnas de la grabación para quien no está
+  // habilitado, así que desde la fila no se distingue "sin grabación todavía"
+  // de "grabación bloqueada por plan". Para eso está `publicLiveHasRecording`
+  // (boolean puro, no revela el id) — ver sql/migrate-public-live-has-recording.sql.
+  // La respuesta se guarda con su token: si cambia la condición, se ignora.
+  const needsRecordingCheck = isEnded && !canReplay;
+  const [recordingCheck, setRecordingCheck] = useState<{ token: string; hasRecording: boolean } | null>(null);
+  useEffect(() => {
+    if (!token || !needsRecordingCheck) return;
+    let active = true;
+    publicLiveHasRecording(token).then((hasRecording) => {
+      if (active) setRecordingCheck({ token, hasRecording });
+    });
+    return () => {
+      active = false;
+    };
+  }, [token, needsRecordingCheck]);
+  const showReplayPaywall =
+    needsRecordingCheck && recordingCheck !== null && recordingCheck.token === token && recordingCheck.hasRecording;
 
   // Fetch inicial + polling: única fuente de verdad del estado de la sala.
   useEffect(() => {
@@ -125,8 +160,8 @@ const PublicLiveRoom = () => {
 
   // Replay: prioriza R2 (igual criterio que `RecordingPlayer` del panel admin)
   // sobre Stream — si hay `recording_r2_key`, la grabación ya fue archivada.
-  const isEnded = live.status === "ended";
-  const replaySource = !isEnded
+  // Solo para quien puede verla: si no, se muestra el paywall en su lugar.
+  const replaySource = !isEnded || !canReplay
     ? null
     : live.recording_storage === "r2" && live.recording_r2_key
       ? "r2"
@@ -142,12 +177,27 @@ const PublicLiveRoom = () => {
       currentUser={sessionUser}
       backTo={{ path: "/", label: "Volver al inicio" }}
       anonPresenceId={anonId}
-      replay={replaySource ? <LiveReplay key={replaySource} live={live} token={token} source={replaySource} /> : undefined}
+      replay={
+        replaySource ? (
+          <LiveReplay
+            key={`${replaySource}-${entitledByPlan}`}
+            live={live}
+            token={token}
+            source={replaySource}
+            entitledByPlan={entitledByPlan}
+          />
+        ) : undefined
+      }
+      endedNotice={
+        showReplayPaywall ? (
+          <LiveReplayPaywall title={live.title || "Sesión de Riqueza"} loggedIn={Boolean(sessionUser)} loginPath={loginPath} />
+        ) : undefined
+      }
       // Con sesión iniciada (llegó por el link y se logueó para participar) se
       // usa el chat completo, que ya sabe escribir; sin sesión, el de solo
-      // lectura. En replay no hay chat.
+      // lectura. En replay y en el paywall de repetición no hay chat.
       renderChat={
-        replaySource
+        replaySource || showReplayPaywall
           ? null
           : (onIncomingMessage) =>
               sessionUser ? (

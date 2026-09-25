@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { setLivePublic, fetchLiveForRoom } from "./lives";
+import { setLivePublic, fetchLiveForRoom, publicLiveHasRecording, setLiveReplayPublic } from "./lives";
 import { supabase } from "@/lib/supabase";
 
 vi.mock("@/lib/supabase", () => ({
@@ -111,5 +111,76 @@ describe("fetchLiveForRoom", () => {
 
     expect(await fetchLiveForRoom(null)).toBeNull();
     expect(supabase.from).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("setLiveReplayPublic", () => {
+  const single = vi.fn();
+  const select = vi.fn(() => ({ single }));
+  const eq = vi.fn(() => ({ select }));
+  const update = vi.fn(() => ({ eq }));
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    update.mockReturnValue({ eq });
+    eq.mockReturnValue({ select });
+    select.mockReturnValue({ single });
+    (supabase.from as any).mockReturnValue({ update });
+  });
+
+  it("updates replay_is_public to true", async () => {
+    single.mockResolvedValue({ data: { id: "live-1", replay_is_public: true }, error: null });
+
+    await setLiveReplayPublic("live-1", true);
+
+    expect(supabase.from).toHaveBeenCalledWith("lives");
+    const updates: any = (update.mock.calls[0] as any[])[0];
+    expect(updates).toEqual({ replay_is_public: true });
+    expect(eq).toHaveBeenCalledWith("id", "live-1");
+  });
+
+  it("updates replay_is_public to false", async () => {
+    single.mockResolvedValue({ data: { id: "live-1", replay_is_public: false }, error: null });
+
+    await setLiveReplayPublic("live-1", false);
+
+    const updates: any = (update.mock.calls[0] as any[])[0];
+    expect(updates).toEqual({ replay_is_public: false });
+  });
+
+  it("throws when Supabase returns an error", async () => {
+    single.mockResolvedValue({ data: null, error: new Error("boom") });
+    await expect(setLiveReplayPublic("live-1", true)).rejects.toThrow();
+  });
+});
+
+describe("publicLiveHasRecording", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns true when the RPC reports a linked recording", async () => {
+    (supabase.rpc as any).mockResolvedValue({ data: true, error: null });
+
+    const result = await publicLiveHasRecording("token-1");
+
+    expect(result).toBe(true);
+    expect(supabase.rpc).toHaveBeenCalledWith("public_live_has_recording", { p_token: "token-1" });
+  });
+
+  it("returns false when the RPC reports no recording", async () => {
+    (supabase.rpc as any).mockResolvedValue({ data: false, error: null });
+
+    const result = await publicLiveHasRecording("token-1");
+
+    expect(result).toBe(false);
+  });
+
+  it("returns false (never throws) when Supabase returns an error", async () => {
+    (supabase.rpc as any).mockResolvedValue({ data: null, error: new Error("boom") });
+
+    const result = await publicLiveHasRecording("token-1");
+
+    expect(result).toBe(false);
   });
 });

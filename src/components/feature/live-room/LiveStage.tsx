@@ -17,6 +17,8 @@ interface LiveStageProps {
   playback: LivePlayback;
   /** Grabación a mostrar una vez finalizada (solo la sala pública la ofrece). */
   replay?: ReactNode;
+  /** Reemplaza el "Transmisión finalizada" (ej. el paywall de la repetición). */
+  endedNotice?: ReactNode;
   waitingLabel?: string;
   waitingTitleFallback: ReactNode;
   /** El escenario toma la proporción 16:9 del video en vez de llenar el alto disponible. */
@@ -26,7 +28,7 @@ interface LiveStageProps {
 }
 
 /** Escenario de la sala: decide qué se ve según el estado del en vivo. */
-export function LiveStage({ live, status, playerRef, playback, replay, waitingLabel, waitingTitleFallback, fitToVideo = false, compact = false }: LiveStageProps) {
+export function LiveStage({ live, status, playerRef, playback, replay, endedNotice, waitingLabel, waitingTitleFallback, fitToVideo = false, compact = false }: LiveStageProps) {
   const { isLive, isEnded, isPaused, showPlayer } = status;
   const hasStreamId = Boolean(live.stream_live_input_id);
 
@@ -52,11 +54,15 @@ export function LiveStage({ live, status, playerRef, playback, replay, waitingLa
       <AnimatePresence mode="wait">
         {showPlayer && hasStreamId ? (
           <motion.div key="player" initial={false} className="w-full h-full relative bg-black flex items-center justify-center">
-            <LivePlayerStage liveInputId={live.stream_live_input_id!} isPaused={isPaused} playerRef={playerRef} playback={playback} />
+            <LivePlayerStage liveInputId={live.stream_live_input_id!} resumeKey={live.id} isPaused={isPaused} playerRef={playerRef} playback={playback} />
           </motion.div>
         ) : isEnded && replay ? (
           <motion.div key="replay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full h-full relative bg-black flex items-center justify-center p-4 sm:p-8">
             {replay}
+          </motion.div>
+        ) : isEnded && endedNotice ? (
+          <motion.div key="ended-notice" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full h-full flex items-center justify-center bg-black/80 relative">
+            {endedNotice}
           </motion.div>
         ) : isEnded ? (
           <motion.div key="ended" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full h-full flex items-center justify-center bg-black/80 relative">

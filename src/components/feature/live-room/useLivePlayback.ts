@@ -33,17 +33,29 @@ export function useLivePlayback() {
     const video = playerRef.current?.video;
     if (!video) return;
     setAudioRetryHint(false);
+    // `muted` es prop CONTROLADA del <video> (LiveHLSPlayer). Si solo se toca
+    // `video.muted` a mano, el siguiente re-render con `isMuted` todavía en
+    // true revierte el cambio y el alumno tiene que volver a tocar el botón.
+    // Por eso el estado de React se actualiza ANTES de pedir el play.
+    setIsMuted(false);
+    video.muted = false;
+    video.volume = 1;
     try {
-      video.muted = false;
-      video.volume = 1;
       // H9: esperamos la promesa real de play() antes de ocultar el aviso —
-      // antes se ocultaba optimistamente y un rechazo (bloqueo del browser,
-      // error de media) dejaba al alumno sin sonido y sin explicación.
+      // ocultarlo optimistamente dejaba al alumno sin sonido y sin explicación
+      // cuando el navegador rechazaba la reproducción.
       await video.play();
-      setIsMuted(false);
       setAudioPromptDismissed(true);
     } catch (e) {
+      // AbortError = otro play()/pause() del player interrumpió a este (pausa
+      // de sala, catch-up de latencia, vuelta de background). El audio ya
+      // quedó activo: revertir a mudo acá era lo que obligaba a insistir.
+      if (e instanceof DOMException && e.name === "AbortError") {
+        setAudioPromptDismissed(true);
+        return;
+      }
       console.warn("[LiveRoom] No se pudo activar el audio:", e);
+      setIsMuted(true);
       video.muted = true;
       setAudioRetryHint(true);
     }

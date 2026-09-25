@@ -99,6 +99,13 @@ describe("LiveRoom", () => {
     expect(screen.queryByRole("button", { name: "Ocultar chat" })).not.toBeInTheDocument();
   });
 
+  it("finalizada con aviso propio (paywall de repetición): lo muestra en lugar del cierre", () => {
+    renderRoom({ live: { ...baseLive, status: "ended" }, endedNotice: <div data-testid="paywall" />, renderChat: null });
+    expect(screen.getByTestId("paywall")).toBeInTheDocument();
+    expect(screen.queryByText("Transmisión finalizada")).not.toBeInTheDocument();
+    expect(screen.getByText("FINALIZADO")).toBeInTheDocument();
+  });
+
   it("cuenta como no leídos solo los mensajes ajenos mientras el chat está oculto", async () => {
     renderRoom();
     fireEvent.click(screen.getByRole("button", { name: "Ocultar chat" }));

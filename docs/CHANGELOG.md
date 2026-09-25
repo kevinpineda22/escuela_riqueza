@@ -5,6 +5,16 @@
 
 ---
 
+## 2026-09-25
+
+### Live — merge con `master`: lo de la rama `juan` portado a la sala unificada
+- **Contexto**: `master` traía 19 commits de la sala en vivo (PR #94–#98) escritos sobre las salas **anteriores** a la unificación (F37), así que Git no podía aplicarlos: su código vivía en archivos que ya no tenían esa forma. Se portó a mano a `src/components/feature/live-room/`:
+  - **"Activar sonido" al primer toque** → `useLivePlayback.enableAudio`: `setIsMuted(false)` antes del `play()` (`muted` es prop controlada; tocar solo `video.muted` se revertía en el siguiente render) y `AbortError` = el audio ya quedó activo, no se revierte.
+  - **Clase completa (DVR)**: `resumeKey`/`onResumed` + toast "Retomamos donde lo dejaste" / "Ir al vivo" → `LivePlayerStage`, así lo tienen ambas salas.
+  - **Repetición paga** (`canWatchReplay`, `replay_is_public`) → `PublicLiveRoom`. `LiveReplay` pide la URL con sesión si el plan lo habilita, o anónima por `share_token` si la sala la abrió. Nuevo `LiveReplayPaywall`, que entra por la prop `endedNotice` de `LiveRoom`. El chequeo de `publicLiveHasRecording` guarda la respuesta junto a su token, en lugar de resetear estado dentro de un efecto.
+- **Mezcla automática revisada**: `LivePlayerControls` (el toque de F03 más la barra de Clase completa, en zonas distintas), `lives.ts` (funciones de ambos lados) y `lives.test.ts` (se conservaron los tests de los dos).
+- **Tests**: 224/224, suma de ambos lados más 1 del aviso de sala finalizada.
+
 ## 2026-09-24
 
 ### Live — teclado del chat: la parte determinista (auditoría UX: F15, con F23 y T13)
@@ -61,6 +71,52 @@
 - **Frontend**: `src/lib/api/session.ts` (`claimActiveSession` → `active`/`superseded`/`unknown`) y `src/components/providers/SessionGuard.tsx` (montado en `App.tsx`). Verifica al entrar, al volver a la pestaña y ante cambios de su fila por Realtime. Con `superseded` hace `signOut({ scope: "local" })` y muestra un toast. **Fail-open**: si la RPC falla (red, migración sin aplicar) no expulsa a nadie, así que el front puede desplegarse antes que el SQL.
 - **Límites conocidos**: un access token ya emitido vale hasta su vencimiento. El cierre inmediato lo hace el cliente, y un cliente manipulado podría estirar hasta ~1 h. Evita el uso **simultáneo**, no el uso por turnos. Endurecimiento posible a futuro: exigir en RLS que `auth.jwt()->>'session_id'` coincida con la sesión activa.
 - **Tests**: `session.test.ts` (5) y `SessionGuard.test.tsx` (7).
+### Live público — repetición abierta a todos, opt-in por sala
+- **Pedido del cliente**: la repetición de un live público (`/live/<token>`) es paga por defecto (Individual/VIP/admin, ver 2026-09-22), pero el admin ahora puede abrirla a cualquiera, sin cuenta ni plan, para una clase puntual — el resto de las salas sigue paga por defecto.
+- **SQL** (`sql/migrate-public-live-open-replay.sql`, aplicar manualmente en Supabase): nueva columna `lives.replay_is_public boolean NOT NULL DEFAULT false`. `get_public_live` revela `recording_stream_uid`/`recording_r2_key` cuando `can_watch_live_replay(auth.uid())` **o** `replay_is_public = true` (antes solo el primero). Sin policy nueva: la escritura ya es admin-only vía las RLS de `lives`.
+- **`api/stream/recording-url.ts`**: se reintrodujo la rama pública por `share_token` (había sido eliminada el 2026-09-22 por firmar sin chequeo de plan). Ahora está estrictamente gateada: llama a `get_public_live` con un cliente anon, y **solo firma si `replay_is_public === true`** en la fila devuelta — 404 si el token no corresponde a ninguna sala pública, 403 si la repetición no está abierta, 409 si la grabación no está archivada en R2. Rate limit propio por IP (`recording-url-public`, 20 req/min), reutilizando `getClientIp` y `signR2RecordingUrl` sin duplicar lógica. La rama autenticada (`live_id` + JWT + `allowed_plans`) queda intacta.
+- **`src/lib/api/stream/lives.ts`**: `LiveEvent.replay_is_public`; `setLiveReplayPublic(id, isOpen)` (mismo patrón que `setLivePublic`); `fetchPublicRecordingUrl(token)` — pide la URL firmada sin sesión (`fetch` crudo, no `authedFetch`), devuelve `null` en cualquier respuesta no-OK.
+- **`src/pages/public/PublicLiveRoom.tsx`**: `canReplay` ahora es `canWatchReplay(plan, role) || live.replay_is_public`. Con entitlement de plan sigue pidiendo la URL por `fetchRecordingUrl(live.id)` (autenticado); habilitado solo por `replay_is_public`, pide `fetchPublicRecordingUrl(token)`. El paywall no aparece en ninguno de los dos casos.
+- **`src/pages/admin/AdminLiveManager.tsx`**: `PublicLinkControl` suma un segundo toggle "Repetición abierta a todos" (solo visible con el link público activo), con su propio estado de carga y toast, conectado a `setLiveReplayPublic`.
+- **Tests**: `api/stream/recording-url.test.ts` (rama pública: firma si `replay_is_public`, 403 si no, 404 sin sala, 400 con token corto; rama autenticada sigue exigiendo JWT) y `src/lib/api/stream/lives.test.ts` (`setLiveReplayPublic`).
+- **Aplicar en Supabase**: correr `sql/migrate-public-live-open-replay.sql` (idempotente, requiere que `sql/migrate-public-live-replay-paid.sql` ya esté aplicada).
+
+## 2026-09-23
+
+### Clase completa — "Retomamos donde lo dejaste" salía sin razón, y el seek sin feedback
+- **Síntoma 1**: el aviso de retomar aparecía aunque el alumno nunca hubiera retrocedido, y lo dejaba atrasado.
+- **Causa**: `savePosition` guardaba la posición cada 5 s SIEMPRE, incluso mirando al filo del vivo. Al volver más tarde el filo había avanzado, la posición guardada caía dentro de la ventana y se restauraba sola. Ahora solo se guarda si el alumno está a más de 30 s del filo (retroceso deliberado); si estaba en vivo, la entrada se borra.
+- **Síntoma 2**: navegar con la barra se sentía tosco y lento.
+- **Causa**: el spinner de buffering espera 1.5 s a propósito (evita parpadeos con las micropausas del HLS) y el evento `seeking` no lo dispara, así que al soltar la barra quedaban hasta ~2 s sin ninguna señal visual. Ahora `seeking` muestra el spinner en el acto y `seeked` lo oculta.
+- **Medición del salto (producción, 1080p, ventana de 70 min)**: 0.6 s / 2.3 s / 2.6 s / 4.0 s / 5.1 s — promedio ~3 s. Causa medida: la playlist de DVR trae TODA la clase (57 KB y 2107 segmentos a los 70 min, contra 5 KB y 8 segmentos de la playlist normal) y el player la re-descarga cada pocos segundos; además cada fragmento de 1080p tarda ~2 s en bajar (para 2 s de video). A 3h40 la playlist rondaría los 180 KB — esto es exactamente la "degradación después de 3 h" que documenta Cloudflare.
+- **Descartado**: bajar `maxStarvationDelay`/`maxLoadingDelay` a 2 s en modo dvr. Probado en vivo: el ABR sí caía a 240p tras cada seek, pero el tiempo hasta ver imagen no mejoró (3.5 s vs 3.7 s). Perder calidad sin ganar velocidad — revertido. El costo está del lado de Cloudflare, no en nuestra configuración.
+
+
+### Live — "Activar sonido" requería varios toques
+- **Síntoma**: había que tocar "Activar sonido" dos o tres veces para que el aviso desapareciera y se oyera el audio.
+- **Causa 1**: `muted` es prop **controlada** del `<video>` (`LiveHLSPlayer.tsx`). El handler hacía `video.muted = false` de forma imperativa mientras `isMuted` seguía en `true`; el `setAudioRetryHint(false)` de la primera línea disparaba un re-render que volvía a aplicar `muted = true` y pisaba el cambio. Ahora el estado de React se actualiza ANTES de pedir el `play()`.
+- **Causa 2**: un `AbortError` de `play()` (otro `play()`/`pause()` del propio player lo interrumpe: pausa de sala, catch-up de latencia, vuelta de background) se trataba como bloqueo del navegador y revertía a mudo. Ahora se distingue: `AbortError` da por bueno el audio; solo un rechazo real revierte y muestra el reintento.
+- **Nota**: el botón NO se puede eliminar — los navegadores bloquean el autoplay con sonido sin interacción previa del usuario. El video arranca mudo por política de Chrome/Safari/Firefox, igual que en YouTube o Twitch.
+- Aplicado en `VIPLiveRoom.tsx` y `PublicLiveRoom.tsx`.
+
+
+### Live público — fix del paywall de repetición y link público en "Finalizados"
+- **Bug 1 — el paywall de repetición nunca aparecía**: `get_public_live` (ver `sql/migrate-public-live-replay-paid.sql`, cambio del 2026-09-22) anula `recording_stream_uid`/`recording_r2_key` para quien no tiene plan pago. `PublicLiveRoom.tsx` derivaba `hasRecording` de esas mismas columnas, así que para un visitante anónimo/Free `hasRecording` siempre daba `false` y nunca se llegaba a `showReplayPaywall` — se mostraba la pantalla genérica de "transmisión finalizada" en vez del paywall.
+  - **Fix**: nueva RPC `public.public_live_has_recording(p_token)` (`sql/migrate-public-live-has-recording.sql`) que devuelve solo un `boolean` (nunca el id/key) indicando si la sala tiene grabación vinculada, sin depender del plan del caller. Nuevo helper `publicLiveHasRecording(token)` en `src/lib/api/stream/lives.ts`. `PublicLiveRoom.tsx` la consulta una vez que el live termina y el visitante no tiene `canReplay`, y arma `showReplayPaywall` con ese boolean en vez de con `hasRecording`.
+  - **Copy del paywall actualizado** (pedido explícito del cliente, redacción muy seca): título del live visible arriba, encabezado "La repetición es para alumnos", cuerpo de dos oraciones explicando que el en vivo fue abierto para todos y que la grabación completa queda para alumnos con plan Individual o VIP. Botón primario "Inicia sesión" (anónimo) → login, o "Ver planes" (logueado sin plan pago) → `/planes`. Para anónimos se agrega además un link secundario "Ver planes" bajo el botón principal, para llegar a la oferta sin necesidad de loguearse antes.
+- **Bug 2 — el toggle de link público desaparecía al finalizar la sala**: `AdminLiveManager.tsx` solo renderizaba el control "Link público" (toggle + URL + "Copiar") en la pestaña de salas activas. `fetchLives()` filtra `.neq("status","ended")`, así que al "Finalizar" una sala pasa a "Finalizados" (`fetchEndedLives()`), donde ese control no existía — el admin no podía ver ni reactivar el link público para compartir la repetición.
+  - **Fix**: el bloque se extrajo a un componente local `PublicLinkControl` (misma UI, sin duplicar JSX) y se reutiliza en ambas pestañas. En "Finalizados" actualiza `endedLives` en vez de `lives` al togglear.
+- **Aplicar en Supabase**: correr `sql/migrate-public-live-has-recording.sql` (idempotente).
+
+## 2026-09-22
+
+### Live público — la repetición pasa a ser contenido pago
+- **Decisión de producto**: el en vivo en `/live/<token>` sigue siendo público para cualquiera (anon incluido), pero la repetición (grabación) ahora es solo para planes Individual/VIP y admin. Free y anónimos ven el en vivo completo, pero al finalizar ven un paywall en vez de la grabación.
+- **`src/lib/plans.ts`**: nuevo helper `canWatchReplay(plan, role)` (admin/individual/vip → true), con tests en `plans.test.ts`.
+- **SQL** (`sql/migrate-public-live-replay-paid.sql`, aplicar manualmente en Supabase): `get_public_live` sigue devolviendo la fila completa del live público, pero anula `recording_stream_uid` y `recording_r2_key` a menos que `auth.uid()` corresponda a un perfil `role='admin'` o `plan IN ('individual','vip')` (nuevo helper `can_watch_live_replay(uuid)`). El resto de columnas no cambia.
+- **`api/stream/recording-url.ts`**: se eliminó la rama anónima por `share_token` — firmaba una URL de R2 para cualquier caller con el token, sin validar plan. El endpoint ahora solo acepta `{ live_id }` con JWT (rama que ya validaba `allowed_plans`); la sala pública reusa esta misma rama con sesión iniciada. Se retiraron `getClientIp` y el cliente Supabase anónimo del handler (quedaron sin uso).
+- **`src/pages/public/PublicLiveRoom.tsx`**: `isReplay` ahora requiere `canWatchReplay(sessionUser?.plan, sessionUser?.role)` además de `isEnded && hasRecording`. Sin ese permiso se muestra una pantalla "La repetición es solo para alumnos" con botón "Inicia sesión" (anónimo) o "Ver planes" (Free logueado). El fetch de la URL firmada de R2 pasa de `fetchPublicRecordingUrl(token)` a `fetchRecordingUrl(live.id)` (autenticado). `src/lib/api/stream/lives.ts` perdió `fetchPublicRecordingUrl` (sin más usos).
+- **Límite conocido**: la grabación de Cloudflare Stream se sirve por iframe/manifest público sin firmar — alguien que ya haya extraído un `recording_stream_uid` de una sesión previa (por ejemplo, de la network tab) podría seguir reproduciéndolo directo. Anular el uid en la RPC cierra el camino fácil; el cierre real requeriría `requireSignedURLs` de Cloudflare Stream (pendiente, fuera de este cambio).
 
 ## 2026-09-21
 
@@ -82,6 +138,59 @@
 - **Regla operativa**: una vez al aire, no tocar Detener/Iniciar en OBS; dejar que reconecte solo.
 - **Pendiente**: feature "Unir grabaciones" en el panel (concatenar varios UIDs del mismo input con ffmpeg en el pipeline de R2) para recuperar lives fragmentados como el del 19-09.
 
+### Live — baja latencia via LL-HLS
+- **Antes**: el modo "Baja latencia" seguía siendo HLS estándar con `liveSyncDuration` más chico (3s) — sin parts LL-HLS, el piso físico de Cloudflare es ~targetduration (≈3s), así que no bajaba de ahí.
+- **Cambio**: `LiveHLSPlayer` pide el manifest con `?protocol=llhls` cuando `latencyMode === "low"` (Cloudflare Stream Low-Latency HLS — **beta** de Cloudflare). El manifest LL-HLS trae `PART-TARGET`/`PART-HOLD-BACK` y partes de 0.5s; hls.js corre con `lowLatencyMode: true` y deriva su propio target de latencia de esos tags (ya NO se fija `liveSyncDuration`/`liveMaxLatencyDuration` en este modo — fijarlos pisa el cálculo automático). Esperado: ~2-4s del edge, contra ~6-10s antes.
+- **"Fluidez" no cambia**: sigue siendo HLS estándar sin el flag, `lowLatencyMode: false`, `liveSyncDuration: 8`. Es el fallback si LL-HLS da problemas en algún live real.
+- **OBS recomendado para "Baja latencia"**: keyframe 1-2s, **B-frames desactivados** (Cloudflare exige esto para LL-HLS). WHIP/WebRTC queda pendiente solo si alguna vez se necesita latencia sub-segundo.
+- Nuevo método en `LiveHLSPlayerHandle`: `getLiveSyncPosition()` — expone `hls.liveSyncPosition` para que `LivePlayerControls.handleGoLive` salte exactamente al target de LL-HLS en vez de restar un offset fijo al edge (con fallback al cálculo anterior si no hay instancia hls.js, ej. Safari nativo).
+- **Catch-up de latencia (medido en vivo real)**: con la config LL-HLS, `targetLatency` reporta ≈1.5s correctamente, pero el reproductor arrancaba ~7-8s atrás del edge y no convergía solo (no seteamos `liveMaxLatencyDuration`, a propósito, así que hls.js no fuerza el seek). Se agregó un catch-up manual en modo "low": al primer `playing` tras `MANIFEST_PARSED` (cubre montaje y cada recarga por recuperación) y en un chequeo cada 10s, si `hls.latency > targetLatency + 3` se hace `video.currentTime = hls.liveSyncPosition`. El chequeo periódico además exige ≥1s de buffer hacia adelante (nunca saltar a zona sin precargar) y respeta un cooldown de 30s entre saltos automáticos. Verificado en vivo: estabiliza en ~2.3s con buffer 1.5-2s y cero starvation en 30s (antes: 13.8s en modo estándar).
+
+**Medición en vivo real (2026-09-22, Chrome desktop, OBS transmitiendo, player de producción en dev):**
+
+| Modo | Latencia p50 | Buffer medio | Muestras sin datos |
+|---|---|---|---|
+| Fluidez (HLS estándar) | 10.2 s | 7.8 s | 0 / 27 |
+| Baja latencia (LL-HLS) | 3.4 s (min 1.9, max 4.2) | 2.7 s | 1 / 60 |
+
+Nota de medición: si la pestaña queda en segundo plano el navegador ralentiza el
+player y la latencia se dispara; el catch-up la corrige al volver, pero cualquier
+medición futura debe hacerse con la pestaña activa.
+
+### Live — tercer modo de latencia "Clase completa" (DVR de Cloudflare)
+- **Qué es**: tercer perfil en `LiveHLSPlayer`/`LivePlayerControls` (`latencyMode: "dvr"`, etiqueta "Clase completa") que usa el DVR de Cloudflare Stream (`?dvrEnabled=true` en el manifest) — el alumno gana una línea de tiempo scrubbable sobre toda la transmisión, con resume automático de posición al volver a entrar.
+- **Medido en vivo real**: DVR devuelve HLS v8, latencia p50 14.6s, ventana seekable CRECE con la transmisión (88s → 144s durante la prueba), 0 stalls, misma config hls.js que "Fluidez" (`lowLatencyMode: false`, `liveSyncDuration: 8`, `liveMaxLatencyDuration: 20`).
+
+| Modo | Latencia p50 | Ventana seekable | Notas |
+|---|---|---|---|
+| Baja latencia (LL-HLS) | ~3-5 s | ~21 s fija | requiere red estable |
+| Clase completa (DVR) | 14.6 s | crece con la transmisión (88s → 144s medido) | timeline + resume |
+
+- **Incompatibilidad confirmada**: `?protocol=llhls&dvrEnabled=true` responde HTTP 500 — DVR y LL-HLS son mutuamente excluyentes en Cloudflare Stream, nunca se combinan. El modo "low" sigue pidiendo solo `?protocol=llhls`; "dvr" solo `?dvrEnabled=true`.
+- **Resume de posición**: en modo "dvr" únicamente, `LiveHLSPlayer` persiste `video.currentTime` en `localStorage` (clave `live-position:<resumeKey>`, `resumeKey` = id de la fila `lives`) cada 5s y al pausar. Al volver a entrar, si hay una posición guardada de menos de 12 horas y cae dentro de la ventana seekable actual, retoma ahí en vez del filo del vivo y dispara `onResumed`; las salas (`VIPLiveRoom`, `PublicLiveRoom`) muestran un toast único "Retomamos donde lo dejaste" con acción "Ir al vivo". Todo acceso a `localStorage` está en try/catch (puede tirar en modo privado).
+- **Timeline**: nuevo slider en `LivePlayerControls`, visible solo en modo "dvr", con elapsed/total en `mm:ss` (o `h:mm:ss`). Nuevos métodos en `LiveHLSPlayerHandle`: `getSeekableRange()` y `seekTo(position)` (clamped a la ventana seekable).
+- **Caveat conocido (sin resolver en este cambio)**: Cloudflare documenta degradación de performance en broadcasts DVR de más de 3 horas; las clases de Iván duran ~3:18, cerca del límite documentado — a monitorear en el primer live real con DVR activo.
+- Cambiar de modo de latencia sigue recreando la instancia de `Hls` (H6, ver arriba) — el cambio se ve como un breve reload, sin cambios acá.
+
+**Verificado en vivo (2026-09-23, OBS transmitiendo):** ventana navegable real de 0 a 1528 s
+(25 min de clase), retroceso a los 10 min que se mantiene, retomar posición guardada
+(15:00 sobre 32:22) y botón "Ir al vivo" que vuelve al filo (-11.9 s).
+
+Dos correcciones sobre la primera implementación, encontradas probando en vivo:
+- `liveMaxLatencyDuration: 20` se aplicaba también a `dvr`: hls.js trataba el retroceso
+  como un error de latencia y devolvía al filo del vivo de un salto ("no me deja
+  devolverme"). En `dvr` ya no se fija ni `liveSyncDuration` ni `liveMaxLatencyDuration`.
+- El retomar posición solo se intentaba en `MANIFEST_PARSED`, donde `video.seekable`
+  todavía está vacío, así que nunca restauraba. Ahora se reintenta en `LEVEL_UPDATED`,
+  antes del seek al filo.
+
+**Scrubbing (2026-09-23):** la barra llamaba a `seekTo` en cada evento `change` del
+`<input type="range">` — React mapea ese evento al `input` nativo, así que un arrastre
+disparaba un seek por cada movimiento del puntero y cada uno tira el buffer y vuelve a
+pedir fragmentos (se sentía a tirones). Ahora, como YouTube: mientras se arrastra solo
+se mueve el indicador (estado local `scrubValue`) y el seek se hace una sola vez al
+soltar (`pointerup` / `keyup` / `blur`). Verificado en vivo: 25 movimientos de arrastre
+→ 0 seeks durante el arrastre, 1 al soltar (antes: 25).
 
 ### Modo claro — fase 6: selector publicado
 - `src/lib/theme.ts`: `APPEARANCE_SELECTOR_ENABLED` pasa de `import.meta.env.DEV` a `true`. El default sigue siendo oscuro; claro y Sistema quedan disponibles desde el selector del header.

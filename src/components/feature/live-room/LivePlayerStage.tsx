@@ -2,6 +2,7 @@ import type { RefObject } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { VideoOff } from "lucide-react";
 import { usePreferencesStore } from "@/stores/preferences.store";
+import { toast } from "@/components/ui/toaster";
 import LiveHLSPlayer, { type LiveHLSPlayerHandle } from "@/components/feature/LiveHLSPlayer";
 import LivePlayerControls from "@/components/feature/LivePlayerControls";
 import { CF_CUSTOMER_CODE } from "./constants";
@@ -11,15 +12,31 @@ import type { LivePlayback } from "./useLivePlayback";
 
 interface LivePlayerStageProps {
   liveInputId: string;
+  /** Id de la sala: clave para retomar la posición en "Clase completa" (dvr). */
+  resumeKey: string;
   isPaused: boolean;
   playerRef: RefObject<LiveHLSPlayerHandle | null>;
   playback: LivePlayback;
 }
 
 /** Player HLS con sus controles y los overlays de audio, pausa y error. */
-export function LivePlayerStage({ liveInputId, isPaused, playerRef, playback }: LivePlayerStageProps) {
+export function LivePlayerStage({ liveInputId, resumeKey, isPaused, playerRef, playback }: LivePlayerStageProps) {
   const latencyMode = usePreferencesStore((s) => s.liveLatencyMode);
   const setLatencyMode = usePreferencesStore((s) => s.setLiveLatencyMode);
+
+  // Modo "dvr": aviso único al retomar una posición guardada, con acción
+  // rápida para volver al filo del vivo (mismo cálculo que el botón "EN VIVO").
+  const handleDvrResumed = () => {
+    toast("Retomamos donde lo dejaste", {
+      action: {
+        label: "Ir al vivo",
+        onClick: () => {
+          const range = playerRef.current?.getSeekableRange();
+          if (range) playerRef.current?.seekTo(range.end - 8);
+        },
+      },
+    });
+  };
 
   return (
     <>
@@ -43,6 +60,8 @@ export function LivePlayerStage({ liveInputId, isPaused, playerRef, playback }: 
           autoPlay
           latencyMode={latencyMode}
           roomPaused={isPaused}
+          resumeKey={resumeKey}
+          onResumed={handleDvrResumed}
           className="w-full h-full object-contain bg-black"
           {...playback.playerEvents}
         />
