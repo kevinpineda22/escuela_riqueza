@@ -5,6 +5,15 @@
 
 ---
 
+## 2026-09-26
+
+### Live — botón "Segundo plano" con texto y barra de controles que entra en celular
+- **Pedido**: el botón de ventana flotante era solo un ícono que nadie reconocía; los alumnos seguían reportando que el vivo "no funciona en segundo plano".
+- **Cambio**: el botón ahora dice **"Segundo plano"** (y "Volver" mientras está activo). En celular va con el ícono arriba y la etiqueta en dos líneas; desde `sm` en una sola línea.
+- **Bug previo encontrado al medir**: con el alumno atrasado, la pill "VOLVER AL VIVO -1:30" ya se partía en dos renglones en 320, 360 y 375 px — o sea, en la mayoría de los teléfonos — antes de este cambio. Ahora en celular dice **"AL VIVO"**; la frase completa se mantiene desde `sm` y en el `aria-label`.
+- **Medición** (réplica exacta del markup, peor caso atrasado + al vivo): 360/375/390 px sin texto partido ni desborde. 320 px (iPhone SE 1ra generación) sigue apretado — aceptado.
+- Tests: 2 nuevos en `LivePlayerControls.test.tsx`.
+
 ## 2026-09-25
 
 ### Live — resto determinista de la auditoría UX (F05, F07, F08, F14, F17, F20, F23, F30, F31, F35, F38, F40, F43)
