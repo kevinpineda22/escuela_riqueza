@@ -8,6 +8,8 @@ import { ChatJumpToLatest } from "@/components/feature/ChatJumpToLatest";
 import { useChatScroll } from "@/hooks/useChatScroll";
 import { getPublicLiveMessages, type PublicChatMessage } from "@/lib/api/stream/lives";
 import { mergeMessagesById } from "@/lib/chat/mergeMessagesById";
+import { MessageReactions } from "@/components/feature/chat/MessageReactions";
+import { fetchPublicLiveReactions, type ReactionsByMessage } from "@/lib/api/stream/reactions";
 
 interface PublicLiveChatProps {
   token: string;
@@ -34,6 +36,7 @@ const POLL_INTERVAL_MS = 4000;
  */
 const PublicLiveChat = ({ token, loginPath, showWelcome = true }: PublicLiveChatProps) => {
   const [messages, setMessages] = useState<PublicChatMessage[]>([SYSTEM_MESSAGE]);
+  const [reactions, setReactions] = useState<ReactionsByMessage>(new Map());
   const [loading, setLoading] = useState(true);
   const visibleMessages = showWelcome ? messages : messages.filter((m) => m.id !== SYSTEM_MESSAGE.id);
   const { listRef, handleScroll, unseenCount, jumpToLatest } = useChatScroll(visibleMessages.length, !loading);
@@ -53,8 +56,24 @@ const PublicLiveChat = ({ token, loginPath, showWelcome = true }: PublicLiveChat
       }
     };
 
+    // Mismo cadence/efecto que los mensajes: solo lectura, sin Realtime (anon
+    // no tiene sesión para suscribirse).
+    const fetchReactions = async () => {
+      try {
+        const fetched = await fetchPublicLiveReactions(token);
+        if (!isActive) return;
+        setReactions(fetched);
+      } catch (err) {
+        console.error("[PublicLiveChat] error fetching reactions:", err);
+      }
+    };
+
     fetchMessages();
-    const poll = setInterval(fetchMessages, POLL_INTERVAL_MS);
+    fetchReactions();
+    const poll = setInterval(() => {
+      fetchMessages();
+      fetchReactions();
+    }, POLL_INTERVAL_MS);
     return () => {
       isActive = false;
       clearInterval(poll);
@@ -134,6 +153,7 @@ const PublicLiveChat = ({ token, loginPath, showWelcome = true }: PublicLiveChat
                   >
                     {msg.message}
                   </div>
+                  {msg.id !== "system-1" && <MessageReactions reactions={reactions.get(msg.id) || {}} readOnly />}
                 </motion.div>
               ))}
             </AnimatePresence>

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act, within } from "@testing-library/react";
 import LiveChat from "./LiveChat";
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/stores/auth.store";
@@ -308,5 +308,119 @@ describe("LiveChat — historial, Realtime y conexión (F20, F23, F38)", () => {
 
     act(() => statusCallback()("CHANNEL_ERROR"));
     expect(screen.getByRole("status")).toHaveTextContent("Reconectando…");
+  });
+});
+
+describe("LiveChat — reacciones", () => {
+  type Row = { id: string; content: string; created_at: string; user_id: string };
+  const reactionInsert = vi.fn();
+  const reactionDeleteEq3 = vi.fn();
+  const reactionDeleteEq2 = vi.fn(() => ({ eq: reactionDeleteEq3 }));
+  const reactionDeleteEq1 = vi.fn(() => ({ eq: reactionDeleteEq2 }));
+  const reactionDelete = vi.fn(() => ({ eq: reactionDeleteEq1 }));
+  const reactionsSelectEq = vi.fn();
+
+  // Handlers registrados en el canal: [0] INSERT live_messages, [1] INSERT
+  // live_message_reactions, [2] DELETE live_message_reactions.
+  const reactionInsertHandler = () => channel.on.mock.calls[1][2] as (payload: { new: { message_id: string; user_id: string; emoji: string } }) => void;
+  const reactionDeleteHandler = () => channel.on.mock.calls[2][2] as (payload: { old: Partial<{ message_id: string; user_id: string; emoji: string }> }) => void;
+
+  const row = (id: string, user_id: string, content: string, created_at: string): Row => ({ id, user_id, content, created_at });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    channel.on.mockReturnValue(channel);
+    channel.subscribe.mockReturnValue(channel);
+    reactionsSelectEq.mockResolvedValue({ data: [], error: null });
+    reactionInsert.mockResolvedValue({ error: null });
+    reactionDeleteEq3.mockResolvedValue({ error: null });
+    (supabase.auth.getSession as ReturnType<typeof vi.fn>).mockResolvedValue({ data: { session: null } });
+    from.mockImplementation((table: string) => {
+      if (table === "profiles") {
+        return { select: () => ({ in: () => Promise.resolve({ data: [{ id: "beto", full_name: "Beto" }] }), eq: () => ({ maybeSingle: () => Promise.resolve({ data: { full_name: "Beto" } }) }) }) };
+      }
+      if (table === "live_message_reactions") {
+        return { select: () => ({ eq: reactionsSelectEq }), insert: reactionInsert, delete: reactionDelete };
+      }
+      return {
+        select: () => ({
+          eq: () => ({
+            order: () => ({
+              limit: () => Promise.resolve({ data: [row("m1", "beto", "Hola", "2026-09-26T10:00:00Z")], error: null }),
+            }),
+          }),
+        }),
+        insert,
+      };
+    });
+    useAuthStore.setState({ user: student, token: "t" });
+  });
+
+  async function renderChatWithMessage() {
+    render(<LiveChat liveId="live-1" showWelcome={false} />);
+    return screen.findByText("Hola");
+  }
+
+  it("el picker se abre al tocar la burbuja del mensaje", async () => {
+    await renderChatWithMessage();
+    fireEvent.click(screen.getByText("Hola"));
+
+    expect(await screen.findByRole("menu", { name: "Elegir reacción" })).toBeInTheDocument();
+  });
+
+  it("elegir ❤️ llama a addReaction y muestra el contador resaltado", async () => {
+    await renderChatWithMessage();
+    fireEvent.click(screen.getByText("Hola"));
+    const menu = await screen.findByRole("menu");
+    fireEvent.click(within(menu).getByRole("menuitem", { name: /Reaccionar con corazón/ }));
+
+    await waitFor(() => expect(reactionInsert).toHaveBeenCalledWith({ message_id: "m1", live_id: "live-1", user_id: "user-1", emoji: "heart" }));
+    const chip = await screen.findByRole("button", { name: /Quitar corazón \(1\)/ });
+    expect(chip).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("tocar de nuevo la reacción propia llama a removeReaction", async () => {
+    await renderChatWithMessage();
+    fireEvent.click(screen.getByText("Hola"));
+    const menu = await screen.findByRole("menu");
+    fireEvent.click(within(menu).getByRole("menuitem", { name: /Reaccionar con corazón/ }));
+    const chip = await screen.findByRole("button", { name: /Quitar corazón \(1\)/ });
+
+    fireEvent.click(chip);
+
+    await waitFor(() => expect(reactionDeleteEq1).toHaveBeenCalledWith("message_id", "m1"));
+    expect(reactionDeleteEq2).toHaveBeenCalledWith("emoji", "heart");
+    expect(reactionDeleteEq3).toHaveBeenCalledWith("user_id", "user-1");
+    expect(screen.queryByRole("button", { name: /corazón/ })).not.toBeInTheDocument();
+  });
+
+  it("un INSERT de Realtime de otro usuario incrementa el contador", async () => {
+    await renderChatWithMessage();
+    await waitFor(() => expect(channel.on).toHaveBeenCalledTimes(3));
+
+    act(() => reactionInsertHandler()({ new: { message_id: "m1", user_id: "otro-user", emoji: "fire" } }));
+
+    expect(await screen.findByText("1")).toBeInTheDocument();
+  });
+
+  it("un DELETE de Realtime quita el contador", async () => {
+    await renderChatWithMessage();
+    await waitFor(() => expect(channel.on).toHaveBeenCalledTimes(3));
+    act(() => reactionInsertHandler()({ new: { message_id: "m1", user_id: "otro-user", emoji: "fire" } }));
+    await screen.findByText("1");
+
+    act(() => reactionDeleteHandler()({ old: { message_id: "m1", user_id: "otro-user", emoji: "fire" } }));
+
+    await waitFor(() => expect(screen.queryByText("1")).not.toBeInTheDocument());
+  });
+
+  it("no hay picker en el mensaje de bienvenida", async () => {
+    render(<LiveChat liveId="live-1" showWelcome />);
+    await screen.findByText("Hola");
+    const welcome = screen.getByText(/Bienvenidos a este encuentro exclusivo/);
+
+    fireEvent.click(welcome);
+
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 });

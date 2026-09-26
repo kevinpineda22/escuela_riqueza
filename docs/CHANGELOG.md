@@ -7,12 +7,24 @@
 
 ## 2026-09-26
 
+### Live — reacciones a los mensajes del chat
+- **Pedido del cliente**: 4 reacciones exactas — ❤️ (`heart`), 🔥 (`fire`), 👏 (`clap`), 🙌 (`raised_hands`). Un usuario puede poner cada una como máximo una vez por mensaje y la saca tocándola de nuevo. Objetivo además del engagement: que Iván vea de un vistazo qué mensajes/preguntas resuenan.
+- **SQL a correr**: `sql/migrate-live-message-reactions.sql` (nueva tabla `live_message_reactions`, RLS, alta a `supabase_realtime`, función `get_public_live_reactions` para el link público).
+- **Modelo de seguridad**: una fila por `(message_id, user_id, emoji)` (PK compuesta — el propio esquema impide reaccionar dos veces con el mismo emoji). RLS: SELECT abierto a autenticados (misma visibilidad que `live_messages`), INSERT valida `user_id = auth.uid()` **y** que `message_id` pertenezca al `live_id` declarado (evita spoofear `live_id`), DELETE solo la propia. El link público lee conteos agregados vía `get_public_live_reactions` (SECURITY DEFINER, token-gated) — nunca ve quién reaccionó.
+- **Realtime**: mismo canal `live_messages_${liveId}` que ya usaba `LiveChat` (sin abrir una suscripción nueva). Verificado en la doc de Supabase ("Postgres Changes"): un DELETE solo se puede filtrar por columna con `replica identity full`, que no activamos; por eso el DELETE llega sin filtrar por `live_id` y el `old` trae únicamente las columnas de la primary key (`message_id, user_id, emoji`, suficiente para actualizar el mapa local). El INSERT sí se filtra por `live_id=eq.${liveId}`.
+- **UI**: `MessageReactions` (chips con contador, solo si count > 0) y `ReactionPicker` (barra de 4 emojis, se cierra con click afuera o Escape) en `src/components/feature/chat/`. En `LiveChat` se abre tocando la burbuja (funciona en touch y desktop) o con un botón que aparece al pasar el mouse/foco en desktop; toggle optimista con rollback + toast de error si falla. `PublicLiveChat` muestra los mismos chips en modo solo lectura, con el mismo polling de 4 s que los mensajes.
+- Tests: `reactions.test.ts` (helpers puros + capa de datos), nuevos casos en `LiveChat.test.tsx`, `PublicLiveChat.test.tsx` nuevo.
+
 ### Live — botón "Segundo plano" con texto y barra de controles que entra en celular
 - **Pedido**: el botón de ventana flotante era solo un ícono que nadie reconocía; los alumnos seguían reportando que el vivo "no funciona en segundo plano".
 - **Cambio**: el botón ahora dice **"Segundo plano"** (y "Volver" mientras está activo). En celular va con el ícono arriba y la etiqueta en dos líneas; desde `sm` en una sola línea.
 - **Bug previo encontrado al medir**: con el alumno atrasado, la pill "VOLVER AL VIVO -1:30" ya se partía en dos renglones en 320, 360 y 375 px — o sea, en la mayoría de los teléfonos — antes de este cambio. Ahora en celular dice **"AL VIVO"**; la frase completa se mantiene desde `sm` y en el `aria-label`.
 - **Medición** (réplica exacta del markup, peor caso atrasado + al vivo): 360/375/390 px sin texto partido ni desborde. 320 px (iPhone SE 1ra generación) sigue apretado — aceptado.
 - Tests: 2 nuevos en `LivePlayerControls.test.tsx`.
+
+- **Bug atrapado en revisión antes de salir**: al quitar tu propia reacción, la actualización inmediata + el eco de Realtime del mismo DELETE descontaban dos veces; con 2+ personas en el mismo emoji, eso borraba la reacción del OTRO espectador de todas las pantallas. `applyReactionRemoved` ahora ignora el eco de una baja propia ya aplicada (mismo criterio que el alta). Test de regresión que falla sin la guarda.
+- Chips de reacción: área táctil de ~44px con un pseudo-elemento invisible (se ven compactos).
+- Pendiente, no bloqueante: cada evento de reacción re-renderiza la lista de hasta 200 mensajes (extraer una fila memoizada si se nota con mucha gente); el chat público hace 2 consultas cada 4s por visitante (mensajes + reacciones) en vez de una.
 
 ## 2026-09-25
 

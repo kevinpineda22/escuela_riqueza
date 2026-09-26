@@ -1,13 +1,28 @@
 import { useState, useEffect, type FormEvent, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Send, Users, ShieldCheck } from "lucide-react";
+import { Send, Users, ShieldCheck, SmilePlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/stores/auth.store";
 import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "@/components/ui/toaster";
 import { ChatJumpToLatest } from "@/components/feature/ChatJumpToLatest";
+import { MessageReactions } from "@/components/feature/chat/MessageReactions";
+import { ReactionPicker } from "@/components/feature/chat/ReactionPicker";
 import { useChatScroll } from "@/hooks/useChatScroll";
 import { mergeMessagesById } from "@/lib/chat/mergeMessagesById";
+import {
+  fetchLiveReactions,
+  addReaction,
+  removeReaction,
+  aggregateReactions,
+  applyReactionAdded,
+  applyReactionRemoved,
+  isReactionKey,
+  type ReactionKey,
+  type ReactionsByMessage,
+  type ReactionRow,
+} from "@/lib/api/stream/reactions";
 
 export interface ChatMessage {
   id: string;
@@ -47,6 +62,19 @@ interface MessageRow {
   user_id: string;
 }
 
+/** Extracts the reaction keys of `messageId` that have a toggle in flight. */
+function pendingKeysForMessage(messageId: string, pending: Set<string>): Set<ReactionKey> {
+  const keys = new Set<ReactionKey>();
+  const prefix = `${messageId}:`;
+  for (const entry of pending) {
+    if (entry.startsWith(prefix)) {
+      const key = entry.slice(prefix.length);
+      if (isReactionKey(key)) keys.add(key);
+    }
+  }
+  return keys;
+}
+
 const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingMessage, showWelcome = true }: LiveChatProps) => {
   const { user } = useAuthStore();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -56,7 +84,15 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
   const [sendError, setSendError] = useState(false);
   const [historyError, setHistoryError] = useState(false);
   const [connection, setConnection] = useState<"connecting" | "connected" | "reconnecting">("connecting");
+  const [reactions, setReactions] = useState<ReactionsByMessage>(new Map());
+  const [openPickerId, setOpenPickerId] = useState<string | null>(null);
+  // Reacciones con un toggle en curso (`${messageId}:${key}`): un segundo tap
+  // sobre la misma mientras responde el servidor se ignora.
+  const [pendingReactions, setPendingReactions] = useState<Set<string>>(new Set());
   const onIncomingMessageRef = useRef(onIncomingMessage);
+  // Ref siempre actualizado: los handlers de Realtime viven dentro de un
+  // efecto con deps [liveId] y no deben quedarse con el `user.id` del montaje.
+  const currentUserIdRef = useRef<string | null>(user?.id ?? null);
   // Mensaje enviado sin confirmar: su id se reusa si se reintenta el mismo texto.
   const pendingSendRef = useRef<{ id: string; text: string } | null>(null);
   const visibleMessages = showWelcome ? messages : messages.filter((m) => m.id !== SYSTEM_MESSAGE.id);
@@ -68,6 +104,10 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
   useEffect(() => {
     onIncomingMessageRef.current = onIncomingMessage;
   }, [onIncomingMessage]);
+
+  useEffect(() => {
+    currentUserIdRef.current = user?.id ?? null;
+  }, [user?.id]);
 
   // Cargar mensajes iniciales y suscribirse a nuevos
   useEffect(() => {
@@ -128,6 +168,16 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
         setMessages((prev) => mergeMessagesById(prev, [SYSTEM_MESSAGE]));
       }
       setLoading(false);
+
+      // Reacciones: una sola consulta para todo el vivo, después de que
+      // cargó el historial (no una por mensaje).
+      try {
+        const rows = await fetchLiveReactions(liveId);
+        if (!isActive) return;
+        setReactions(aggregateReactions(rows, currentUserIdRef.current));
+      } catch (err) {
+        console.error("[LiveChat] error cargando reacciones:", err);
+      }
     };
 
     fetchHistory();
@@ -164,6 +214,33 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
           onIncomingMessageRef.current?.(incomingMessage);
         }
       }
+    ).on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "live_message_reactions", filter: `live_id=eq.${liveId}` },
+      (payload: { new: ReactionRow }) => {
+        if (!isActive) return;
+        setReactions((prev) => applyReactionAdded(prev, payload.new, currentUserIdRef.current));
+      }
+    ).on(
+      // Postgres Changes solo puede filtrar un DELETE si la tabla tiene
+      // `replica identity full` (verificado en la doc de Supabase Realtime,
+      // guía "Postgres Changes"). No la activamos para no mandar la fila
+      // completa en cada delete de todo el proyecto, así que este handler
+      // llega SIN filtrar por live_id: con `replica identity` default el
+      // `old` solo trae las columnas de la primary key (message_id, user_id,
+      // emoji), que es justo lo que hace falta para actualizar el mapa local
+      // — y actualizar por un message_id que no está en este chat es un
+      // no-op inofensivo (ver `applyReactionRemoved`).
+      "postgres_changes",
+      { event: "DELETE", schema: "public", table: "live_message_reactions" },
+      (payload: { old: Partial<ReactionRow> }) => {
+        if (!isActive) return;
+        const { message_id, user_id, emoji } = payload.old;
+        if (!message_id || !user_id || !emoji || !isReactionKey(emoji)) return;
+        setReactions((prev) =>
+          applyReactionRemoved(prev, { message_id, user_id, emoji }, currentUserIdRef.current)
+        );
+      }
     ).subscribe((status) => {
       // F23: el indicador refleja la suscripción real, no es decorativo.
       if (isActive) setConnection(status === "SUBSCRIBED" ? "connected" : "reconnecting");
@@ -175,6 +252,40 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
       supabase.removeChannel(channel);
     };
   }, [liveId]);
+
+  const toggleReaction = async (messageId: string, key: ReactionKey) => {
+    if (!user) return;
+    const pendingKey = `${messageId}:${key}`;
+    if (pendingReactions.has(pendingKey)) return;
+
+    const alreadyMine = Boolean(reactions.get(messageId)?.[key]?.mine);
+    const previousReactions = reactions;
+    setPendingReactions((prev) => new Set(prev).add(pendingKey));
+    // Optimista: refleja el toggle antes de que responda el servidor.
+    setReactions((prev) =>
+      alreadyMine
+        ? applyReactionRemoved(prev, { message_id: messageId, user_id: user.id, emoji: key }, user.id)
+        : applyReactionAdded(prev, { message_id: messageId, user_id: user.id, emoji: key }, user.id)
+    );
+
+    try {
+      if (alreadyMine) {
+        await removeReaction(messageId, key, user.id);
+      } else {
+        await addReaction(messageId, liveId, key, user.id);
+      }
+    } catch (err) {
+      console.error("[LiveChat] error al reaccionar:", err);
+      setReactions(previousReactions);
+      toast.error("No se pudo guardar tu reacción");
+    } finally {
+      setPendingReactions((prev) => {
+        const next = new Set(prev);
+        next.delete(pendingKey);
+        return next;
+      });
+    }
+  };
 
   const handleSendMessage = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -307,21 +418,64 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
                     )}
                   </div>
                   
-                  <div
-                    className={cn(
-                      "px-4 py-2.5 rounded-2xl max-w-[90%] text-sm break-words relative overflow-hidden",
-                      msg.isSystem
-                        ? "bg-brand/10 text-accent border border-brand/30 shadow-[0_0_20px_rgba(204,164,59,0.1)]"
-                        : msg.user_id === user?.id
-                          ? "bg-brand text-on-brand font-medium shadow-lg"
-                          : "bg-ink/5 text-foreground border border-ink/5 light:bg-surface-panel light:border-line-subtle light:shadow-sm"
+                  <div className={cn("group relative flex items-end gap-1", msg.user_id === user?.id && !msg.isSystem && "flex-row-reverse")}>
+                    <div
+                      onClick={() => {
+                        if (!msg.isSystem && user) setOpenPickerId((current) => (current === msg.id ? null : msg.id));
+                      }}
+                      className={cn(
+                        "px-4 py-2.5 rounded-2xl max-w-[90%] text-sm break-words relative overflow-hidden",
+                        !msg.isSystem && user && "cursor-pointer",
+                        msg.isSystem
+                          ? "bg-brand/10 text-accent border border-brand/30 shadow-[0_0_20px_rgba(204,164,59,0.1)]"
+                          : msg.user_id === user?.id
+                            ? "bg-brand text-on-brand font-medium shadow-lg"
+                            : "bg-ink/5 text-foreground border border-ink/5 light:bg-surface-panel light:border-line-subtle light:shadow-sm"
+                      )}
+                    >
+                      {msg.isSystem && (
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" />
+                      )}
+                      {msg.content}
+                    </div>
+                    {!msg.isSystem && user && (
+                      <button
+                        type="button"
+                        aria-label="Reaccionar a este mensaje"
+                        onClick={() => setOpenPickerId((current) => (current === msg.id ? null : msg.id))}
+                        className="hidden md:flex items-center justify-center size-8 rounded-full text-foreground-muted opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-ink/5 hover:text-accent transition-opacity shrink-0"
+                      >
+                        <SmilePlus size={16} />
+                      </button>
                     )}
-                  >
-                    {msg.isSystem && (
-                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" />
-                    )}
-                    {msg.content}
                   </div>
+
+                  {!msg.isSystem && (
+                    <div className={cn("flex flex-col", msg.user_id === user?.id ? "items-end" : "items-start")}>
+                      <MessageReactions
+                        reactions={reactions.get(msg.id) || {}}
+                        readOnly={!user}
+                        onToggle={(key) => toggleReaction(msg.id, key)}
+                      />
+                      {openPickerId === msg.id && (
+                        <ReactionPicker
+                          activeKeys={
+                            new Set(
+                              (Object.keys(reactions.get(msg.id) || {}) as ReactionKey[]).filter(
+                                (key) => reactions.get(msg.id)?.[key]?.mine
+                              )
+                            )
+                          }
+                          pendingKeys={pendingKeysForMessage(msg.id, pendingReactions)}
+                          onSelect={(key) => {
+                            toggleReaction(msg.id, key);
+                            setOpenPickerId(null);
+                          }}
+                          onClose={() => setOpenPickerId(null)}
+                        />
+                      )}
+                    </div>
+                  )}
                 </motion.div>
               ))}
             </AnimatePresence>
