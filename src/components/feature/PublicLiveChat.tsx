@@ -27,6 +27,8 @@ const SYSTEM_MESSAGE: PublicChatMessage = {
 };
 
 const POLL_INTERVAL_MS = 4000;
+// Misma ventana para mensajes y reacciones — el default de getPublicLiveMessages.
+const MESSAGE_WINDOW = 100;
 
 /**
  * Chat de solo lectura para el link público de un live. A diferencia de
@@ -46,7 +48,7 @@ const PublicLiveChat = ({ token, loginPath, showWelcome = true }: PublicLiveChat
 
     const fetchMessages = async () => {
       try {
-        const fetched = await getPublicLiveMessages(token);
+        const fetched = await getPublicLiveMessages(token, MESSAGE_WINDOW);
         if (!isActive) return;
         setMessages((prev) => mergeMessagesById(prev, fetched));
       } catch (err) {
@@ -60,7 +62,7 @@ const PublicLiveChat = ({ token, loginPath, showWelcome = true }: PublicLiveChat
     // no tiene sesión para suscribirse).
     const fetchReactions = async () => {
       try {
-        const fetched = await fetchPublicLiveReactions(token);
+        const fetched = await fetchPublicLiveReactions(token, MESSAGE_WINDOW);
         if (!isActive) return;
         setReactions(fetched);
       } catch (err) {

@@ -4,12 +4,14 @@ import {
   aggregateReactions,
   applyReactionAdded,
   applyReactionRemoved,
+  mergeReactionSnapshot,
   fetchLiveReactions,
   addReaction,
   removeReaction,
   fetchPublicLiveReactions,
   isReactionKey,
   type ReactionRow,
+  type ReactionOp,
 } from "./reactions";
 
 vi.mock("@/lib/supabase", () => ({
@@ -154,20 +156,76 @@ describe("applyReactionRemoved", () => {
 describe("fetchLiveReactions", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("queries the whole live in one request", async () => {
-    const eq = vi.fn().mockResolvedValue({ data: [{ message_id: "m1", user_id: "a", emoji: "heart" }], error: null });
+  it("queries reactions scoped to the given message ids", async () => {
+    const inFn = vi.fn().mockResolvedValue({ data: [{ message_id: "m1", user_id: "a", emoji: "heart" }], error: null });
+    const eq = vi.fn(() => ({ in: inFn }));
     from.mockReturnValue({ select: () => ({ eq }) });
 
-    const result = await fetchLiveReactions("live-1");
+    const result = await fetchLiveReactions("live-1", ["m1", "m2"]);
 
     expect(from).toHaveBeenCalledWith("live_message_reactions");
     expect(eq).toHaveBeenCalledWith("live_id", "live-1");
+    expect(inFn).toHaveBeenCalledWith("message_id", ["m1", "m2"]);
     expect(result).toEqual([{ message_id: "m1", user_id: "a", emoji: "heart" }]);
   });
 
+  it("returns [] without querying when there are no message ids", async () => {
+    const result = await fetchLiveReactions("live-1", []);
+    expect(from).not.toHaveBeenCalled();
+    expect(result).toEqual([]);
+  });
+
   it("throws on error", async () => {
-    from.mockReturnValue({ select: () => ({ eq: () => Promise.resolve({ data: null, error: { message: "boom" } }) }) });
-    await expect(fetchLiveReactions("live-1")).rejects.toBeTruthy();
+    from.mockReturnValue({ select: () => ({ eq: () => ({ in: () => Promise.resolve({ data: null, error: { message: "boom" } }) }) }) });
+    await expect(fetchLiveReactions("live-1", ["m1"])).rejects.toBeTruthy();
+  });
+});
+
+describe("mergeReactionSnapshot", () => {
+  const row = (message_id: string, user_id: string, emoji: ReactionRow["emoji"]): ReactionRow => ({
+    message_id,
+    user_id,
+    emoji,
+  });
+  const add = (r: ReactionRow): ReactionOp => ({ type: "add", row: r });
+  const remove = (r: ReactionRow): ReactionOp => ({ type: "remove", row: r });
+
+  it("counts an insert that landed after the snapshot was taken", () => {
+    const snapshot = [row("m1", "a", "heart")];
+    const ops = [add(row("m1", "b", "heart"))];
+    const result = mergeReactionSnapshot(snapshot, ops, "a");
+    expect(result.get("m1")).toEqual({ heart: { count: 2, mine: true } });
+  });
+
+  it("does not double-count an insert already present in the snapshot", () => {
+    const snapshot = [row("m1", "a", "heart")];
+    const ops = [add(row("m1", "a", "heart"))];
+    const result = mergeReactionSnapshot(snapshot, ops, "a");
+    expect(result.get("m1")).toEqual({ heart: { count: 1, mine: true } });
+  });
+
+  it("applies a remove of a row that was in the snapshot", () => {
+    const snapshot = [row("m1", "a", "heart"), row("m1", "b", "heart")];
+    const ops = [remove(row("m1", "b", "heart"))];
+    const result = mergeReactionSnapshot(snapshot, ops, "a");
+    expect(result.get("m1")).toEqual({ heart: { count: 1, mine: true } });
+  });
+
+  it("insert then remove of the same row during load leaves it absent", () => {
+    const snapshot: ReactionRow[] = [];
+    const ops = [add(row("m1", "a", "heart")), remove(row("m1", "a", "heart"))];
+    const result = mergeReactionSnapshot(snapshot, ops, "a");
+    expect(result.get("m1")).toBeUndefined();
+  });
+
+  it("computes the mine flag for the current user across snapshot and ops", () => {
+    const snapshot = [row("m1", "b", "heart")];
+    const ops = [add(row("m1", "a", "heart"))];
+    const result = mergeReactionSnapshot(snapshot, ops, "a");
+    expect(result.get("m1")).toEqual({ heart: { count: 2, mine: true } });
+
+    const resultForOther = mergeReactionSnapshot(snapshot, ops, "c");
+    expect(resultForOther.get("m1")).toEqual({ heart: { count: 2, mine: false } });
   });
 });
 
@@ -207,11 +265,17 @@ describe("addReaction / removeReaction", () => {
 describe("fetchPublicLiveReactions", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("maps RPC rows into a ReactionsByMessage with mine always false", async () => {
+  it("maps RPC rows into a ReactionsByMessage with mine always false, defaulting p_limit to 100", async () => {
     rpc.mockResolvedValue({ data: [{ message_id: "m1", emoji: "heart", total: 3 }], error: null });
     const result = await fetchPublicLiveReactions("token-1");
-    expect(rpc).toHaveBeenCalledWith("get_public_live_reactions", { p_token: "token-1" });
+    expect(rpc).toHaveBeenCalledWith("get_public_live_reactions", { p_token: "token-1", p_limit: 100 });
     expect(result.get("m1")).toEqual({ heart: { count: 3, mine: false } });
+  });
+
+  it("forwards a custom limit as p_limit", async () => {
+    rpc.mockResolvedValue({ data: [], error: null });
+    await fetchPublicLiveReactions("token-1", 50);
+    expect(rpc).toHaveBeenCalledWith("get_public_live_reactions", { p_token: "token-1", p_limit: 50 });
   });
 
   it("ignores rows with an unrecognized emoji key", async () => {

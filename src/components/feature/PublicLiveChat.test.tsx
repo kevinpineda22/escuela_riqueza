@@ -34,5 +34,9 @@ describe("PublicLiveChat — reacciones de solo lectura", () => {
     expect(await screen.findByText("3")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /corazón/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+
+    // Reacciones y mensajes comparten la misma ventana — no un límite propio.
+    expect(getPublicLiveMessages).toHaveBeenCalledWith("token-1", 100);
+    expect(fetchPublicLiveReactions).toHaveBeenCalledWith("token-1", 100);
   });
 });

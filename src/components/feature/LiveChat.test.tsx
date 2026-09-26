@@ -318,7 +318,7 @@ describe("LiveChat — reacciones", () => {
   const reactionDeleteEq2 = vi.fn(() => ({ eq: reactionDeleteEq3 }));
   const reactionDeleteEq1 = vi.fn(() => ({ eq: reactionDeleteEq2 }));
   const reactionDelete = vi.fn(() => ({ eq: reactionDeleteEq1 }));
-  const reactionsSelectEq = vi.fn();
+  const reactionsSelectIn = vi.fn();
 
   // Handlers registrados en el canal: [0] INSERT live_messages, [1] INSERT
   // live_message_reactions, [2] DELETE live_message_reactions.
@@ -331,7 +331,7 @@ describe("LiveChat — reacciones", () => {
     vi.clearAllMocks();
     channel.on.mockReturnValue(channel);
     channel.subscribe.mockReturnValue(channel);
-    reactionsSelectEq.mockResolvedValue({ data: [], error: null });
+    reactionsSelectIn.mockResolvedValue({ data: [], error: null });
     reactionInsert.mockResolvedValue({ error: null });
     reactionDeleteEq3.mockResolvedValue({ error: null });
     (supabase.auth.getSession as ReturnType<typeof vi.fn>).mockResolvedValue({ data: { session: null } });
@@ -340,7 +340,7 @@ describe("LiveChat — reacciones", () => {
         return { select: () => ({ in: () => Promise.resolve({ data: [{ id: "beto", full_name: "Beto" }] }), eq: () => ({ maybeSingle: () => Promise.resolve({ data: { full_name: "Beto" } }) }) }) };
       }
       if (table === "live_message_reactions") {
-        return { select: () => ({ eq: reactionsSelectEq }), insert: reactionInsert, delete: reactionDelete };
+        return { select: () => ({ eq: () => ({ in: reactionsSelectIn }) }), insert: reactionInsert, delete: reactionDelete };
       }
       return {
         select: () => ({
@@ -412,6 +412,26 @@ describe("LiveChat — reacciones", () => {
     act(() => reactionDeleteHandler()({ old: { message_id: "m1", user_id: "otro-user", emoji: "fire" } }));
 
     await waitFor(() => expect(screen.queryByText("1")).not.toBeInTheDocument());
+  });
+
+  it("una reacción de Realtime que llega antes de que resuelva el snapshot no se pierde (race 2026-09-26)", async () => {
+    let resolveReactions: (value: { data: unknown[]; error: null }) => void = () => {};
+    reactionsSelectIn.mockReturnValue(new Promise((resolve) => { resolveReactions = resolve; }));
+
+    await renderChatWithMessage();
+    await waitFor(() => expect(channel.on).toHaveBeenCalledTimes(3));
+
+    // El evento de Realtime llega ANTES de que el snapshot de reacciones resuelva.
+    act(() => reactionInsertHandler()({ new: { message_id: "m1", user_id: "otro-user", emoji: "fire" } }));
+    expect(await screen.findByText("1")).toBeInTheDocument();
+
+    // El snapshot resuelve vacío (como si la consulta hubiera arrancado antes
+    // de que llegara el evento) — el merge debe conservar el evento bufferizado.
+    await act(async () => {
+      resolveReactions({ data: [], error: null });
+    });
+
+    expect(await screen.findByText("1")).toBeInTheDocument();
   });
 
   it("no hay picker en el mensaje de bienvenida", async () => {

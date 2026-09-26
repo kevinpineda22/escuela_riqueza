@@ -15,13 +15,14 @@ import {
   fetchLiveReactions,
   addReaction,
   removeReaction,
-  aggregateReactions,
+  mergeReactionSnapshot,
   applyReactionAdded,
   applyReactionRemoved,
   isReactionKey,
   type ReactionKey,
   type ReactionsByMessage,
   type ReactionRow,
+  type ReactionOp,
 } from "@/lib/api/stream/reactions";
 
 export interface ChatMessage {
@@ -117,6 +118,15 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
     // consulta en CADA espectador (F38).
     const names = new Map<string, string>();
 
+    // El canal de Realtime se suscribe MÁS ABAJO, antes de que resuelva el
+    // snapshot de reacciones — igual que con los mensajes (F20). Cualquier
+    // INSERT/DELETE de `live_message_reactions` que llegue mientras el
+    // snapshot todavía está en vuelo se guarda acá y se repite sobre el
+    // snapshot con `mergeReactionSnapshot` en vez de perderse al aplicar el
+    // `setReactions(...)` final.
+    let reactionsSnapshotLoaded = false;
+    const bufferedReactionOps: ReactionOp[] = [];
+
     const resolveName = async (userId: string): Promise<string> => {
       const known = names.get(userId);
       if (known) return known;
@@ -143,6 +153,10 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
 
       if (!isActive) return;
 
+      // Ids de los mensajes recién cargados: las reacciones se piden solo
+      // para esta ventana, no para todo el historial del vivo.
+      let historyMessageIds: string[] = [];
+
       if (rows && !error) {
         const history = (rows as MessageRow[]).slice().reverse();
         const unknownIds = [...new Set(history.map((m) => m.user_id))].filter((id) => !names.has(id));
@@ -159,6 +173,7 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
           content: msg.content,
           created_at: msg.created_at,
         }));
+        historyMessageIds = loaded.map((m) => m.id);
         // F20: MEZCLAR, no reemplazar. Lo que llegó por Realtime mientras
         // cargaba el historial ya está en `prev` y antes se perdía.
         setMessages((prev) => mergeMessagesById(prev, [SYSTEM_MESSAGE, ...loaded]));
@@ -169,14 +184,21 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
       }
       setLoading(false);
 
-      // Reacciones: una sola consulta para todo el vivo, después de que
-      // cargó el historial (no una por mensaje).
+      // Reacciones de la ventana de mensajes recién cargada, después de que
+      // cargó el historial (no una consulta por mensaje). El snapshot se
+      // MEZCLA con lo que haya llegado por Realtime durante la carga (misma
+      // idea que F20 pero para reacciones): reemplazar directo perdía
+      // cualquier INSERT/DELETE que aterrizara en la ventana entre el
+      // snapshot y este `setReactions`.
       try {
-        const rows = await fetchLiveReactions(liveId);
+        const snapshot = await fetchLiveReactions(liveId, historyMessageIds);
         if (!isActive) return;
-        setReactions(aggregateReactions(rows, currentUserIdRef.current));
+        setReactions(mergeReactionSnapshot(snapshot, bufferedReactionOps, currentUserIdRef.current));
       } catch (err) {
         console.error("[LiveChat] error cargando reacciones:", err);
+      } finally {
+        reactionsSnapshotLoaded = true;
+        bufferedReactionOps.length = 0;
       }
     };
 
@@ -219,6 +241,12 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
       { event: "INSERT", schema: "public", table: "live_message_reactions", filter: `live_id=eq.${liveId}` },
       (payload: { new: ReactionRow }) => {
         if (!isActive) return;
+        // Mientras el snapshot de reacciones no resolvió, este evento se
+        // guarda para repetirse sobre el snapshot (ver mergeReactionSnapshot).
+        // También se aplica al estado ya mismo para que la UI no se quede
+        // atrás mientras tanto; el `setReactions` del snapshot lo reemplaza
+        // por el resultado ya mezclado apenas resuelve.
+        if (!reactionsSnapshotLoaded) bufferedReactionOps.push({ type: "add", row: payload.new });
         setReactions((prev) => applyReactionAdded(prev, payload.new, currentUserIdRef.current));
       }
     ).on(
@@ -237,6 +265,9 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
         if (!isActive) return;
         const { message_id, user_id, emoji } = payload.old;
         if (!message_id || !user_id || !emoji || !isReactionKey(emoji)) return;
+        // Mismo criterio que el INSERT de arriba: bufferear mientras el
+        // snapshot no cargó, y de paso aplicar al estado actual.
+        if (!reactionsSnapshotLoaded) bufferedReactionOps.push({ type: "remove", row: { message_id, user_id, emoji } });
         setReactions((prev) =>
           applyReactionRemoved(prev, { message_id, user_id, emoji }, currentUserIdRef.current)
         );

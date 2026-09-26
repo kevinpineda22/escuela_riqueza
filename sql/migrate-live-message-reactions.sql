@@ -76,7 +76,16 @@ END $$;
 -- aggregated counts, not per-user rows, so anon never learns who reacted.
 -- Does NOT touch get_public_live_messages itself — changing its return type
 -- would require DROP FUNCTION and risk breaking a running public page.
-CREATE OR REPLACE FUNCTION public.get_public_live_reactions(p_token text)
+--
+-- 2026-09-26: scoped to the same recent-message window as
+-- get_public_live_messages (p_limit, same LEAST/GREATEST clamp) — it used
+-- to aggregate reactions for every message of the live, while the public
+-- chat only ever shows the last p_limit of them. The signature gained
+-- p_limit, so the old (text)-only overload is dropped first: leaving it in
+-- place would make a 1-arg call ambiguous between the two overloads.
+DROP FUNCTION IF EXISTS public.get_public_live_reactions(text);
+
+CREATE OR REPLACE FUNCTION public.get_public_live_reactions(p_token text, p_limit int DEFAULT 100)
 RETURNS TABLE (
   message_id uuid,
   emoji text,
@@ -87,13 +96,21 @@ STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
+  WITH target_live AS (
+    SELECT id FROM public.lives WHERE share_token = p_token AND is_public = true LIMIT 1
+  ),
+  recent_messages AS (
+    SELECT m.id
+    FROM public.live_messages m, target_live tl
+    WHERE m.live_id = tl.id
+    ORDER BY m.created_at DESC, m.id DESC
+    LIMIT LEAST(GREATEST(p_limit, 1), 200)
+  )
   SELECT r.message_id, r.emoji, count(*) AS total
   FROM public.live_message_reactions r
-  JOIN public.lives l ON l.id = r.live_id
-  WHERE l.share_token = p_token
-    AND l.is_public = true
+  JOIN recent_messages rm ON rm.id = r.message_id
   GROUP BY r.message_id, r.emoji;
 $$;
 
-REVOKE ALL ON FUNCTION public.get_public_live_reactions(text) FROM public;
-GRANT EXECUTE ON FUNCTION public.get_public_live_reactions(text) TO anon, authenticated;
+REVOKE ALL ON FUNCTION public.get_public_live_reactions(text, int) FROM public;
+GRANT EXECUTE ON FUNCTION public.get_public_live_reactions(text, int) TO anon, authenticated;

@@ -30,6 +30,54 @@ export type ReactionSummary = Partial<Record<ReactionKey, ReactionCell>>;
 
 export type ReactionsByMessage = Map<string, ReactionSummary>;
 
+/** One realtime event captured for a row identity, replayed by mergeReactionSnapshot. */
+export type ReactionOp = {
+  type: "add" | "remove";
+  row: Pick<ReactionRow, "message_id" | "user_id" | "emoji">;
+};
+
+function reactionRowKey(row: Pick<ReactionRow, "message_id" | "user_id" | "emoji">): string {
+  return `${row.message_id}:${row.user_id}:${row.emoji}`;
+}
+
+/**
+ * Merges a reactions snapshot (a point-in-time SELECT) with the realtime
+ * ops captured since the Realtime subscription was opened — which happens
+ * BEFORE the snapshot query is issued, so the op buffer may contain events
+ * that landed before, during, or after the snapshot's own read.
+ *
+ * Why replaying the whole op list over the snapshot is correct: each op is
+ * an idempotent set/unset of exactly one row identity (message_id, user_id,
+ * emoji) — there's no UPDATE, only INSERT (row exists) and DELETE (row
+ * doesn't). Postgres serializes writes to the same primary key, so ops for
+ * the same key are replayed here in the same order they committed; applying
+ * them in order to the snapshot's map means the LAST op for a key decides
+ * its final presence, which is exactly the row's true state once every
+ * captured op has been accounted for. A key with no matching op simply
+ * keeps whatever the snapshot said. Whether the snapshot happened to
+ * already reflect a given op doesn't matter: replaying "add" on a
+ * already-present key or "remove" on an already-absent key is a no-op.
+ */
+export function mergeReactionSnapshot(
+  snapshot: ReactionRow[],
+  ops: ReactionOp[],
+  currentUserId: string | null
+): ReactionsByMessage {
+  const rowsByKey = new Map<string, ReactionRow>();
+  for (const row of snapshot) {
+    rowsByKey.set(reactionRowKey(row), row);
+  }
+  for (const op of ops) {
+    const key = reactionRowKey(op.row);
+    if (op.type === "add") {
+      rowsByKey.set(key, { message_id: op.row.message_id, user_id: op.row.user_id, emoji: op.row.emoji });
+    } else {
+      rowsByKey.delete(key);
+    }
+  }
+  return aggregateReactions([...rowsByKey.values()], currentUserId);
+}
+
 /** Builds the full per-message summary from scratch (used after loading history). */
 export function aggregateReactions(rows: ReactionRow[], currentUserId: string | null): ReactionsByMessage {
   const byMessage: ReactionsByMessage = new Map();
@@ -111,12 +159,20 @@ export function applyReactionRemoved(
   return next;
 }
 
-/** Reactions for the whole live in one query — never one query per message. */
-export async function fetchLiveReactions(liveId: string): Promise<ReactionRow[]> {
+/**
+ * Reactions for the given messages in one query — never one query per
+ * message. Scoped to `messageIds` (the currently loaded history window)
+ * instead of the whole live, since a live can accumulate far more messages
+ * than the windowed history ever shows. Returns [] without querying when
+ * `messageIds` is empty (nothing loaded yet, nothing to fetch).
+ */
+export async function fetchLiveReactions(liveId: string, messageIds: string[]): Promise<ReactionRow[]> {
+  if (messageIds.length === 0) return [];
   const { data, error } = await supabase
     .from("live_message_reactions")
     .select("message_id, user_id, emoji")
-    .eq("live_id", liveId);
+    .eq("live_id", liveId)
+    .in("message_id", messageIds);
   if (error) throw error;
   return (data || []) as ReactionRow[];
 }
@@ -143,9 +199,13 @@ export async function removeReaction(messageId: string, key: ReactionKey, userId
   if (error) throw error;
 }
 
-/** Aggregated counts for a public (anonymous) live link — no per-user rows. */
-export async function fetchPublicLiveReactions(token: string): Promise<ReactionsByMessage> {
-  const { data, error } = await supabase.rpc("get_public_live_reactions", { p_token: token });
+/**
+ * Aggregated counts for a public (anonymous) live link — no per-user rows.
+ * `limit` must match the message window `getPublicLiveMessages` loads, so
+ * reactions are never fetched for messages the public chat never shows.
+ */
+export async function fetchPublicLiveReactions(token: string, limit = 100): Promise<ReactionsByMessage> {
+  const { data, error } = await supabase.rpc("get_public_live_reactions", { p_token: token, p_limit: limit });
   if (error) throw error;
 
   const byMessage: ReactionsByMessage = new Map();
