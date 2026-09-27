@@ -27,6 +27,7 @@ import {
   type ForgotPasswordInput,
 } from "@/schemas/auth.schema";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsDesktop } from "@/hooks/useMediaQuery";
 import ParticleNetwork from "@/components/feature/ParticleNetwork";
 import { requestPasswordReset } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
@@ -732,7 +733,9 @@ const NOISE_SVG =
  * → constelación (el protagonista) → viñeta que centra la mirada en la card →
  * grano sutil. Cada capa tiene UNA función.
  */
-const AuthBackground = () => (
+const AuthBackground = () => {
+  const isDesktop = useIsDesktop();
+  return (
   <div aria-hidden className="absolute inset-0 overflow-hidden pointer-events-none">
     {/* Base: negro profundo con un cálido dorado naciendo arriba. */}
     <div className="absolute inset-0 bg-[radial-gradient(ellipse_130%_90%_at_50%_-10%,#1c150c_0%,#0a0a0a_48%,#050505_100%)] light:bg-[radial-gradient(ellipse_130%_90%_at_50%_-10%,#f1e3c2_0%,#f8f6f1_50%,#f3efe6_100%)]" />
@@ -742,8 +745,11 @@ const AuthBackground = () => (
     <div className="absolute -top-[18%] -left-[12%] w-[60vw] h-[60vw] max-w-[620px] max-h-[620px] rounded-full bg-[radial-gradient(circle_at_center,rgba(204,164,59,0.22),transparent_66%)] light:bg-[radial-gradient(circle_at_center,rgba(204,164,59,0.14),transparent_66%)] blur-[80px]" />
     <div className="absolute -bottom-[20%] -right-[10%] w-[55vw] h-[55vw] max-w-[560px] max-h-[560px] rounded-full bg-[radial-gradient(circle_at_center,rgba(160,110,30,0.16),transparent_68%)] light:bg-[radial-gradient(circle_at_center,rgba(160,110,30,0.09),transparent_68%)] blur-[100px]" />
 
-    {/* La constelación dorada — protagonista del fondo. */}
-    <ParticleNetwork />
+    {/* La constelación dorada — protagonista del fondo. Solo en escritorio: en
+        iPhone, llegando desde un vivo (memoria del video todavía sin liberar),
+        el canvas redibujado en cada frame con glow podía agotar la memoria y
+        Safari cerraba la pestaña ("Ocurrió un problema varias veces"). */}
+    {isDesktop && <ParticleNetwork />}
 
     {/* Viñeta radial: oscurece los bordes para que la mirada caiga en el centro. */}
     <div className="absolute inset-0 bg-[radial-gradient(ellipse_75%_75%_at_50%_50%,transparent_35%,rgba(5,5,5,0.55)_100%)] light:bg-[radial-gradient(ellipse_75%_75%_at_50%_50%,transparent_40%,rgba(120,95,40,0.1)_100%)]" />
@@ -754,7 +760,8 @@ const AuthBackground = () => (
       style={{ backgroundImage: `url("${NOISE_SVG}")`, backgroundSize: "200px 200px" }}
     />
   </div>
-);
+  );
+};
 
 /* ============================================================ */
 /* Página principal                                              */

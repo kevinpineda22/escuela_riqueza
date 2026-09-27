@@ -13,7 +13,7 @@
 -- view: the client only ever sends `reply_to_id`, and a SECURITY DEFINER
 -- trigger derives the other three from the real parent row before the write
 -- lands. See the trigger function below for the full reasoning, including
--- how it interacts with the delete-cleanup trigger.
+-- how a deleted original is cleaned up.
 
 -- 1. Columns -----------------------------------------------------------
 
@@ -23,7 +23,7 @@ ALTER TABLE public.live_messages ADD COLUMN IF NOT EXISTS reply_to_user_name tex
 ALTER TABLE public.live_messages ADD COLUMN IF NOT EXISTS reply_to_excerpt text;
 
 -- Needed for the FK's ON DELETE SET NULL lookup (finds every child of a
--- message being deleted) and for the delete-cleanup trigger's own UPDATE.
+-- message being deleted).
 CREATE INDEX IF NOT EXISTS live_messages_reply_to_id_idx ON public.live_messages (reply_to_id);
 
 -- 2. Derive-on-write trigger --------------------------------------------
@@ -44,22 +44,16 @@ CREATE INDEX IF NOT EXISTS live_messages_reply_to_id_idx ON public.live_messages
 --      belongs to a different live, turns the row into a normal message
 --      (all 4 reply columns NULL): a reply can't point outside its own room.
 --
---   c) UPDATE where reply_to_id did NOT change -> the only legitimate
---      caller here is the BEFORE DELETE cleanup trigger below, which only
---      ever sets reply_to_excerpt to NULL and never touches reply_to_id.
---      Re-assert OLD's reply_to_user_id/reply_to_user_name unconditionally
---      (blocks a direct spoof attempt on those two columns) and allow
---      reply_to_excerpt to become NULL, but revert any other value back to
---      OLD (blocks a spoof attempt on the excerpt itself).
+--   c) UPDATE where reply_to_id did NOT change -> nothing legitimate writes
+--      the quote columns directly, so re-assert all 3 from OLD (blocks a
+--      direct spoof attempt on any of them).
 --
---   d) UPDATE where reply_to_id changed TO NULL -> this is the FK's own
---      "ON DELETE SET NULL" cascade firing on a child after its parent
---      message was deleted. reply_to_user_name must SURVIVE this (the UI
---      still shows "replying to {name}" with "Mensaje eliminado" instead of
---      the excerpt), and reply_to_excerpt was already cleared by the BEFORE
---      DELETE cleanup trigger a moment earlier in the same statement — so
---      this branch just re-asserts OLD's values for all 3 columns rather
---      than nulling them out.
+--   d) UPDATE where reply_to_id changed TO NULL -> the FK's own
+--      "ON DELETE SET NULL" firing on a child after its parent message was
+--      deleted. This is where moderation cleanup happens: the excerpt is
+--      dropped (the deleted text must not survive inside quotes) while
+--      reply_to_user_id/name SURVIVE, so the UI still shows
+--      "Respondiendo a {name}" with "Mensaje eliminado".
 CREATE OR REPLACE FUNCTION public.live_messages_derive_reply_quote()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -82,14 +76,15 @@ BEGIN
     -- Case (c): reply_to_id itself is unchanged in this UPDATE.
     NEW.reply_to_user_id := OLD.reply_to_user_id;
     NEW.reply_to_user_name := OLD.reply_to_user_name;
-    NEW.reply_to_excerpt := CASE WHEN NEW.reply_to_excerpt IS NULL THEN NULL ELSE OLD.reply_to_excerpt END;
+    NEW.reply_to_excerpt := OLD.reply_to_excerpt;
     RETURN NEW;
 
   ELSIF NEW.reply_to_id IS NULL THEN
-    -- Case (d): the FK's ON DELETE SET NULL cascade after the parent was removed.
+    -- Case (d): the FK's ON DELETE SET NULL after the parent was removed.
+    -- Moderation cleanup happens HERE: drop the excerpt, keep the attribution.
     NEW.reply_to_user_id := OLD.reply_to_user_id;
     NEW.reply_to_user_name := OLD.reply_to_user_name;
-    NEW.reply_to_excerpt := OLD.reply_to_excerpt;
+    NEW.reply_to_excerpt := NULL;
     RETURN NEW;
   END IF;
   -- Else: UPDATE redirecting reply_to_id to a new non-null target. Fall
@@ -133,34 +128,19 @@ CREATE TRIGGER trg_live_messages_reply_update
   FOR EACH ROW
   EXECUTE FUNCTION public.live_messages_derive_reply_quote();
 
--- 3. Delete cleanup -------------------------------------------------------
+-- 3. Removed: BEFORE DELETE cleanup trigger ---------------------------------
 --
--- When a quoted message is deleted (moderation, or any future delete path),
--- its text must not keep surviving inside other messages' quotes. This only
--- clears the EXCERPT — reply_to_user_name is intentionally left alone here
--- (see case (d) above) so the UI can still attribute the reply, and
--- reply_to_id is left alone here too: the FK's ON DELETE SET NULL clears it
--- automatically once this row is actually removed, right after this trigger
--- runs.
-CREATE OR REPLACE FUNCTION public.live_messages_clear_reply_excerpt_on_delete()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-BEGIN
-  UPDATE public.live_messages
-  SET reply_to_excerpt = NULL
-  WHERE reply_to_id = OLD.id;
-  RETURN OLD;
-END;
-$$;
-
+-- An earlier version of this file cleared children's excerpts from a
+-- BEFORE DELETE trigger. That broke deleting a whole live (2026-09-28):
+-- lives -> live_messages cascades, so the trigger UPDATEd replies that the
+-- same statement was about to delete, and Postgres aborted the DELETE with
+-- 27000 "tuple to be updated was already modified by an operation triggered
+-- by the current command". The cleanup now lives in case (d) above, driven
+-- by the FK's ON DELETE SET NULL (an AFTER-style referential action, which
+-- skips rows the statement already deleted). Dropped here so re-running this
+-- file fixes databases that got the old version.
 DROP TRIGGER IF EXISTS trg_live_messages_clear_reply_on_delete ON public.live_messages;
-CREATE TRIGGER trg_live_messages_clear_reply_on_delete
-  BEFORE DELETE ON public.live_messages
-  FOR EACH ROW
-  EXECUTE FUNCTION public.live_messages_clear_reply_excerpt_on_delete();
+DROP FUNCTION IF EXISTS public.live_messages_clear_reply_excerpt_on_delete();
 
 -- 4. Public link RPC --------------------------------------------------------
 --
