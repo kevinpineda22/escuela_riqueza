@@ -8,6 +8,9 @@ import { ChatJumpToLatest } from "@/components/feature/ChatJumpToLatest";
 import { useChatScroll } from "@/hooks/useChatScroll";
 import { getPublicLiveMessages, type PublicChatMessage } from "@/lib/api/stream/lives";
 import { mergeMessagesById } from "@/lib/chat/mergeMessagesById";
+import { MessageReactions } from "@/components/feature/chat/MessageReactions";
+import { QuotedMessage } from "@/components/feature/chat/QuotedMessage";
+import { fetchPublicLiveReactions, type ReactionsByMessage } from "@/lib/api/stream/reactions";
 
 interface PublicLiveChatProps {
   token: string;
@@ -16,15 +19,23 @@ interface PublicLiveChatProps {
   showWelcome?: boolean;
 }
 
+// Cuánto se mantiene resaltado el mensaje original tras "Ir al mensaje original".
+const HIGHLIGHT_DURATION_MS = 1500;
+
 const SYSTEM_MESSAGE: PublicChatMessage = {
   id: "system-1",
   user_id: "system",
   user_name: "Iván Mazo",
   message: "¡Bienvenidos a este encuentro exclusivo! Iniciamos en instantes.",
   created_at: new Date(0).toISOString(),
+  reply_to_id: null,
+  reply_to_user_name: null,
+  reply_to_excerpt: null,
 };
 
 const POLL_INTERVAL_MS = 4000;
+// Misma ventana para mensajes y reacciones — el default de getPublicLiveMessages.
+const MESSAGE_WINDOW = 100;
 
 /**
  * Chat de solo lectura para el link público de un live. A diferencia de
@@ -34,16 +45,33 @@ const POLL_INTERVAL_MS = 4000;
  */
 const PublicLiveChat = ({ token, loginPath, showWelcome = true }: PublicLiveChatProps) => {
   const [messages, setMessages] = useState<PublicChatMessage[]>([SYSTEM_MESSAGE]);
+  const [reactions, setReactions] = useState<ReactionsByMessage>(new Map());
   const [loading, setLoading] = useState(true);
+  // Id del mensaje resaltado tras un salto a "Ir al mensaje original".
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const visibleMessages = showWelcome ? messages : messages.filter((m) => m.id !== SYSTEM_MESSAGE.id);
   const { listRef, handleScroll, unseenCount, jumpToLatest } = useChatScroll(visibleMessages.length, !loading);
+
+  // Igual que en LiveChat: salta al mensaje original (si sigue cargado) y lo
+  // resalta unos instantes. El chat público es de solo lectura, pero el
+  // salto a la cita sigue siendo útil.
+  const jumpToMessage = (id: string) => {
+    const container = listRef.current;
+    const target = container?.querySelector<HTMLElement>(`[data-message-id="${id}"]`);
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlightedMessageId(id);
+    window.setTimeout(() => {
+      setHighlightedMessageId((current) => (current === id ? null : current));
+    }, HIGHLIGHT_DURATION_MS);
+  };
 
   useEffect(() => {
     let isActive = true;
 
     const fetchMessages = async () => {
       try {
-        const fetched = await getPublicLiveMessages(token);
+        const fetched = await getPublicLiveMessages(token, MESSAGE_WINDOW);
         if (!isActive) return;
         setMessages((prev) => mergeMessagesById(prev, fetched));
       } catch (err) {
@@ -53,8 +81,24 @@ const PublicLiveChat = ({ token, loginPath, showWelcome = true }: PublicLiveChat
       }
     };
 
+    // Mismo cadence/efecto que los mensajes: solo lectura, sin Realtime (anon
+    // no tiene sesión para suscribirse).
+    const fetchReactions = async () => {
+      try {
+        const fetched = await fetchPublicLiveReactions(token, MESSAGE_WINDOW);
+        if (!isActive) return;
+        setReactions(fetched);
+      } catch (err) {
+        console.error("[PublicLiveChat] error fetching reactions:", err);
+      }
+    };
+
     fetchMessages();
-    const poll = setInterval(fetchMessages, POLL_INTERVAL_MS);
+    fetchReactions();
+    const poll = setInterval(() => {
+      fetchMessages();
+      fetchReactions();
+    }, POLL_INTERVAL_MS);
     return () => {
       isActive = false;
       clearInterval(poll);
@@ -96,9 +140,13 @@ const PublicLiveChat = ({ token, loginPath, showWelcome = true }: PublicLiveChat
             </div>
           ) : (
             <AnimatePresence initial={false}>
-              {visibleMessages.map((msg) => (
+              {visibleMessages.map((msg) => {
+                // El original puede no estar cargado (fuera de la ventana de MESSAGE_WINDOW).
+                const canJumpToOriginal = Boolean(msg.reply_to_id && messages.some((m) => m.id === msg.reply_to_id));
+                return (
                 <motion.div
                   key={msg.id}
+                  data-message-id={msg.id}
                   initial={{ opacity: 0, x: -20, scale: 0.95 }}
                   animate={{ opacity: 1, x: 0, scale: 1 }}
                   transition={{ duration: 0.2 }}
@@ -108,13 +156,13 @@ const PublicLiveChat = ({ token, loginPath, showWelcome = true }: PublicLiveChat
                     <span
                       className={cn(
                         "text-[10px] font-bold uppercase tracking-wider",
-                        msg.id === "system-1" ? "text-accent" : "text-foreground-muted"
+                        msg.id === SYSTEM_MESSAGE.id ? "text-accent" : "text-foreground-muted"
                       )}
                     >
                       {msg.user_name}
                     </span>
-                    {msg.id === "system-1" && <ShieldCheck size={10} className="text-accent" />}
-                    {msg.id !== "system-1" && (
+                    {msg.id === SYSTEM_MESSAGE.id && <ShieldCheck size={10} className="text-accent" />}
+                    {msg.id !== SYSTEM_MESSAGE.id && (
                       <span className="text-[9px] font-medium text-fg-30 light:text-fg-50 tracking-wide tabular-nums">
                         {new Date(msg.created_at).toLocaleTimeString(undefined, {
                           hour: "2-digit",
@@ -126,16 +174,26 @@ const PublicLiveChat = ({ token, loginPath, showWelcome = true }: PublicLiveChat
   
                   <div
                     className={cn(
-                      "px-4 py-2.5 rounded-2xl max-w-[90%] text-sm break-words relative overflow-hidden",
-                      msg.id === "system-1"
+                      "px-4 py-2.5 rounded-2xl max-w-[90%] text-sm break-words relative overflow-hidden transition-shadow",
+                      msg.id === SYSTEM_MESSAGE.id
                         ? "bg-brand/10 text-accent border border-brand/30 shadow-[0_0_20px_rgba(204,164,59,0.1)]"
-                        : "bg-ink/5 text-foreground border border-ink/5 light:bg-surface-panel light:border-line-subtle light:shadow-sm"
+                        : "bg-ink/5 text-foreground border border-ink/5 light:bg-surface-panel light:border-line-subtle light:shadow-sm",
+                      highlightedMessageId === msg.id && "ring-2 ring-accent"
                     )}
                   >
+                    {msg.reply_to_user_name && (
+                      <QuotedMessage
+                        userName={msg.reply_to_user_name}
+                        excerpt={msg.reply_to_excerpt}
+                        onJumpToOriginal={canJumpToOriginal ? () => jumpToMessage(msg.reply_to_id!) : undefined}
+                      />
+                    )}
                     {msg.message}
                   </div>
+                  {msg.id !== SYSTEM_MESSAGE.id && <MessageReactions reactions={reactions.get(msg.id) || {}} readOnly />}
                 </motion.div>
-              ))}
+                );
+              })}
             </AnimatePresence>
           )}
         </div>

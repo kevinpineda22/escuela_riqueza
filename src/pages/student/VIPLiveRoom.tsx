@@ -175,7 +175,7 @@ const VIPLiveRoom = () => {
       signalConnected={liveInputConnected}
       cinematicIntro
       renderChat={(onIncomingMessage) => (
-        <LiveChat liveId={live.id} onIncomingMessage={onIncomingMessage} showWelcome={live.status === "scheduled"} />
+        <LiveChat key={live.id} liveId={live.id} onIncomingMessage={onIncomingMessage} showWelcome={live.status === "scheduled"} />
       )}
     />
   );

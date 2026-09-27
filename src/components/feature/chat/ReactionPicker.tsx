@@ -1,0 +1,97 @@
+import { useEffect, useRef } from "react";
+import { motion } from "motion/react";
+import { Reply } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { REACTIONS, type ReactionKey } from "@/lib/api/stream/reactions";
+
+interface ReactionPickerProps {
+  /** Reactions the current user already placed on this message — highlighted. */
+  activeKeys: Set<ReactionKey>;
+  /** Reactions with a toggle request in flight — disabled to ignore a double tap. */
+  pendingKeys: Set<ReactionKey>;
+  onSelect: (key: ReactionKey) => void;
+  onClose: () => void;
+  /** When provided, appends a "Responder" action after a divider — turns this into a small actions bar. */
+  onReply?: () => void;
+}
+
+/**
+ * Small inline actions bar: the 4 reaction emojis and, when `onReply` is
+ * given, a divider followed by a Reply action. Closes itself on outside
+ * click or Escape.
+ */
+export function ReactionPicker({ activeKeys, pendingKeys, onSelect, onClose, onReply }: ReactionPickerProps) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handlePointerDown = (e: PointerEvent) => {
+      const target = e.target as Node;
+      if (ref.current && ref.current.contains(target)) return;
+      // El mismo tap que abre el picker (burbuja o botón SmilePlus) dispara
+      // primero `pointerdown` y después `click`: si este handler cerrara acá,
+      // el `click` posterior volvía a abrirlo (toggle sobre `null`). Ignorar
+      // cualquier trigger marcado con `data-reaction-trigger` deja que sea el
+      // `click` del trigger el que decida abrir/cerrar/cambiar de mensaje.
+      if (target instanceof Element && target.closest("[data-reaction-trigger]")) return;
+      onClose();
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose]);
+
+  return (
+    <motion.div
+      ref={ref}
+      initial={{ opacity: 0, y: 4, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 4, scale: 0.95 }}
+      transition={{ duration: 0.12 }}
+      role="menu"
+      aria-label="Elegir reacción"
+      className="flex items-center gap-1 mt-1 p-1.5 rounded-2xl bg-surface-popover border border-line-subtle shadow-panel w-fit"
+    >
+      {REACTIONS.map(({ key, emoji, label }) => {
+        const isActive = activeKeys.has(key);
+        const isPending = pendingKeys.has(key);
+        return (
+          <button
+            key={key}
+            type="button"
+            role="menuitem"
+            disabled={isPending}
+            aria-pressed={isActive}
+            aria-label={`${isActive ? "Quitar" : "Reaccionar con"} ${label}`}
+            onClick={() => onSelect(key)}
+            className={cn(
+              "flex items-center justify-center min-w-11 min-h-11 rounded-xl text-lg transition-colors disabled:opacity-40",
+              isActive ? "bg-brand/15 ring-1 ring-brand/40" : "hover:bg-ink/5"
+            )}
+          >
+            <span aria-hidden="true">{emoji}</span>
+          </button>
+        );
+      })}
+      {onReply && (
+        <>
+          <span className="mx-0.5 h-6 w-px shrink-0 bg-line-subtle" aria-hidden="true" />
+          <button
+            type="button"
+            role="menuitem"
+            aria-label="Responder"
+            onClick={onReply}
+            className="flex items-center justify-center min-w-11 min-h-11 rounded-xl text-foreground-muted transition-colors hover:bg-ink/5 hover:text-accent"
+          >
+            <Reply size={16} />
+          </button>
+        </>
+      )}
+    </motion.div>
+  );
+}

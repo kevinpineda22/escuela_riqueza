@@ -205,7 +205,7 @@ const PublicLiveRoom = () => {
           ? null
           : (onIncomingMessage) =>
               sessionUser ? (
-                <LiveChat liveId={live.id} onIncomingMessage={onIncomingMessage} showWelcome={live.status === "scheduled"} />
+                <LiveChat key={live.id} liveId={live.id} onIncomingMessage={onIncomingMessage} showWelcome={live.status === "scheduled"} />
               ) : (
                 <PublicLiveChat token={token} loginPath={loginPath} showWelcome={live.status === "scheduled"} />
               )

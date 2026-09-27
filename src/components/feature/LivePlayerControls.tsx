@@ -616,7 +616,11 @@ const LivePlayerControls = ({
                 {isBehind ? (
                   <>
                     <span className="w-2 h-2 rounded-full bg-fg-60" />
-                    <span>VOLVER AL VIVO</span>
+                    {/* En celular "VOLVER AL VIVO -1:30" se partía en dos renglones
+                        (medido: 320/360/375 px). La pill gris ya comunica que es una
+                        acción; el aria-label mantiene la frase completa. */}
+                    <span className="sm:hidden">AL VIVO</span>
+                    <span className="hidden sm:inline">VOLVER AL VIVO</span>
                     <span className="font-bold text-fg-70 tabular-nums">-{formatDelay(liveDelta)}</span>
                   </>
                 ) : (
@@ -632,13 +636,42 @@ const LivePlayerControls = ({
 
               <div className="flex-1" />
 
+              {/* "Segundo plano" con texto visible: el ícono solo de picture-in-picture
+                  no lo reconocía nadie, y es justo lo que buscan los alumnos que
+                  reportaban que el vivo "no funciona en segundo plano" (Chrome pausa
+                  cualquier <video> de una pestaña oculta; la ventana flotante es la
+                  única forma de seguir escuchando con otra app o la pantalla
+                  bloqueada). En celular el texto va en dos líneas para no
+                  desbordar la barra junto a "VOLVER AL VIVO". */}
               {pipSupported && (
                 <button
+                  type="button"
                   onClick={() => { handlePipToggle(); wakeControls(); }}
-                  aria-label={isPip ? "Salir de ventana flotante" : "Ventana flotante (seguir viendo en otra app)"}
-                  className={cn(CONTROL_BUTTON, isPip && "text-accent")}
+                  aria-label={
+                    isPip
+                      ? "Volver a ver aquí"
+                      : "Segundo plano: seguir viendo en una ventana flotante mientras usas otra app"
+                  }
+                  className={cn(
+                    // Celular: ícono arriba y etiqueta debajo (2 líneas) — medido en
+                    // 360/375/390 px junto a "AL VIVO -1:30" sin partir ni desbordar.
+                    // sm+: ícono y etiqueta en una sola línea.
+                    "inline-flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 min-h-11 -my-2 px-1.5 sm:px-3 rounded-full sm:rounded-full transition-colors cursor-pointer active:scale-95",
+                    isPip
+                      ? "text-accent bg-accent/15 hover:bg-accent/25"
+                      : "text-foreground-strong bg-ink/15 hover:bg-ink/25",
+                  )}
                 >
-                  <PictureInPicture2 size={20} />
+                  <PictureInPicture2 className="shrink-0 size-4 sm:size-[18px]" />
+                  <span className="text-[9px] sm:text-xs font-black uppercase tracking-wide leading-[1.1] text-center sm:text-left">
+                    {isPip ? (
+                      "Volver"
+                    ) : (
+                      <>
+                        Segundo<br className="sm:hidden" /> plano
+                      </>
+                    )}
+                  </span>
                 </button>
               )}
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { render, screen, fireEvent, act, within } from "@testing-library/react";
 import LivePlayerControls from "./LivePlayerControls";
 import type { LiveHLSPlayerHandle, QualityLevel } from "./LiveHLSPlayer";
 
@@ -131,5 +131,40 @@ describe("LivePlayerControls", () => {
     fireEvent.click(surface, { detail: 1 });
 
     expect(onTogglePlay).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("LivePlayerControls — botón Segundo plano", () => {
+  const original = Object.getOwnPropertyDescriptor(Document.prototype, "pictureInPictureEnabled");
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    // jsdom no implementa Picture-in-Picture: sin esto el botón no se renderiza.
+    Object.defineProperty(document, "pictureInPictureEnabled", { configurable: true, value: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    if (original) Object.defineProperty(Document.prototype, "pictureInPictureEnabled", original);
+    delete (document as unknown as Record<string, unknown>).pictureInPictureEnabled;
+  });
+
+  it("muestra el texto 'Segundo plano', no solo un ícono", () => {
+    renderControls();
+    const btn = screen.getByRole("button", { name: /segundo plano/i, hidden: true });
+    expect(btn.textContent?.replace(/\s+/g, " ").trim()).toMatch(/segundo plano/i);
+  });
+
+  it("atrasado: 'AL VIVO' corto en celular y la frase completa en pantallas grandes", () => {
+    renderControls({ playerRef: fakePlayer(50, 100) });
+    act(() => { vi.advanceTimersByTime(1100); });
+    const goLive = screen.getByRole("button", { name: /Volver al vivo \(vas 50 s atrasado\)/, hidden: true });
+    // En celular "VOLVER AL VIVO -50 s" se partía en dos renglones: la versión corta
+    // solo se muestra bajo el breakpoint sm y la completa desde sm en adelante.
+    const corta = within(goLive).getByText("AL VIVO");
+    const completa = within(goLive).getByText("VOLVER AL VIVO");
+    expect(corta.className).toContain("sm:hidden");
+    expect(completa.className).toContain("hidden");
+    expect(completa.className).toContain("sm:inline");
   });
 });
