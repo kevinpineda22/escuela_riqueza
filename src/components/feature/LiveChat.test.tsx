@@ -98,6 +98,7 @@ describe("LiveChat — envío (F22)", () => {
       live_id: "live-1",
       user_id: "user-1",
       content: "Hola a todos",
+      reply_to_id: null,
     });
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
@@ -495,5 +496,235 @@ describe("LiveChat — reacciones", () => {
     fireEvent.click(welcome);
 
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+});
+
+describe("LiveChat — respuestas (2026-09-27)", () => {
+  interface Row {
+    id: string;
+    content: string;
+    created_at: string;
+    user_id: string;
+    reply_to_id: string | null;
+    reply_to_user_id: string | null;
+    reply_to_user_name: string | null;
+    reply_to_excerpt: string | null;
+  }
+
+  const row = (
+    overrides: Pick<Row, "id" | "user_id" | "content" | "created_at"> & Partial<Row>
+  ): Row => ({
+    reply_to_id: null,
+    reply_to_user_id: null,
+    reply_to_user_name: null,
+    reply_to_excerpt: null,
+    ...overrides,
+  });
+
+  // El canal de mensajes solo registra este único handler (ver los otros
+  // describes de este archivo para el mismo criterio).
+  const insertHandler = () => messagesChannel.on.mock.calls[0][2] as (payload: { new: Row }) => Promise<void>;
+
+  const openActionsBarAndReply = async () => {
+    fireEvent.click(screen.getByText("Hola"));
+    const menu = await screen.findByRole("menu");
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Responder" }));
+    return screen.findByText("Respondiendo a Beto");
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupChannelChaining();
+    (supabase.auth.getSession as ReturnType<typeof vi.fn>).mockResolvedValue({ data: { session: null } });
+    from.mockImplementation((table: string) => {
+      if (table === "profiles") {
+        return {
+          select: () => ({
+            in: () => Promise.resolve({ data: [{ id: "beto", full_name: "Beto" }] }),
+            eq: () => ({ maybeSingle: () => Promise.resolve({ data: { full_name: "Beto" } }) }),
+          }),
+        };
+      }
+      if (table === "live_message_reactions") {
+        return { select: () => ({ eq: () => ({ in: () => Promise.resolve({ data: [], error: null }) }) }) };
+      }
+      return {
+        select: () => ({
+          eq: () => ({
+            order: () => ({
+              limit: () =>
+                Promise.resolve({
+                  data: [row({ id: "m1", user_id: "beto", content: "Hola", created_at: "2026-09-27T10:00:00Z" })],
+                  error: null,
+                }),
+            }),
+          }),
+        }),
+        insert,
+      };
+    });
+    useAuthStore.setState({ user: student, token: "t" });
+  });
+
+  async function renderChatWithMessage() {
+    render(<LiveChat liveId="live-1" showWelcome={false} />);
+    await screen.findByText("Hola");
+  }
+
+  it("elegir «Responder» desde la barra de acciones muestra el composer de respuesta y enfoca el input", async () => {
+    await renderChatWithMessage();
+
+    await openActionsBarAndReply();
+
+    expect(screen.getByLabelText("Mensaje para la comunidad")).toHaveFocus();
+  });
+
+  it("enviar inserta con reply_to_id y SIN reply_to_user_name/excerpt en el payload", async () => {
+    insert.mockResolvedValue({ error: null });
+    await renderChatWithMessage();
+    await openActionsBarAndReply();
+    const input = screen.getByLabelText("Mensaje para la comunidad") as HTMLInputElement;
+
+    send(input, "Dale");
+
+    await waitFor(() => expect(insert).toHaveBeenCalled());
+    const payload = insert.mock.calls[0][0] as Record<string, unknown>;
+    expect(payload).toMatchObject({ reply_to_id: "m1" });
+    expect(payload).not.toHaveProperty("reply_to_user_name");
+    expect(payload).not.toHaveProperty("reply_to_excerpt");
+    // Confirmado: el composer se limpia solo.
+    await waitFor(() => expect(screen.queryByText("Respondiendo a Beto")).not.toBeInTheDocument());
+  });
+
+  it("cancelar con el botón X limpia el objetivo de respuesta", async () => {
+    await renderChatWithMessage();
+    await openActionsBarAndReply();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar respuesta" }));
+
+    expect(screen.queryByText("Respondiendo a Beto")).not.toBeInTheDocument();
+  });
+
+  it("Escape en el input cancela la respuesta", async () => {
+    await renderChatWithMessage();
+    await openActionsBarAndReply();
+    const input = screen.getByLabelText("Mensaje para la comunidad");
+
+    fireEvent.keyDown(input, { key: "Escape" });
+
+    expect(screen.queryByText("Respondiendo a Beto")).not.toBeInTheDocument();
+  });
+
+  it("un envío fallido conserva el objetivo de respuesta", async () => {
+    insert.mockResolvedValue({ error: { message: "boom" } });
+    await renderChatWithMessage();
+    await openActionsBarAndReply();
+    const input = screen.getByLabelText("Mensaje para la comunidad") as HTMLInputElement;
+
+    send(input, "Dale");
+    await screen.findByRole("alert");
+
+    expect(screen.getByText("Respondiendo a Beto")).toBeInTheDocument();
+  });
+
+  it("un INSERT de Realtime con datos de respuesta muestra la cita", async () => {
+    await renderChatWithMessage();
+    await waitFor(() => expect(messagesChannel.on).toHaveBeenCalled());
+
+    await act(async () => {
+      await insertHandler()({
+        new: row({
+          id: "m2",
+          user_id: "beto",
+          content: "Va de nuevo",
+          created_at: "2026-09-27T10:05:00Z",
+          reply_to_id: "m1",
+          reply_to_user_id: "beto",
+          reply_to_user_name: "Beto",
+          reply_to_excerpt: "Hola",
+        }),
+      });
+    });
+
+    expect(await screen.findByText("Va de nuevo")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ir al mensaje original" })).toBeInTheDocument();
+  });
+
+  it("un mensaje sin extracto (original borrado) muestra 'Mensaje eliminado'", async () => {
+    await renderChatWithMessage();
+    await waitFor(() => expect(messagesChannel.on).toHaveBeenCalled());
+
+    await act(async () => {
+      await insertHandler()({
+        new: row({
+          id: "m2",
+          user_id: "beto",
+          content: "Va de nuevo",
+          created_at: "2026-09-27T10:05:00Z",
+          reply_to_id: null,
+          reply_to_user_id: null,
+          reply_to_user_name: "Beto",
+          reply_to_excerpt: null,
+        }),
+      });
+    });
+
+    expect(await screen.findByText("Mensaje eliminado")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Ir al mensaje original" })).not.toBeInTheDocument();
+  });
+
+  it("resalta la burbuja de quien me respondió", async () => {
+    const { container } = render(<LiveChat liveId="live-1" showWelcome={false} />);
+    await screen.findByText("Hola");
+    await waitFor(() => expect(messagesChannel.on).toHaveBeenCalled());
+
+    await act(async () => {
+      await insertHandler()({
+        new: row({
+          id: "m2",
+          user_id: "beto",
+          content: "Te contesto",
+          created_at: "2026-09-27T10:05:00Z",
+          reply_to_id: "m1",
+          reply_to_user_id: "user-1",
+          reply_to_user_name: "Alumno",
+          reply_to_excerpt: "Hola",
+        }),
+      });
+    });
+
+    await screen.findByText("Te contesto");
+    const bubble = container.querySelector('[data-message-id="m2"] [data-reaction-trigger="true"]');
+    expect(bubble).toHaveClass("ring-accent/60");
+  });
+
+  it("«Ir al mensaje original» desplaza y resalta la burbuja original", async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    const { container } = render(<LiveChat liveId="live-1" showWelcome={false} />);
+    await screen.findByText("Hola");
+    await waitFor(() => expect(messagesChannel.on).toHaveBeenCalled());
+
+    await act(async () => {
+      await insertHandler()({
+        new: row({
+          id: "m2",
+          user_id: "beto",
+          content: "Va de nuevo",
+          created_at: "2026-09-27T10:05:00Z",
+          reply_to_id: "m1",
+          reply_to_user_id: "beto",
+          reply_to_user_name: "Beto",
+          reply_to_excerpt: "Hola",
+        }),
+      });
+    });
+    await screen.findByText("Va de nuevo");
+
+    fireEvent.click(screen.getByRole("button", { name: "Ir al mensaje original" }));
+
+    expect(scrollIntoView).toHaveBeenCalled();
+    const originalBubble = container.querySelector('[data-message-id="m1"] [data-reaction-trigger="true"]');
+    expect(originalBubble).toHaveClass("ring-accent");
   });
 });

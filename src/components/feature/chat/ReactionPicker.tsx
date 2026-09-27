@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { motion } from "motion/react";
+import { Reply } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { REACTIONS, type ReactionKey } from "@/lib/api/stream/reactions";
 
@@ -10,10 +11,16 @@ interface ReactionPickerProps {
   pendingKeys: Set<ReactionKey>;
   onSelect: (key: ReactionKey) => void;
   onClose: () => void;
+  /** When provided, appends a "Responder" action after a divider — turns this into a small actions bar. */
+  onReply?: () => void;
 }
 
-/** Small inline bar with the 4 emojis. Closes itself on outside click or Escape. */
-export function ReactionPicker({ activeKeys, pendingKeys, onSelect, onClose }: ReactionPickerProps) {
+/**
+ * Small inline actions bar: the 4 reaction emojis and, when `onReply` is
+ * given, a divider followed by a Reply action. Closes itself on outside
+ * click or Escape.
+ */
+export function ReactionPicker({ activeKeys, pendingKeys, onSelect, onClose, onReply }: ReactionPickerProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -71,6 +78,20 @@ export function ReactionPicker({ activeKeys, pendingKeys, onSelect, onClose }: R
           </button>
         );
       })}
+      {onReply && (
+        <>
+          <span className="mx-0.5 h-6 w-px shrink-0 bg-line-subtle" aria-hidden="true" />
+          <button
+            type="button"
+            role="menuitem"
+            aria-label="Responder"
+            onClick={onReply}
+            className="flex items-center justify-center min-w-11 min-h-11 rounded-xl text-foreground-muted transition-colors hover:bg-ink/5 hover:text-accent"
+          >
+            <Reply size={16} />
+          </button>
+        </>
+      )}
     </motion.div>
   );
 }

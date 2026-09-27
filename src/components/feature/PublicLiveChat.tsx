@@ -9,6 +9,7 @@ import { useChatScroll } from "@/hooks/useChatScroll";
 import { getPublicLiveMessages, type PublicChatMessage } from "@/lib/api/stream/lives";
 import { mergeMessagesById } from "@/lib/chat/mergeMessagesById";
 import { MessageReactions } from "@/components/feature/chat/MessageReactions";
+import { QuotedMessage } from "@/components/feature/chat/QuotedMessage";
 import { fetchPublicLiveReactions, type ReactionsByMessage } from "@/lib/api/stream/reactions";
 
 interface PublicLiveChatProps {
@@ -18,12 +19,18 @@ interface PublicLiveChatProps {
   showWelcome?: boolean;
 }
 
+// Cuánto se mantiene resaltado el mensaje original tras "Ir al mensaje original".
+const HIGHLIGHT_DURATION_MS = 1500;
+
 const SYSTEM_MESSAGE: PublicChatMessage = {
   id: "system-1",
   user_id: "system",
   user_name: "Iván Mazo",
   message: "¡Bienvenidos a este encuentro exclusivo! Iniciamos en instantes.",
   created_at: new Date(0).toISOString(),
+  reply_to_id: null,
+  reply_to_user_name: null,
+  reply_to_excerpt: null,
 };
 
 const POLL_INTERVAL_MS = 4000;
@@ -40,8 +47,24 @@ const PublicLiveChat = ({ token, loginPath, showWelcome = true }: PublicLiveChat
   const [messages, setMessages] = useState<PublicChatMessage[]>([SYSTEM_MESSAGE]);
   const [reactions, setReactions] = useState<ReactionsByMessage>(new Map());
   const [loading, setLoading] = useState(true);
+  // Id del mensaje resaltado tras un salto a "Ir al mensaje original".
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const visibleMessages = showWelcome ? messages : messages.filter((m) => m.id !== SYSTEM_MESSAGE.id);
   const { listRef, handleScroll, unseenCount, jumpToLatest } = useChatScroll(visibleMessages.length, !loading);
+
+  // Igual que en LiveChat: salta al mensaje original (si sigue cargado) y lo
+  // resalta unos instantes. El chat público es de solo lectura, pero el
+  // salto a la cita sigue siendo útil.
+  const jumpToMessage = (id: string) => {
+    const container = listRef.current;
+    const target = container?.querySelector<HTMLElement>(`[data-message-id="${id}"]`);
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlightedMessageId(id);
+    window.setTimeout(() => {
+      setHighlightedMessageId((current) => (current === id ? null : current));
+    }, HIGHLIGHT_DURATION_MS);
+  };
 
   useEffect(() => {
     let isActive = true;
@@ -117,9 +140,13 @@ const PublicLiveChat = ({ token, loginPath, showWelcome = true }: PublicLiveChat
             </div>
           ) : (
             <AnimatePresence initial={false}>
-              {visibleMessages.map((msg) => (
+              {visibleMessages.map((msg) => {
+                // El original puede no estar cargado (fuera de la ventana de MESSAGE_WINDOW).
+                const canJumpToOriginal = Boolean(msg.reply_to_id && messages.some((m) => m.id === msg.reply_to_id));
+                return (
                 <motion.div
                   key={msg.id}
+                  data-message-id={msg.id}
                   initial={{ opacity: 0, x: -20, scale: 0.95 }}
                   animate={{ opacity: 1, x: 0, scale: 1 }}
                   transition={{ duration: 0.2 }}
@@ -147,17 +174,26 @@ const PublicLiveChat = ({ token, loginPath, showWelcome = true }: PublicLiveChat
   
                   <div
                     className={cn(
-                      "px-4 py-2.5 rounded-2xl max-w-[90%] text-sm break-words relative overflow-hidden",
+                      "px-4 py-2.5 rounded-2xl max-w-[90%] text-sm break-words relative overflow-hidden transition-shadow",
                       msg.id === SYSTEM_MESSAGE.id
                         ? "bg-brand/10 text-accent border border-brand/30 shadow-[0_0_20px_rgba(204,164,59,0.1)]"
-                        : "bg-ink/5 text-foreground border border-ink/5 light:bg-surface-panel light:border-line-subtle light:shadow-sm"
+                        : "bg-ink/5 text-foreground border border-ink/5 light:bg-surface-panel light:border-line-subtle light:shadow-sm",
+                      highlightedMessageId === msg.id && "ring-2 ring-accent"
                     )}
                   >
+                    {msg.reply_to_user_name && (
+                      <QuotedMessage
+                        userName={msg.reply_to_user_name}
+                        excerpt={msg.reply_to_excerpt}
+                        onJumpToOriginal={canJumpToOriginal ? () => jumpToMessage(msg.reply_to_id!) : undefined}
+                      />
+                    )}
                     {msg.message}
                   </div>
                   {msg.id !== SYSTEM_MESSAGE.id && <MessageReactions reactions={reactions.get(msg.id) || {}} readOnly />}
                 </motion.div>
-              ))}
+                );
+              })}
             </AnimatePresence>
           )}
         </div>

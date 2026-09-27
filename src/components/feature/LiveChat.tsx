@@ -1,6 +1,6 @@
 import { useState, useEffect, type FormEvent, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Send, Users, ShieldCheck, SmilePlus } from "lucide-react";
+import { Send, Users, ShieldCheck, SmilePlus, Reply } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/stores/auth.store";
@@ -8,9 +8,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ChatJumpToLatest } from "@/components/feature/ChatJumpToLatest";
 import { MessageReactions } from "@/components/feature/chat/MessageReactions";
 import { ReactionPicker } from "@/components/feature/chat/ReactionPicker";
+import { QuotedMessage } from "@/components/feature/chat/QuotedMessage";
+import { ReplyComposerPreview } from "@/components/feature/chat/ReplyComposerPreview";
 import { useChatScroll } from "@/hooks/useChatScroll";
 import { useLiveReactions } from "@/hooks/useLiveReactions";
+import { useReplyTarget } from "@/hooks/useReplyTarget";
 import { mergeMessagesById } from "@/lib/chat/mergeMessagesById";
+import type { ReplyTo } from "@/lib/chat/replyTo";
 
 export interface ChatMessage {
   id: string;
@@ -19,7 +23,13 @@ export interface ChatMessage {
   content: string;
   created_at: string;
   isSystem?: boolean;
+  reply_to?: ReplyTo | null;
 }
+
+/** How long the jump-to-original highlight stays on the target bubble. */
+const HIGHLIGHT_DURATION_MS = 1500;
+/** Client-side cap on the reply preview excerpt — the DB independently truncates to the same length. */
+const REPLY_EXCERPT_LENGTH = 140;
 
 interface LiveChatProps {
   liveId?: string;
@@ -48,6 +58,26 @@ interface MessageRow {
   content: string;
   created_at: string;
   user_id: string;
+  reply_to_id: string | null;
+  reply_to_user_id: string | null;
+  reply_to_user_name: string | null;
+  reply_to_excerpt: string | null;
+}
+
+/**
+ * Builds the reply quote from a DB row. `reply_to_user_name` (not
+ * `reply_to_id`) is the signal that a message IS a reply: once the original
+ * is deleted, the FK nulls `reply_to_id` but the trigger keeps the author
+ * name so the UI can still show "Mensaje eliminado" with attribution.
+ */
+function buildReplyTo(row: MessageRow): ReplyTo | null {
+  if (!row.reply_to_user_name) return null;
+  return {
+    id: row.reply_to_id,
+    user_id: row.reply_to_user_id,
+    user_name: row.reply_to_user_name,
+    excerpt: row.reply_to_excerpt,
+  };
 }
 
 const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingMessage, showWelcome = true }: LiveChatProps) => {
@@ -63,9 +93,14 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
   // false hasta que el historial resuelve (éxito o error) — recién ahí el
   // hook de reacciones pide el snapshot inicial.
   const [historyReady, setHistoryReady] = useState(false);
+  // Id del mensaje al que se saltó por "Ir al mensaje original" — resalta la
+  // burbuja unos instantes y después se apaga sola.
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const onIncomingMessageRef = useRef(onIncomingMessage);
   // Mensaje enviado sin confirmar: su id se reusa si se reintenta el mismo texto.
   const pendingSendRef = useRef<{ id: string; text: string } | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const { replyTarget, startReply, cancelReply } = useReplyTarget();
   const visibleMessages = showWelcome ? messages : messages.filter((m) => m.id !== SYSTEM_MESSAGE.id);
   // Ventana de mensajes para la que se piden reacciones — recalculada en cada
   // render (el hook la lee por ref) para que un resync tras reconexión use
@@ -80,6 +115,27 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
     messageIds,
     historyReady,
   });
+
+  // Abre el composer con el mensaje elegido, cierra cualquier picker abierto
+  // y enfoca el input — así el alumno puede escribir la respuesta enseguida.
+  const handleStartReply = (msg: ChatMessage) => {
+    startReply({ id: msg.id, userName: msg.user_name, excerpt: msg.content.slice(0, REPLY_EXCERPT_LENGTH) });
+    setOpenPickerId(null);
+    inputRef.current?.focus();
+  };
+
+  // Desplaza el mensaje original a la vista y lo resalta unos instantes.
+  // No hace nada si ya no está cargado (fuera de la ventana de HISTORY_LIMIT).
+  const jumpToMessage = (id: string) => {
+    const container = listRef.current;
+    const target = container?.querySelector<HTMLElement>(`[data-message-id="${id}"]`);
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlightedMessageId(id);
+    window.setTimeout(() => {
+      setHighlightedMessageId((current) => (current === id ? null : current));
+    }, HIGHLIGHT_DURATION_MS);
+  };
 
   // Mantener el callback siempre actualizado sin reabrir la suscripción Realtime
   useEffect(() => {
@@ -113,7 +169,7 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
       // Antes traía el historial completo de la clase.
       const { data: rows, error } = await supabase
         .from("live_messages")
-        .select("id, content, created_at, user_id")
+        .select("id, content, created_at, user_id, reply_to_id, reply_to_user_id, reply_to_user_name, reply_to_excerpt")
         .eq("live_id", liveId)
         .order("created_at", { ascending: false })
         .limit(HISTORY_LIMIT);
@@ -135,6 +191,7 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
           user_name: names.get(msg.user_id) || "Usuario",
           content: msg.content,
           created_at: msg.created_at,
+          reply_to: buildReplyTo(msg),
         }));
         // F20: MEZCLAR, no reemplazar. Lo que llegó por Realtime mientras
         // cargaba el historial ya está en `prev` y antes se perdía.
@@ -165,6 +222,7 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
           user_name: await resolveName(newMsg.user_id),
           content: newMsg.content,
           created_at: newMsg.created_at,
+          reply_to: buildReplyTo(newMsg),
         };
         if (!isActive) return;
 
@@ -217,11 +275,15 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
     // lo que escribió y creía que lo había enviado.
     let failed = false;
     try {
+      // Solo viaja el id del original — el nombre y el extracto los llena el
+      // trigger del lado servidor a partir de la fila real (ver
+      // sql/migrate-live-message-replies.sql), nunca lo que mande el cliente.
       const { error } = await supabase.from("live_messages").insert({
         id: pending.id,
         live_id: liveId,
         user_id: user.id,
         content: messageText,
+        reply_to_id: replyTarget?.id ?? null,
       });
       // 23505 (unique_violation) en un reintento = el intento anterior sí
       // llegó. El mensaje ya está enviado: no es un error.
@@ -242,6 +304,9 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
     pendingSendRef.current = null;
     // Solo se limpia si el alumno no siguió escribiendo mientras se enviaba.
     setNewMessage((current) => (current.trim() === messageText ? "" : current));
+    // Un envío fallido CONSERVA el objetivo de respuesta (se reintenta con el
+    // mismo); solo se limpia cuando el mensaje se confirmó.
+    cancelReply();
     // Quien escribe quiere ver su mensaje: vuelve al final aunque estuviera leyendo.
     jumpToLatest();
   };
@@ -298,9 +363,15 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
             <AnimatePresence initial={false}>
               {visibleMessages.map((msg) => {
                 const isBubbleInteractive = !msg.isSystem && Boolean(user);
+                // Alguien me respondió: un aviso sutil para que no se pase de largo.
+                const isReplyToMe = !msg.isSystem && msg.reply_to?.user_id === user?.id && msg.user_id !== user?.id;
+                const replyToOriginalId = msg.reply_to?.id;
+                // El original puede no estar (ya no existe, o quedó fuera de HISTORY_LIMIT).
+                const canJumpToOriginal = Boolean(replyToOriginalId && messages.some((m) => m.id === replyToOriginalId));
                 return (
                 <motion.div
                   key={msg.id}
+                  data-message-id={msg.id}
                   initial={{ opacity: 0, x: msg.user_id === user?.id && !msg.isSystem ? 20 : -20, scale: 0.95 }}
                   animate={{ opacity: 1, x: 0, scale: 1 }}
                   transition={{ duration: 0.2 }}
@@ -346,30 +417,51 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
                       aria-expanded={isBubbleInteractive ? openPickerId === msg.id : undefined}
                       data-reaction-trigger={isBubbleInteractive ? "true" : undefined}
                       className={cn(
-                        "px-4 py-2.5 rounded-2xl max-w-[90%] text-sm break-words relative overflow-hidden",
+                        "px-4 py-2.5 rounded-2xl max-w-[90%] text-sm break-words relative overflow-hidden transition-shadow",
                         isBubbleInteractive && "cursor-pointer",
                         msg.isSystem
                           ? "bg-brand/10 text-accent border border-brand/30 shadow-[0_0_20px_rgba(204,164,59,0.1)]"
                           : msg.user_id === user?.id
                             ? "bg-brand text-on-brand font-medium shadow-lg"
-                            : "bg-ink/5 text-foreground border border-ink/5 light:bg-surface-panel light:border-line-subtle light:shadow-sm"
+                            : "bg-ink/5 text-foreground border border-ink/5 light:bg-surface-panel light:border-line-subtle light:shadow-sm",
+                        isReplyToMe && "ring-2 ring-accent/60",
+                        highlightedMessageId === msg.id && "ring-2 ring-accent"
                       )}
                     >
                       {msg.isSystem && (
                         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" />
                       )}
+                      {msg.reply_to && (
+                        <QuotedMessage
+                          userName={msg.reply_to.user_name}
+                          excerpt={msg.reply_to.excerpt}
+                          isOwnBubble={msg.user_id === user?.id}
+                          onJumpToOriginal={canJumpToOriginal ? () => jumpToMessage(replyToOriginalId!) : undefined}
+                        />
+                      )}
                       {msg.content}
                     </div>
                     {!msg.isSystem && user && (
-                      <button
-                        type="button"
-                        aria-label="Reaccionar a este mensaje"
-                        data-reaction-trigger="true"
-                        onClick={() => setOpenPickerId((current) => (current === msg.id ? null : msg.id))}
-                        className="hidden md:flex items-center justify-center size-8 rounded-full text-foreground-muted opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-ink/5 hover:text-accent transition-opacity shrink-0"
-                      >
-                        <SmilePlus size={16} />
-                      </button>
+                      <div className="hidden md:flex items-center gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity shrink-0">
+                        <button
+                          type="button"
+                          aria-label="Responder"
+                          data-reaction-trigger="true"
+                          onClick={() => handleStartReply(msg)}
+                          className="flex items-center justify-center size-8 rounded-full text-foreground-muted hover:bg-ink/5 hover:text-accent"
+                        >
+                          <Reply size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Reaccionar a este mensaje"
+                          data-reaction-trigger="true"
+                          onClick={() => setOpenPickerId((current) => (current === msg.id ? null : msg.id))}
+                          className="flex items-center justify-center size-8 rounded-full text-foreground-muted hover:bg-ink/5 hover:text-accent"
+                        >
+                          <SmilePlus size={16} />
+                        </button>
+                      </div>
                     )}
                   </div>
 
@@ -389,6 +481,7 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
                             setOpenPickerId(null);
                           }}
                           onClose={() => setOpenPickerId(null)}
+                          onReply={() => handleStartReply(msg)}
                         />
                       )}
                     </div>
@@ -404,9 +497,11 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
 
       {/* Input Area */}
       <div className="p-4 bg-black/40 light:bg-surface-subtle border-t border-line-subtle shrink-0">
+        {replyTarget && <ReplyComposerPreview target={replyTarget} onCancel={cancelReply} />}
         <form onSubmit={handleSendMessage} className="flex gap-2 group">
           <div className="relative flex-1">
             <input
+              ref={inputRef}
               type="text"
               value={newMessage}
               onChange={(e) => {
@@ -415,8 +510,10 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
               }}
               // Enter que confirma una composición IME (acentos, otros idiomas)
               // no es "enviar": algunos navegadores igual disparaban el submit.
+              // Escape cancela la respuesta en curso, si hay una.
               onKeyDown={(e) => {
                 if (e.key === "Enter" && e.nativeEvent.isComposing) e.preventDefault();
+                if (e.key === "Escape" && replyTarget) cancelReply();
               }}
               enterKeyHint="send"
               autoComplete="off"

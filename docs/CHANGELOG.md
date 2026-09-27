@@ -5,6 +5,17 @@
 
 ---
 
+## 2026-09-27
+
+### Live — responder a un mensaje del chat (estilo WhatsApp)
+- **⚠️ Correr `sql/migrate-live-message-replies.sql` en Supabase ANTES de deployar el frontend.** El frontend viejo sigue funcionando sin cambios contra la nueva firma de `get_public_live_messages` (ignora las 3 columnas nuevas), así que no hay ventana rota entre los dos deploys.
+- **Columnas nuevas en `live_messages`**: `reply_to_id` (FK a `live_messages(id) ON DELETE SET NULL`), `reply_to_user_id`, `reply_to_user_name`, `reply_to_excerpt`. El cliente solo manda `reply_to_id` al insertar — el nombre y el extracto los deriva un trigger `BEFORE INSERT`/`BEFORE UPDATE OF ...` (`SECURITY DEFINER`) a partir de la fila real del mensaje original, nunca de lo que mande el cliente (si no, cualquiera podría "citar" algo que Iván nunca dijo).
+- **Moderación (mensaje original borrado)**: un trigger `BEFORE DELETE` limpia `reply_to_excerpt` de todas las respuestas antes de que el FK ponga `reply_to_id` en null. `reply_to_user_name` se conserva a propósito (el trigger de derivación lo reafirma en ese caso) — así la UI puede seguir mostrando "Respondiendo a {nombre}" con "Mensaje eliminado" en vez del extracto, en lugar de perder la atribución.
+- **`get_public_live_messages`**: gana `reply_to_id`, `reply_to_user_name`, `reply_to_excerpt` (no expone `reply_to_user_id` — el link público anónimo no tiene sesión con la que compararlo).
+- **UI**: `QuotedMessage` (cita dentro de la burbuja, clickeable como "Ir al mensaje original" solo si el original sigue cargado — si no, es un `div` no interactivo) y `ReplyComposerPreview` (barra "Respondiendo a {nombre}" sobre el input, con X y Escape para cancelar) nuevos en `src/components/feature/chat/`. `ReactionPicker` pasó a ser una pequeña barra de acciones: los 4 emojis + separador + botón "Responder" (ícono `Reply` de lucide). En `LiveChat` se puede responder desde esa barra (mobile) o con un botón de hover junto al de `SmilePlus` (desktop); un envío fallido conserva el objetivo de respuesta, uno confirmado lo limpia. La burbuja de quien recibió una respuesta lleva un anillo sutil. `PublicLiveChat` renderiza la misma cita en modo lectura (sin acciones — anon no puede responder).
+- Estado de UI nuevo: hook `useReplyTarget` (mensaje en curso de respuesta) en `src/hooks/`, tipos `ReplyTo`/`ReplyTarget` en `src/lib/chat/replyTo.ts`.
+- Tests: `QuotedMessage.test.tsx` y `ReplyComposerPreview.test.tsx` nuevos; casos nuevos en `LiveChat.test.tsx` (responder desde la barra de acciones, payload sin `reply_to_user_name`/`excerpt`, cancelar con X/Escape, un envío fallido conserva la respuesta, cita desde Realtime, "Mensaje eliminado", anillo de "te respondieron", salto+resalte al original) y en `PublicLiveChat.test.tsx` (cita en modo lectura, con y sin original cargado).
+
 ## 2026-09-26
 
 ### Live — reacciones a los mensajes del chat

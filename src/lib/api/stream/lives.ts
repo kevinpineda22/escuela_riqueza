@@ -333,6 +333,12 @@ export interface PublicChatMessage {
   message: string;
   created_at: string;
   user_name: string;
+  /** Id of the original message being replied to, or null (not a reply, or the original was deleted). */
+  reply_to_id: string | null;
+  /** Non-null whenever this message is a reply, even after the original was deleted. */
+  reply_to_user_name: string | null;
+  /** null when this message isn't a reply, or when it is one but the original was deleted. */
+  reply_to_excerpt: string | null;
 }
 
 export async function getPublicLiveMessages(token: string, limit = 100): Promise<PublicChatMessage[]> {
