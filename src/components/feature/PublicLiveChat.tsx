@@ -129,13 +129,13 @@ const PublicLiveChat = ({ token, loginPath, showWelcome = true }: PublicLiveChat
                     <span
                       className={cn(
                         "text-[10px] font-bold uppercase tracking-wider",
-                        msg.id === "system-1" ? "text-accent" : "text-foreground-muted"
+                        msg.id === SYSTEM_MESSAGE.id ? "text-accent" : "text-foreground-muted"
                       )}
                     >
                       {msg.user_name}
                     </span>
-                    {msg.id === "system-1" && <ShieldCheck size={10} className="text-accent" />}
-                    {msg.id !== "system-1" && (
+                    {msg.id === SYSTEM_MESSAGE.id && <ShieldCheck size={10} className="text-accent" />}
+                    {msg.id !== SYSTEM_MESSAGE.id && (
                       <span className="text-[9px] font-medium text-fg-30 light:text-fg-50 tracking-wide tabular-nums">
                         {new Date(msg.created_at).toLocaleTimeString(undefined, {
                           hour: "2-digit",
@@ -148,14 +148,14 @@ const PublicLiveChat = ({ token, loginPath, showWelcome = true }: PublicLiveChat
                   <div
                     className={cn(
                       "px-4 py-2.5 rounded-2xl max-w-[90%] text-sm break-words relative overflow-hidden",
-                      msg.id === "system-1"
+                      msg.id === SYSTEM_MESSAGE.id
                         ? "bg-brand/10 text-accent border border-brand/30 shadow-[0_0_20px_rgba(204,164,59,0.1)]"
                         : "bg-ink/5 text-foreground border border-ink/5 light:bg-surface-panel light:border-line-subtle light:shadow-sm"
                     )}
                   >
                     {msg.message}
                   </div>
-                  {msg.id !== "system-1" && <MessageReactions reactions={reactions.get(msg.id) || {}} readOnly />}
+                  {msg.id !== SYSTEM_MESSAGE.id && <MessageReactions reactions={reactions.get(msg.id) || {}} readOnly />}
                 </motion.div>
               ))}
             </AnimatePresence>

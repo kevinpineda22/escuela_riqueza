@@ -199,6 +199,19 @@ export async function removeReaction(messageId: string, key: ReactionKey, userId
   if (error) throw error;
 }
 
+/** Extracts the reaction keys of `messageId` that have a toggle in flight. */
+export function pendingKeysForMessage(messageId: string, pending: Set<string>): Set<ReactionKey> {
+  const keys = new Set<ReactionKey>();
+  const prefix = `${messageId}:`;
+  for (const entry of pending) {
+    if (entry.startsWith(prefix)) {
+      const key = entry.slice(prefix.length);
+      if (isReactionKey(key)) keys.add(key);
+    }
+  }
+  return keys;
+}
+
 /**
  * Aggregated counts for a public (anonymous) live link — no per-user rows.
  * `limit` must match the message window `getPublicLiveMessages` loads, so

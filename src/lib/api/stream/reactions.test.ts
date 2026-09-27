@@ -10,6 +10,7 @@ import {
   removeReaction,
   fetchPublicLiveReactions,
   isReactionKey,
+  pendingKeysForMessage,
   type ReactionRow,
   type ReactionOp,
 } from "./reactions";
@@ -150,6 +151,22 @@ describe("applyReactionRemoved", () => {
     const current = new Map([["m1", { heart: { count: 1, mine: true } }]]);
     const result = applyReactionRemoved(current, { message_id: "m1", user_id: "a", emoji: "fire" }, "a");
     expect(result).toBe(current);
+  });
+});
+
+describe("pendingKeysForMessage", () => {
+  it("extracts only the keys belonging to the given message", () => {
+    const pending = new Set(["m1:heart", "m1:fire", "m2:clap"]);
+    expect(pendingKeysForMessage("m1", pending)).toEqual(new Set(["heart", "fire"]));
+  });
+
+  it("ignores an unrecognized emoji key", () => {
+    const pending = new Set(["m1:thumbs_up"]);
+    expect(pendingKeysForMessage("m1", pending).size).toBe(0);
+  });
+
+  it("returns an empty set when nothing is pending for the message", () => {
+    expect(pendingKeysForMessage("m1", new Set()).size).toBe(0);
   });
 });
 

@@ -5,14 +5,27 @@ import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/stores/auth.store";
 import type { User } from "@/types/user";
 
-const channel = { on: vi.fn(), subscribe: vi.fn() };
+// LiveChat.tsx se suscribe al canal de mensajes; useLiveReactions (hook
+// aparte, ver useLiveReactions.ts) se suscribe a su PROPIO canal
+// `live_reactions_${liveId}`. `supabase.channel` devuelve uno u otro según
+// el nombre pedido, así los tests distinguen ambos sin depender del orden en
+// que React corre los efectos de cada hook.
+const messagesChannel = { on: vi.fn(), subscribe: vi.fn() };
+const reactionsChannel = { on: vi.fn(), subscribe: vi.fn() };
 const insert = vi.fn();
+
+function setupChannelChaining() {
+  messagesChannel.on.mockReturnValue(messagesChannel);
+  messagesChannel.subscribe.mockReturnValue(messagesChannel);
+  reactionsChannel.on.mockReturnValue(reactionsChannel);
+  reactionsChannel.subscribe.mockReturnValue(reactionsChannel);
+}
 
 vi.mock("@/lib/supabase", () => ({
   supabase: {
     auth: { getSession: vi.fn() },
     from: vi.fn(),
-    channel: vi.fn(() => channel),
+    channel: vi.fn((name: string) => (name.startsWith("live_reactions_") ? reactionsChannel : messagesChannel)),
     removeChannel: vi.fn(),
   },
 }));
@@ -35,12 +48,19 @@ function send(input: HTMLInputElement, text: string) {
 describe("LiveChat — envío (F22)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    channel.on.mockReturnValue(channel);
-    channel.subscribe.mockReturnValue(channel);
+    setupChannelChaining();
     (supabase.auth.getSession as ReturnType<typeof vi.fn>).mockResolvedValue({ data: { session: null } });
     // Historial vacío; `insert` es lo que cada test controla.
+    // La forma genérica cubre las dos consultas del montaje: el historial de
+    // mensajes (`eq().order().limit()`) y, apenas termina de cargar, el
+    // snapshot de reacciones del hook (`eq().in()`).
     from.mockReturnValue({
-      select: () => ({ eq: () => ({ order: () => ({ limit: () => Promise.resolve({ data: [], error: null }) }) }) }),
+      select: () => ({
+        eq: () => ({
+          order: () => ({ limit: () => Promise.resolve({ data: [], error: null }) }),
+          in: () => Promise.resolve({ data: [], error: null }),
+        }),
+      }),
       insert,
     });
     useAuthStore.setState({ user: student, token: "t" });
@@ -110,11 +130,18 @@ describe("LiveChat — envío (F22)", () => {
 describe("LiveChat — teclado (F15)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    channel.on.mockReturnValue(channel);
-    channel.subscribe.mockReturnValue(channel);
+    setupChannelChaining();
     (supabase.auth.getSession as ReturnType<typeof vi.fn>).mockResolvedValue({ data: { session: null } });
+    // La forma genérica cubre las dos consultas del montaje: el historial de
+    // mensajes (`eq().order().limit()`) y, apenas termina de cargar, el
+    // snapshot de reacciones del hook (`eq().in()`).
     from.mockReturnValue({
-      select: () => ({ eq: () => ({ order: () => ({ limit: () => Promise.resolve({ data: [], error: null }) }) }) }),
+      select: () => ({
+        eq: () => ({
+          order: () => ({ limit: () => Promise.resolve({ data: [], error: null }) }),
+          in: () => Promise.resolve({ data: [], error: null }),
+        }),
+      }),
       insert,
     });
     useAuthStore.setState({ user: student, token: "t" });
@@ -147,11 +174,18 @@ describe("LiveChat — teclado (F15)", () => {
 describe("LiveChat — reintento sin duplicados (F22)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    channel.on.mockReturnValue(channel);
-    channel.subscribe.mockReturnValue(channel);
+    setupChannelChaining();
     (supabase.auth.getSession as ReturnType<typeof vi.fn>).mockResolvedValue({ data: { session: null } });
+    // La forma genérica cubre las dos consultas del montaje: el historial de
+    // mensajes (`eq().order().limit()`) y, apenas termina de cargar, el
+    // snapshot de reacciones del hook (`eq().in()`).
     from.mockReturnValue({
-      select: () => ({ eq: () => ({ order: () => ({ limit: () => Promise.resolve({ data: [], error: null }) }) }) }),
+      select: () => ({
+        eq: () => ({
+          order: () => ({ limit: () => Promise.resolve({ data: [], error: null }) }),
+          in: () => Promise.resolve({ data: [], error: null }),
+        }),
+      }),
       insert,
     });
     useAuthStore.setState({ user: student, token: "t" });
@@ -223,30 +257,34 @@ describe("LiveChat — historial, Realtime y conexión (F20, F23, F38)", () => {
   const profilesEq = vi.fn();
 
   // Realtime: el handler de INSERT y el callback de estado que registra el chat.
-  const insertHandler = () => channel.on.mock.calls[0][2] as (payload: { new: Row }) => Promise<void>;
-  const statusCallback = () => channel.subscribe.mock.calls[0][0] as (status: string) => void;
+  // El canal de mensajes solo registra este único handler (las reacciones
+  // viven en su propio canal, ver useLiveReactions.ts), así que el índice 0
+  // es estable.
+  const insertHandler = () => messagesChannel.on.mock.calls[0][2] as (payload: { new: Row }) => Promise<void>;
+  const statusCallback = () => messagesChannel.subscribe.mock.calls[0][0] as (status: string) => void;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    channel.on.mockReturnValue(channel);
-    channel.subscribe.mockReturnValue(channel);
+    setupChannelChaining();
     (supabase.auth.getSession as ReturnType<typeof vi.fn>).mockResolvedValue({ data: { session: null } });
     profilesIn.mockResolvedValue({ data: [{ id: "ana", full_name: "Ana" }] });
     profilesEq.mockReturnValue({ maybeSingle: () => Promise.resolve({ data: { full_name: "Beto" } }) });
-    from.mockImplementation((table: string) =>
-      table === "profiles"
-        ? { select: () => ({ in: profilesIn, eq: profilesEq }) }
-        : {
-            select: () => ({
-              eq: () => ({
-                order: () => ({
-                  limit: () => new Promise((resolve) => { resolveHistory = resolve; }),
-                }),
-              }),
+    from.mockImplementation((table: string) => {
+      if (table === "profiles") return { select: () => ({ in: profilesIn, eq: profilesEq }) };
+      if (table === "live_message_reactions") {
+        return { select: () => ({ eq: () => ({ in: () => Promise.resolve({ data: [], error: null }) }) }) };
+      }
+      return {
+        select: () => ({
+          eq: () => ({
+            order: () => ({
+              limit: () => new Promise((resolve) => { resolveHistory = resolve; }),
             }),
-            insert,
-          }
-    );
+          }),
+        }),
+        insert,
+      };
+    });
     useAuthStore.setState({ user: student, token: "t" });
   });
 
@@ -254,7 +292,7 @@ describe("LiveChat — historial, Realtime y conexión (F20, F23, F38)", () => {
 
   it("un mensaje que llega por Realtime mientras carga el historial no se pierde", async () => {
     render(<LiveChat liveId="live-1" showWelcome={false} />);
-    await waitFor(() => expect(channel.on).toHaveBeenCalled());
+    await waitFor(() => expect(messagesChannel.on).toHaveBeenCalled());
 
     // Llega un mensaje nuevo ANTES de que responda el historial.
     await act(async () => {
@@ -274,7 +312,7 @@ describe("LiveChat — historial, Realtime y conexión (F20, F23, F38)", () => {
 
   it("no consulta el perfil de alguien que ya habló (F38)", async () => {
     render(<LiveChat liveId="live-1" showWelcome={false} />);
-    await waitFor(() => expect(channel.on).toHaveBeenCalled());
+    await waitFor(() => expect(messagesChannel.on).toHaveBeenCalled());
     await act(async () => {
       resolveHistory({ data: [row("m1", "ana", "hola", "2026-09-25T10:01:00Z")], error: null });
     });
@@ -290,7 +328,7 @@ describe("LiveChat — historial, Realtime y conexión (F20, F23, F38)", () => {
 
   it("si el historial no carga, lo dice en vez de mostrar un chat vacío (F23)", async () => {
     render(<LiveChat liveId="live-1" showWelcome={false} />);
-    await waitFor(() => expect(channel.on).toHaveBeenCalled());
+    await waitFor(() => expect(messagesChannel.on).toHaveBeenCalled());
     await act(async () => {
       resolveHistory({ data: null, error: { message: "boom" } });
     });
@@ -300,7 +338,7 @@ describe("LiveChat — historial, Realtime y conexión (F20, F23, F38)", () => {
 
   it("el indicador de conexión refleja la suscripción real (F23)", async () => {
     render(<LiveChat liveId="live-1" showWelcome={false} />);
-    await waitFor(() => expect(channel.subscribe).toHaveBeenCalled());
+    await waitFor(() => expect(messagesChannel.subscribe).toHaveBeenCalled());
     expect(screen.getByRole("status")).toHaveTextContent("Conectando…");
 
     act(() => statusCallback()("SUBSCRIBED"));
@@ -320,17 +358,17 @@ describe("LiveChat — reacciones", () => {
   const reactionDelete = vi.fn(() => ({ eq: reactionDeleteEq1 }));
   const reactionsSelectIn = vi.fn();
 
-  // Handlers registrados en el canal: [0] INSERT live_messages, [1] INSERT
-  // live_message_reactions, [2] DELETE live_message_reactions.
-  const reactionInsertHandler = () => channel.on.mock.calls[1][2] as (payload: { new: { message_id: string; user_id: string; emoji: string } }) => void;
-  const reactionDeleteHandler = () => channel.on.mock.calls[2][2] as (payload: { old: Partial<{ message_id: string; user_id: string; emoji: string }> }) => void;
+  // Handlers registrados en el canal de reacciones (propio, ver
+  // useLiveReactions.ts): [0] INSERT live_message_reactions, [1] DELETE
+  // live_message_reactions. El canal de mensajes ya no los ve.
+  const reactionInsertHandler = () => reactionsChannel.on.mock.calls[0][2] as (payload: { new: { message_id: string; user_id: string; emoji: string } }) => void;
+  const reactionDeleteHandler = () => reactionsChannel.on.mock.calls[1][2] as (payload: { old: Partial<{ message_id: string; user_id: string; emoji: string }> }) => void;
 
   const row = (id: string, user_id: string, content: string, created_at: string): Row => ({ id, user_id, content, created_at });
 
   beforeEach(() => {
     vi.clearAllMocks();
-    channel.on.mockReturnValue(channel);
-    channel.subscribe.mockReturnValue(channel);
+    setupChannelChaining();
     reactionsSelectIn.mockResolvedValue({ data: [], error: null });
     reactionInsert.mockResolvedValue({ error: null });
     reactionDeleteEq3.mockResolvedValue({ error: null });
@@ -368,6 +406,21 @@ describe("LiveChat — reacciones", () => {
     expect(await screen.findByRole("menu", { name: "Elegir reacción" })).toBeInTheDocument();
   });
 
+  it("tocar de nuevo la burbuja lo cierra en vez de reabrirlo (2026-09-26)", async () => {
+    await renderChatWithMessage();
+    const bubble = screen.getByText("Hola");
+    fireEvent.click(bubble);
+    await screen.findByRole("menu");
+
+    // Un tap real dispara primero `pointerdown` (el handler de "click afuera"
+    // del picker) y recién después `click` (el toggle de la burbuja). Sin el
+    // fix, el `pointerdown` ya cerraba el picker y el `click` lo reabría.
+    fireEvent.pointerDown(bubble);
+    fireEvent.click(bubble);
+
+    await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+  });
+
   it("elegir ❤️ llama a addReaction y muestra el contador resaltado", async () => {
     await renderChatWithMessage();
     fireEvent.click(screen.getByText("Hola"));
@@ -396,7 +449,7 @@ describe("LiveChat — reacciones", () => {
 
   it("un INSERT de Realtime de otro usuario incrementa el contador", async () => {
     await renderChatWithMessage();
-    await waitFor(() => expect(channel.on).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(reactionsChannel.on).toHaveBeenCalledTimes(2));
 
     act(() => reactionInsertHandler()({ new: { message_id: "m1", user_id: "otro-user", emoji: "fire" } }));
 
@@ -405,7 +458,7 @@ describe("LiveChat — reacciones", () => {
 
   it("un DELETE de Realtime quita el contador", async () => {
     await renderChatWithMessage();
-    await waitFor(() => expect(channel.on).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(reactionsChannel.on).toHaveBeenCalledTimes(2));
     act(() => reactionInsertHandler()({ new: { message_id: "m1", user_id: "otro-user", emoji: "fire" } }));
     await screen.findByText("1");
 
@@ -419,7 +472,7 @@ describe("LiveChat — reacciones", () => {
     reactionsSelectIn.mockReturnValue(new Promise((resolve) => { resolveReactions = resolve; }));
 
     await renderChatWithMessage();
-    await waitFor(() => expect(channel.on).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(reactionsChannel.on).toHaveBeenCalledTimes(2));
 
     // El evento de Realtime llega ANTES de que el snapshot de reacciones resuelva.
     act(() => reactionInsertHandler()({ new: { message_id: "m1", user_id: "otro-user", emoji: "fire" } }));

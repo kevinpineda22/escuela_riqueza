@@ -5,25 +5,12 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/stores/auth.store";
 import { Skeleton } from "@/components/ui/skeleton";
-import { toast } from "@/components/ui/toaster";
 import { ChatJumpToLatest } from "@/components/feature/ChatJumpToLatest";
 import { MessageReactions } from "@/components/feature/chat/MessageReactions";
 import { ReactionPicker } from "@/components/feature/chat/ReactionPicker";
 import { useChatScroll } from "@/hooks/useChatScroll";
+import { useLiveReactions } from "@/hooks/useLiveReactions";
 import { mergeMessagesById } from "@/lib/chat/mergeMessagesById";
-import {
-  fetchLiveReactions,
-  addReaction,
-  removeReaction,
-  mergeReactionSnapshot,
-  applyReactionAdded,
-  applyReactionRemoved,
-  isReactionKey,
-  type ReactionKey,
-  type ReactionsByMessage,
-  type ReactionRow,
-  type ReactionOp,
-} from "@/lib/api/stream/reactions";
 
 export interface ChatMessage {
   id: string;
@@ -63,19 +50,6 @@ interface MessageRow {
   user_id: string;
 }
 
-/** Extracts the reaction keys of `messageId` that have a toggle in flight. */
-function pendingKeysForMessage(messageId: string, pending: Set<string>): Set<ReactionKey> {
-  const keys = new Set<ReactionKey>();
-  const prefix = `${messageId}:`;
-  for (const entry of pending) {
-    if (entry.startsWith(prefix)) {
-      const key = entry.slice(prefix.length);
-      if (isReactionKey(key)) keys.add(key);
-    }
-  }
-  return keys;
-}
-
 const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingMessage, showWelcome = true }: LiveChatProps) => {
   const { user } = useAuthStore();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -85,30 +59,32 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
   const [sendError, setSendError] = useState(false);
   const [historyError, setHistoryError] = useState(false);
   const [connection, setConnection] = useState<"connecting" | "connected" | "reconnecting">("connecting");
-  const [reactions, setReactions] = useState<ReactionsByMessage>(new Map());
   const [openPickerId, setOpenPickerId] = useState<string | null>(null);
-  // Reacciones con un toggle en curso (`${messageId}:${key}`): un segundo tap
-  // sobre la misma mientras responde el servidor se ignora.
-  const [pendingReactions, setPendingReactions] = useState<Set<string>>(new Set());
+  // false hasta que el historial resuelve (éxito o error) — recién ahí el
+  // hook de reacciones pide el snapshot inicial.
+  const [historyReady, setHistoryReady] = useState(false);
   const onIncomingMessageRef = useRef(onIncomingMessage);
-  // Ref siempre actualizado: los handlers de Realtime viven dentro de un
-  // efecto con deps [liveId] y no deben quedarse con el `user.id` del montaje.
-  const currentUserIdRef = useRef<string | null>(user?.id ?? null);
   // Mensaje enviado sin confirmar: su id se reusa si se reintenta el mismo texto.
   const pendingSendRef = useRef<{ id: string; text: string } | null>(null);
   const visibleMessages = showWelcome ? messages : messages.filter((m) => m.id !== SYSTEM_MESSAGE.id);
+  // Ventana de mensajes para la que se piden reacciones — recalculada en cada
+  // render (el hook la lee por ref) para que un resync tras reconexión use
+  // los ids más recientes, no solo los del historial inicial.
+  const messageIds = messages.filter((m) => !m.isSystem).map((m) => m.id);
   // F19: antes cada mensaje nuevo arrastraba al final aunque el alumno
   // estuviera leyendo más arriba.
   const { listRef, handleScroll, unseenCount, jumpToLatest } = useChatScroll(visibleMessages.length, !loading);
+  const { reactions, toggleReaction, activeKeysFor, pendingKeysFor } = useLiveReactions({
+    liveId,
+    userId: user?.id ?? null,
+    messageIds,
+    historyReady,
+  });
 
   // Mantener el callback siempre actualizado sin reabrir la suscripción Realtime
   useEffect(() => {
     onIncomingMessageRef.current = onIncomingMessage;
   }, [onIncomingMessage]);
-
-  useEffect(() => {
-    currentUserIdRef.current = user?.id ?? null;
-  }, [user?.id]);
 
   // Cargar mensajes iniciales y suscribirse a nuevos
   useEffect(() => {
@@ -117,15 +93,6 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
     // consultar `profiles`. Antes cada mensaje entrante disparaba una
     // consulta en CADA espectador (F38).
     const names = new Map<string, string>();
-
-    // El canal de Realtime se suscribe MÁS ABAJO, antes de que resuelva el
-    // snapshot de reacciones — igual que con los mensajes (F20). Cualquier
-    // INSERT/DELETE de `live_message_reactions` que llegue mientras el
-    // snapshot todavía está en vuelo se guarda acá y se repite sobre el
-    // snapshot con `mergeReactionSnapshot` en vez de perderse al aplicar el
-    // `setReactions(...)` final.
-    let reactionsSnapshotLoaded = false;
-    const bufferedReactionOps: ReactionOp[] = [];
 
     const resolveName = async (userId: string): Promise<string> => {
       const known = names.get(userId);
@@ -153,10 +120,6 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
 
       if (!isActive) return;
 
-      // Ids de los mensajes recién cargados: las reacciones se piden solo
-      // para esta ventana, no para todo el historial del vivo.
-      let historyMessageIds: string[] = [];
-
       if (rows && !error) {
         const history = (rows as MessageRow[]).slice().reverse();
         const unknownIds = [...new Set(history.map((m) => m.user_id))].filter((id) => !names.has(id));
@@ -173,7 +136,6 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
           content: msg.content,
           created_at: msg.created_at,
         }));
-        historyMessageIds = loaded.map((m) => m.id);
         // F20: MEZCLAR, no reemplazar. Lo que llegó por Realtime mientras
         // cargaba el historial ya está en `prev` y antes se perdía.
         setMessages((prev) => mergeMessagesById(prev, [SYSTEM_MESSAGE, ...loaded]));
@@ -183,23 +145,7 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
         setMessages((prev) => mergeMessagesById(prev, [SYSTEM_MESSAGE]));
       }
       setLoading(false);
-
-      // Reacciones de la ventana de mensajes recién cargada, después de que
-      // cargó el historial (no una consulta por mensaje). El snapshot se
-      // MEZCLA con lo que haya llegado por Realtime durante la carga (misma
-      // idea que F20 pero para reacciones): reemplazar directo perdía
-      // cualquier INSERT/DELETE que aterrizara en la ventana entre el
-      // snapshot y este `setReactions`.
-      try {
-        const snapshot = await fetchLiveReactions(liveId, historyMessageIds);
-        if (!isActive) return;
-        setReactions(mergeReactionSnapshot(snapshot, bufferedReactionOps, currentUserIdRef.current));
-      } catch (err) {
-        console.error("[LiveChat] error cargando reacciones:", err);
-      } finally {
-        reactionsSnapshotLoaded = true;
-        bufferedReactionOps.length = 0;
-      }
+      setHistoryReady(true);
     };
 
     fetchHistory();
@@ -236,42 +182,6 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
           onIncomingMessageRef.current?.(incomingMessage);
         }
       }
-    ).on(
-      "postgres_changes",
-      { event: "INSERT", schema: "public", table: "live_message_reactions", filter: `live_id=eq.${liveId}` },
-      (payload: { new: ReactionRow }) => {
-        if (!isActive) return;
-        // Mientras el snapshot de reacciones no resolvió, este evento se
-        // guarda para repetirse sobre el snapshot (ver mergeReactionSnapshot).
-        // También se aplica al estado ya mismo para que la UI no se quede
-        // atrás mientras tanto; el `setReactions` del snapshot lo reemplaza
-        // por el resultado ya mezclado apenas resuelve.
-        if (!reactionsSnapshotLoaded) bufferedReactionOps.push({ type: "add", row: payload.new });
-        setReactions((prev) => applyReactionAdded(prev, payload.new, currentUserIdRef.current));
-      }
-    ).on(
-      // Postgres Changes solo puede filtrar un DELETE si la tabla tiene
-      // `replica identity full` (verificado en la doc de Supabase Realtime,
-      // guía "Postgres Changes"). No la activamos para no mandar la fila
-      // completa en cada delete de todo el proyecto, así que este handler
-      // llega SIN filtrar por live_id: con `replica identity` default el
-      // `old` solo trae las columnas de la primary key (message_id, user_id,
-      // emoji), que es justo lo que hace falta para actualizar el mapa local
-      // — y actualizar por un message_id que no está en este chat es un
-      // no-op inofensivo (ver `applyReactionRemoved`).
-      "postgres_changes",
-      { event: "DELETE", schema: "public", table: "live_message_reactions" },
-      (payload: { old: Partial<ReactionRow> }) => {
-        if (!isActive) return;
-        const { message_id, user_id, emoji } = payload.old;
-        if (!message_id || !user_id || !emoji || !isReactionKey(emoji)) return;
-        // Mismo criterio que el INSERT de arriba: bufferear mientras el
-        // snapshot no cargó, y de paso aplicar al estado actual.
-        if (!reactionsSnapshotLoaded) bufferedReactionOps.push({ type: "remove", row: { message_id, user_id, emoji } });
-        setReactions((prev) =>
-          applyReactionRemoved(prev, { message_id, user_id, emoji }, currentUserIdRef.current)
-        );
-      }
     ).subscribe((status) => {
       // F23: el indicador refleja la suscripción real, no es decorativo.
       if (isActive) setConnection(status === "SUBSCRIBED" ? "connected" : "reconnecting");
@@ -283,40 +193,6 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
       supabase.removeChannel(channel);
     };
   }, [liveId]);
-
-  const toggleReaction = async (messageId: string, key: ReactionKey) => {
-    if (!user) return;
-    const pendingKey = `${messageId}:${key}`;
-    if (pendingReactions.has(pendingKey)) return;
-
-    const alreadyMine = Boolean(reactions.get(messageId)?.[key]?.mine);
-    const previousReactions = reactions;
-    setPendingReactions((prev) => new Set(prev).add(pendingKey));
-    // Optimista: refleja el toggle antes de que responda el servidor.
-    setReactions((prev) =>
-      alreadyMine
-        ? applyReactionRemoved(prev, { message_id: messageId, user_id: user.id, emoji: key }, user.id)
-        : applyReactionAdded(prev, { message_id: messageId, user_id: user.id, emoji: key }, user.id)
-    );
-
-    try {
-      if (alreadyMine) {
-        await removeReaction(messageId, key, user.id);
-      } else {
-        await addReaction(messageId, liveId, key, user.id);
-      }
-    } catch (err) {
-      console.error("[LiveChat] error al reaccionar:", err);
-      setReactions(previousReactions);
-      toast.error("No se pudo guardar tu reacción");
-    } finally {
-      setPendingReactions((prev) => {
-        const next = new Set(prev);
-        next.delete(pendingKey);
-        return next;
-      });
-    }
-  };
 
   const handleSendMessage = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -420,7 +296,9 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
             </div>
           ) : (
             <AnimatePresence initial={false}>
-              {visibleMessages.map((msg) => (
+              {visibleMessages.map((msg) => {
+                const isBubbleInteractive = !msg.isSystem && Boolean(user);
+                return (
                 <motion.div
                   key={msg.id}
                   initial={{ opacity: 0, x: msg.user_id === user?.id && !msg.isSystem ? 20 : -20, scale: 0.95 }}
@@ -452,11 +330,24 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
                   <div className={cn("group relative flex items-end gap-1", msg.user_id === user?.id && !msg.isSystem && "flex-row-reverse")}>
                     <div
                       onClick={() => {
-                        if (!msg.isSystem && user) setOpenPickerId((current) => (current === msg.id ? null : msg.id));
+                        if (isBubbleInteractive) setOpenPickerId((current) => (current === msg.id ? null : msg.id));
                       }}
+                      onKeyDown={(e) => {
+                        if (!isBubbleInteractive) return;
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setOpenPickerId((current) => (current === msg.id ? null : msg.id));
+                        }
+                      }}
+                      role={isBubbleInteractive ? "button" : undefined}
+                      tabIndex={isBubbleInteractive ? 0 : undefined}
+                      aria-label={isBubbleInteractive ? "Reaccionar a este mensaje" : undefined}
+                      aria-haspopup={isBubbleInteractive ? "menu" : undefined}
+                      aria-expanded={isBubbleInteractive ? openPickerId === msg.id : undefined}
+                      data-reaction-trigger={isBubbleInteractive ? "true" : undefined}
                       className={cn(
                         "px-4 py-2.5 rounded-2xl max-w-[90%] text-sm break-words relative overflow-hidden",
-                        !msg.isSystem && user && "cursor-pointer",
+                        isBubbleInteractive && "cursor-pointer",
                         msg.isSystem
                           ? "bg-brand/10 text-accent border border-brand/30 shadow-[0_0_20px_rgba(204,164,59,0.1)]"
                           : msg.user_id === user?.id
@@ -473,6 +364,7 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
                       <button
                         type="button"
                         aria-label="Reaccionar a este mensaje"
+                        data-reaction-trigger="true"
                         onClick={() => setOpenPickerId((current) => (current === msg.id ? null : msg.id))}
                         className="hidden md:flex items-center justify-center size-8 rounded-full text-foreground-muted opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-ink/5 hover:text-accent transition-opacity shrink-0"
                       >
@@ -490,14 +382,8 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
                       />
                       {openPickerId === msg.id && (
                         <ReactionPicker
-                          activeKeys={
-                            new Set(
-                              (Object.keys(reactions.get(msg.id) || {}) as ReactionKey[]).filter(
-                                (key) => reactions.get(msg.id)?.[key]?.mine
-                              )
-                            )
-                          }
-                          pendingKeys={pendingKeysForMessage(msg.id, pendingReactions)}
+                          activeKeys={activeKeysFor(msg.id)}
+                          pendingKeys={pendingKeysFor(msg.id)}
                           onSelect={(key) => {
                             toggleReaction(msg.id, key);
                             setOpenPickerId(null);
@@ -508,7 +394,8 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
                     </div>
                   )}
                 </motion.div>
-              ))}
+                );
+              })}
             </AnimatePresence>
           )}
         </div>

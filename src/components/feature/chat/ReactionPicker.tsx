@@ -18,7 +18,15 @@ export function ReactionPicker({ activeKeys, pendingKeys, onSelect, onClose }: R
 
   useEffect(() => {
     const handlePointerDown = (e: PointerEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+      const target = e.target as Node;
+      if (ref.current && ref.current.contains(target)) return;
+      // El mismo tap que abre el picker (burbuja o botón SmilePlus) dispara
+      // primero `pointerdown` y después `click`: si este handler cerrara acá,
+      // el `click` posterior volvía a abrirlo (toggle sobre `null`). Ignorar
+      // cualquier trigger marcado con `data-reaction-trigger` deja que sea el
+      // `click` del trigger el que decida abrir/cerrar/cambiar de mensaje.
+      if (target instanceof Element && target.closest("[data-reaction-trigger]")) return;
+      onClose();
     };
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
