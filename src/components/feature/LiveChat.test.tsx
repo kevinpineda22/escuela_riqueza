@@ -723,7 +723,9 @@ describe("LiveChat — respuestas (2026-09-27)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Ir al mensaje original" }));
 
-    expect(scrollIntoView).toHaveBeenCalled();
+    // Solo se desplaza la lista (scrollWithinList, con su propio test):
+    // scrollIntoView arrastraba también la página y el video en celular.
+    expect(scrollIntoView).not.toHaveBeenCalled();
     const originalBubble = container.querySelector('[data-message-id="m1"] [data-reaction-trigger="true"]');
     expect(originalBubble).toHaveClass("ring-accent");
   });

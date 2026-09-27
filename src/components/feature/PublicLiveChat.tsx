@@ -8,6 +8,7 @@ import { ChatJumpToLatest } from "@/components/feature/ChatJumpToLatest";
 import { useChatScroll } from "@/hooks/useChatScroll";
 import { getPublicLiveMessages, type PublicChatMessage } from "@/lib/api/stream/lives";
 import { mergeMessagesById } from "@/lib/chat/mergeMessagesById";
+import { scrollWithinList } from "@/lib/chat/scrollWithinList";
 import { MessageReactions } from "@/components/feature/chat/MessageReactions";
 import { QuotedMessage } from "@/components/feature/chat/QuotedMessage";
 import { fetchPublicLiveReactions, type ReactionsByMessage } from "@/lib/api/stream/reactions";
@@ -58,8 +59,8 @@ const PublicLiveChat = ({ token, loginPath, showWelcome = true }: PublicLiveChat
   const jumpToMessage = (id: string) => {
     const container = listRef.current;
     const target = container?.querySelector<HTMLElement>(`[data-message-id="${id}"]`);
-    if (!target) return;
-    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (!container || !target) return;
+    scrollWithinList(container, target, "center");
     setHighlightedMessageId(id);
     window.setTimeout(() => {
       setHighlightedMessageId((current) => (current === id ? null : current));
