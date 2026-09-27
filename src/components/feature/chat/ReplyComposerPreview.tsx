@@ -18,7 +18,9 @@ export function ReplyComposerPreview({ target, onCancel }: ReplyComposerPreviewP
         type="button"
         onClick={onCancel}
         aria-label="Cancelar respuesta"
-        className="flex size-8 shrink-0 items-center justify-center rounded-full text-foreground-muted hover:bg-ink/10 hover:text-foreground"
+        // Se ve de 32px pero el área táctil llega a 44px con un pseudo-elemento
+        // invisible, como los chips de reacciones.
+        className="relative flex size-8 shrink-0 items-center justify-center rounded-full text-foreground-muted hover:bg-ink/10 hover:text-foreground before:absolute before:-inset-1.5 before:content-['']"
       >
         <X size={16} />
       </button>

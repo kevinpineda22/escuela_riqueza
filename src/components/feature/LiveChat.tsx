@@ -14,6 +14,7 @@ import { useChatScroll } from "@/hooks/useChatScroll";
 import { useLiveReactions } from "@/hooks/useLiveReactions";
 import { useReplyTarget } from "@/hooks/useReplyTarget";
 import { mergeMessagesById } from "@/lib/chat/mergeMessagesById";
+import { scrollWithinList } from "@/lib/chat/scrollWithinList";
 import type { ReplyTo } from "@/lib/chat/replyTo";
 
 export interface ChatMessage {
@@ -129,13 +130,22 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
   const jumpToMessage = (id: string) => {
     const container = listRef.current;
     const target = container?.querySelector<HTMLElement>(`[data-message-id="${id}"]`);
-    if (!target) return;
-    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (!container || !target) return;
+    scrollWithinList(container, target, "center");
     setHighlightedMessageId(id);
     window.setTimeout(() => {
       setHighlightedMessageId((current) => (current === id ? null : current));
     }, HIGHLIGHT_DURATION_MS);
   };
+
+  // El picker se abre DEBAJO de la burbuja: en el último mensaje quedaba fuera
+  // de la vista en celular. Se desplaza la lista lo mínimo para mostrarlo.
+  useEffect(() => {
+    const list = listRef.current;
+    if (!openPickerId || !list) return;
+    const picker = list.querySelector<HTMLElement>('[role="menu"]');
+    if (picker) scrollWithinList(list, picker, "nearest");
+  }, [openPickerId, listRef]);
 
   // Mantener el callback siempre actualizado sin reabrir la suscripción Realtime
   useEffect(() => {
@@ -398,7 +408,11 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
                     )}
                   </div>
                   
-                  <div className={cn("group relative flex items-end gap-1", msg.user_id === user?.id && !msg.isSystem && "flex-row-reverse")}>
+                  {/* El límite de ancho va en esta fila y no en la burbuja: la fila se
+                      ajusta a su contenido (el padre usa items-start/end), así que un
+                      max-w-[90%] en la burbuja era el 90% de su propio texto y partía
+                      palabras ("Excelen te"). Acá el 90% es del ancho del chat. */}
+                  <div className={cn("group relative flex items-end gap-1 max-w-[90%]", msg.user_id === user?.id && !msg.isSystem && "flex-row-reverse")}>
                     <div
                       onClick={() => {
                         if (isBubbleInteractive) setOpenPickerId((current) => (current === msg.id ? null : msg.id));
@@ -417,7 +431,7 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
                       aria-expanded={isBubbleInteractive ? openPickerId === msg.id : undefined}
                       data-reaction-trigger={isBubbleInteractive ? "true" : undefined}
                       className={cn(
-                        "px-4 py-2.5 rounded-2xl max-w-[90%] text-sm break-words relative overflow-hidden transition-shadow",
+                        "px-4 py-2.5 rounded-2xl min-w-0 text-sm break-words relative overflow-hidden transition-shadow",
                         isBubbleInteractive && "cursor-pointer",
                         msg.isSystem
                           ? "bg-brand/10 text-accent border border-brand/30 shadow-[0_0_20px_rgba(204,164,59,0.1)]"

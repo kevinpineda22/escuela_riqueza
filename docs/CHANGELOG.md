@@ -7,6 +7,12 @@
 
 ## 2026-09-27
 
+### Live — chat en celular: burbujas cortadas y picker fuera de la vista
+- **Palabras partidas en las burbujas ("Excelen te")**: la fila que envuelve la burbuja se ajusta a su contenido (el padre usa `items-start/end`), y la burbuja tenía `max-w-[90%]` de esa fila, es decir, el 90% de su propio texto. El límite pasó a la fila, donde el 90% es del ancho del chat. Venía de cuando las reacciones metieron la fila alrededor de la burbuja.
+- **Picker de reacciones fuera de la vista en el último mensaje**: se abre debajo de la burbuja y en celular quedaba cortado. Ahora la lista se desplaza lo mínimo para mostrarlo.
+- **`scrollWithinList`** (`src/lib/chat/`): desplaza solo la lista del chat. Reemplaza el `scrollIntoView` de "Ir al mensaje original" (en `LiveChat` y `PublicLiveChat`), que en celular arrastraba también la página y el video (misma razón que en `useChatScroll`, F19).
+- **Botón ✕ de "Respondiendo a…"**: el área táctil pasa de 32px a 44px.
+
 ### Live — responder a un mensaje del chat (estilo WhatsApp)
 - **⚠️ Correr `sql/migrate-live-message-replies.sql` en Supabase ANTES de deployar el frontend.** El frontend viejo sigue funcionando sin cambios contra la nueva firma de `get_public_live_messages` (ignora las 3 columnas nuevas), así que no hay ventana rota entre los dos deploys.
 - **Columnas nuevas en `live_messages`**: `reply_to_id` (FK a `live_messages(id) ON DELETE SET NULL`), `reply_to_user_id`, `reply_to_user_name`, `reply_to_excerpt`. El cliente solo manda `reply_to_id` al insertar — el nombre y el extracto los deriva un trigger `BEFORE INSERT`/`BEFORE UPDATE OF ...` (`SECURITY DEFINER`) a partir de la fila real del mensaje original, nunca de lo que mande el cliente (si no, cualquiera podría "citar" algo que Iván nunca dijo).
