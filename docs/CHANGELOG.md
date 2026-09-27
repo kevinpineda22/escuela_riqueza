@@ -5,7 +5,21 @@
 
 ---
 
+## 2026-09-28
+
+### Lives — no se podía eliminar una sala con respuestas en el chat
+- **Síntoma**: eliminar una sala en "Finalizados" fallaba con `27000 tuple to be updated was already modified by an operation triggered by the current command` (400 en `DELETE /lives`).
+- **Causa**: el trigger `BEFORE DELETE` de `migrate-live-message-replies.sql` limpiaba el extracto de las respuestas con un `UPDATE`. Al borrar una sala, `lives → live_messages` borra en cascada, así que el trigger modificaba respuestas que ese mismo comando estaba por borrar, y Postgres abortaba todo. Con mensajes sueltos no pasaba.
+- **Fix**: se eliminó ese trigger. La limpieza pasó al caso (d) del trigger de derivación, que se dispara cuando la FK `ON DELETE SET NULL` anula `reply_to_id`: borra el extracto y conserva el autor ("Mensaje eliminado" sigue igual). **⚠️ Volver a correr `sql/migrate-live-message-replies.sql` en Supabase** (es re-ejecutable y hace `DROP` del trigger viejo).
+- **Verificado contra Postgres real** (PGlite, esquema mínimo): con el SQL viejo se reproduce el `27000`; con el nuevo aplicado encima, la sala se elimina con sus mensajes, y siguen funcionando el bloqueo de citas falsas, la degradación de respuestas a otra sala y "Mensaje eliminado".
+- **`AdminLiveManager`**: `handleDelete` ahora también saca la sala de `endedLives` (antes seguía visible en "Finalizados" hasta recargar) y muestra un toast de error si el borrado falla (antes solo iba a la consola).
+
 ## 2026-09-27
+
+### Login — sin partículas de fondo en celular
+- **Síntoma**: en iPhone, al pasar de un vivo público a `/login?returnTo=...`, Safari mostró "Ocurrió un problema varias veces" (la pestaña se cerró varias veces seguidas, típicamente por falta de memoria). Al recargar, funcionó.
+- **Hipótesis (no confirmada con el inspector de Safari)**: `ParticleNetwork` redibuja un canvas a pantalla completa en cada frame (comparación O(n²) + `shadowBlur`) y arrancaba mientras iOS todavía no había liberado la memoria del video del vivo. Se descartaron un bucle de redirección `returnTo` y efectos al escribir el correo.
+- **Cambio**: `AuthBackground` monta `ParticleNetwork` solo con `useIsDesktop()` (≥768px). La landing (`HeroCinematic`) no se tocó.
 
 ### Live — chat en celular: burbujas cortadas y picker fuera de la vista
 - **Palabras partidas en las burbujas ("Excelen te")**: la fila que envuelve la burbuja se ajusta a su contenido (el padre usa `items-start/end`), y la burbuja tenía `max-w-[90%]` de esa fila, es decir, el 90% de su propio texto. El límite pasó a la fila, donde el 90% es del ancho del chat. Venía de cuando las reacciones metieron la fila alrededor de la burbuja.

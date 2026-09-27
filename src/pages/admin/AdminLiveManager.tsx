@@ -644,6 +644,8 @@ const AdminLiveManager = () => {
       await deleteLive(id);
       const remaining = lives.filter(l => l.id !== id);
       setLives(remaining);
+      // La sala puede estar en "Finalizados": sin esto seguía visible hasta recargar.
+      setEndedLives(prev => prev.filter(l => l.id !== id));
       if (activeLive?.id === id) {
         if (remaining.length > 0) {
           setActiveLive(remaining[0]);
@@ -661,6 +663,7 @@ const AdminLiveManager = () => {
       toast.success("Sala eliminada");
     } catch (err) {
       console.error(err);
+      toast.error("No se pudo eliminar la sala");
     }
   };
 
