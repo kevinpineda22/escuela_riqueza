@@ -3,7 +3,17 @@ import { render, screen, fireEvent, waitFor, act, within } from "@testing-librar
 import LiveChat from "./LiveChat";
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/stores/auth.store";
+import { toast } from "@/components/ui/toaster";
+import { deleteLiveMessage } from "@/lib/api/stream/messages";
 import type { User } from "@/types/user";
+
+vi.mock("@/components/ui/toaster", () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
+
+vi.mock("@/lib/api/stream/messages", () => ({
+  deleteLiveMessage: vi.fn(),
+}));
 
 // LiveChat.tsx se suscribe al canal de mensajes; useLiveReactions (hook
 // aparte, ver useLiveReactions.ts) se suscribe a su PROPIO canal
@@ -728,5 +738,433 @@ describe("LiveChat — respuestas (2026-09-27)", () => {
     expect(scrollIntoView).not.toHaveBeenCalled();
     const originalBubble = container.querySelector('[data-message-id="m1"] [data-reaction-trigger="true"]');
     expect(originalBubble).toHaveClass("ring-accent");
+  });
+});
+
+describe("LiveChat — moderación y borrado en tiempo real (2026-10-09)", () => {
+  interface Row {
+    id: string;
+    content: string;
+    created_at: string;
+    user_id: string;
+    reply_to_id: string | null;
+    reply_to_user_id: string | null;
+    reply_to_user_name: string | null;
+    reply_to_excerpt: string | null;
+  }
+
+  const history: Row[] = [
+    {
+      id: "m1",
+      user_id: "beto",
+      content: "Hola",
+      created_at: "2026-10-09T10:00:00Z",
+      reply_to_id: null,
+      reply_to_user_id: null,
+      reply_to_user_name: null,
+      reply_to_excerpt: null,
+    },
+    {
+      id: "m2",
+      user_id: "ana",
+      content: "Te contesto",
+      created_at: "2026-10-09T10:01:00Z",
+      reply_to_id: "m1",
+      reply_to_user_id: "beto",
+      reply_to_user_name: "Beto",
+      reply_to_excerpt: "Hola",
+    },
+  ];
+
+  const admin = { id: "admin-1", fullName: "Iván", role: "admin" } as User;
+  const regular = { id: "user-1", fullName: "Alumno", role: "student" } as User;
+
+  // El canal de mensajes registra [0] INSERT y [1] DELETE.
+  const deleteHandler = () => messagesChannel.on.mock.calls[1][2] as (payload: { old: { id?: string } }) => void;
+  const deleteMock = deleteLiveMessage as unknown as ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupChannelChaining();
+    (supabase.auth.getSession as ReturnType<typeof vi.fn>).mockResolvedValue({ data: { session: null } });
+    from.mockImplementation((table: string) => {
+      if (table === "profiles") {
+        return {
+          select: () => ({
+            in: () =>
+              Promise.resolve({
+                data: [
+                  { id: "beto", full_name: "Beto" },
+                  { id: "ana", full_name: "Ana" },
+                ],
+              }),
+            eq: () => ({ maybeSingle: () => Promise.resolve({ data: { full_name: "Beto" } }) }),
+          }),
+        };
+      }
+      if (table === "live_message_reactions") {
+        return { select: () => ({ eq: () => ({ in: () => Promise.resolve({ data: [], error: null }) }) }) };
+      }
+      return {
+        select: () => ({
+          eq: () => ({ order: () => ({ limit: () => Promise.resolve({ data: [...history].reverse(), error: null }) }) }),
+        }),
+        insert,
+      };
+    });
+    deleteMock.mockResolvedValue(undefined);
+    useAuthStore.setState({ user: regular, token: "t" });
+  });
+
+  async function renderChat(props: { canModerate?: boolean } = {}) {
+    render(<LiveChat liveId="live-1" showWelcome={false} {...props} />);
+    await screen.findByText("Te contesto");
+  }
+
+  describe("DELETE por Realtime", () => {
+    it("quita el mensaje eliminado para todos", async () => {
+      await renderChat();
+      await waitFor(() => expect(messagesChannel.on).toHaveBeenCalledTimes(2));
+
+      act(() => deleteHandler()({ old: { id: "m2" } }));
+
+      expect(screen.queryByText("Te contesto")).not.toBeInTheDocument();
+      expect(screen.getAllByText("Hola").length).toBeGreaterThan(0);
+    });
+
+    it("las respuestas al mensaje eliminado pasan a mostrar 'Mensaje eliminado' sin botón de salto", async () => {
+      await renderChat();
+      expect(screen.getByRole("button", { name: "Ir al mensaje original" })).toBeInTheDocument();
+      await waitFor(() => expect(messagesChannel.on).toHaveBeenCalledTimes(2));
+
+      act(() => deleteHandler()({ old: { id: "m1" } }));
+
+      expect(await screen.findByText("Mensaje eliminado")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Ir al mensaje original" })).not.toBeInTheDocument();
+      expect(screen.queryByText("Hola")).not.toBeInTheDocument();
+    });
+
+    it("un id que este chat no tiene no cambia nada", async () => {
+      await renderChat();
+      await waitFor(() => expect(messagesChannel.on).toHaveBeenCalledTimes(2));
+
+      act(() => deleteHandler()({ old: { id: "de-otra-sala" } }));
+      act(() => deleteHandler()({ old: {} }));
+
+      expect(screen.getByText("Te contesto")).toBeInTheDocument();
+      expect(screen.queryByText("Mensaje eliminado")).not.toBeInTheDocument();
+    });
+
+    it("cancela la respuesta en curso al mensaje eliminado", async () => {
+      await renderChat();
+      fireEvent.click(screen.getByText("Te contesto"));
+      const menu = await screen.findByRole("menu");
+      fireEvent.click(within(menu).getByRole("menuitem", { name: "Responder" }));
+      await screen.findByText("Respondiendo a Ana");
+      await waitFor(() => expect(messagesChannel.on).toHaveBeenCalledTimes(2));
+
+      act(() => deleteHandler()({ old: { id: "m2" } }));
+
+      await waitFor(() => expect(screen.queryByText("Respondiendo a Ana")).not.toBeInTheDocument());
+    });
+
+    it("no cancela una respuesta a otro mensaje", async () => {
+      await renderChat();
+      fireEvent.click(screen.getByText("Te contesto"));
+      const menu = await screen.findByRole("menu");
+      fireEvent.click(within(menu).getByRole("menuitem", { name: "Responder" }));
+      await screen.findByText("Respondiendo a Ana");
+      await waitFor(() => expect(messagesChannel.on).toHaveBeenCalledTimes(2));
+
+      act(() => deleteHandler()({ old: { id: "m1" } }));
+
+      expect(screen.getByText("Respondiendo a Ana")).toBeInTheDocument();
+    });
+
+    it("cierra el picker de reacciones abierto sobre el mensaje eliminado", async () => {
+      await renderChat();
+      fireEvent.click(screen.getByText("Te contesto"));
+      await screen.findByRole("menu");
+      await waitFor(() => expect(messagesChannel.on).toHaveBeenCalledTimes(2));
+
+      act(() => deleteHandler()({ old: { id: "m2" } }));
+
+      await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+    });
+  });
+
+  describe("acción de moderar", () => {
+    it("no aparece sin canModerate, ni siquiera para un admin", async () => {
+      useAuthStore.setState({ user: admin, token: "t" });
+      await renderChat();
+
+      expect(screen.queryByRole("button", { name: "Eliminar mensaje" })).not.toBeInTheDocument();
+    });
+
+    it("no aparece con canModerate si el usuario no es admin", async () => {
+      await renderChat({ canModerate: true });
+
+      expect(screen.queryByRole("button", { name: "Eliminar mensaje" })).not.toBeInTheDocument();
+    });
+
+    it("aparece en cada mensaje para un admin con canModerate", async () => {
+      useAuthStore.setState({ user: admin, token: "t" });
+      await renderChat({ canModerate: true });
+
+      expect(screen.getAllByRole("button", { name: "Eliminar mensaje" })).toHaveLength(2);
+    });
+
+    it("en celular se llega desde el menú de acciones de la burbuja", async () => {
+      useAuthStore.setState({ user: admin, token: "t" });
+      await renderChat({ canModerate: true });
+
+      fireEvent.click(screen.getByText("Te contesto"));
+      const menu = await screen.findByRole("menu");
+
+      expect(within(menu).getByRole("menuitem", { name: "Eliminar mensaje" })).toBeInTheDocument();
+    });
+
+    it("pide confirmación mostrando el mensaje antes de eliminar", async () => {
+      useAuthStore.setState({ user: admin, token: "t" });
+      await renderChat({ canModerate: true });
+
+      fireEvent.click(screen.getAllByRole("button", { name: "Eliminar mensaje" })[0]);
+
+      const dialog = await screen.findByRole("dialog");
+      expect(within(dialog).getByText("Hola")).toBeInTheDocument();
+      expect(deleteMock).not.toHaveBeenCalled();
+      // Cancelar no borra nada.
+      fireEvent.click(within(dialog).getByRole("button", { name: "Cancelar" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+      expect(deleteMock).not.toHaveBeenCalled();
+    });
+
+    it("al confirmar elimina, quita el mensaje al instante y avisa", async () => {
+      useAuthStore.setState({ user: admin, token: "t" });
+      await renderChat({ canModerate: true });
+
+      fireEvent.click(screen.getAllByRole("button", { name: "Eliminar mensaje" })[0]);
+      const dialog = await screen.findByRole("dialog");
+      fireEvent.click(within(dialog).getByRole("button", { name: "Eliminar" }));
+
+      await waitFor(() => expect(deleteMock).toHaveBeenCalledWith("m1"));
+      await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Mensaje eliminado"));
+      // «Hola» desapareció y la respuesta quedó citando un mensaje eliminado.
+      expect(screen.queryByText("Hola")).not.toBeInTheDocument();
+      expect(screen.getByText("Mensaje eliminado")).toBeInTheDocument();
+    });
+
+    it("si falla, devuelve el mensaje y sus citas y muestra el error", async () => {
+      deleteMock.mockRejectedValue(new Error("RLS"));
+      useAuthStore.setState({ user: admin, token: "t" });
+      await renderChat({ canModerate: true });
+
+      fireEvent.click(screen.getAllByRole("button", { name: "Eliminar mensaje" })[0]);
+      const dialog = await screen.findByRole("dialog");
+      fireEvent.click(within(dialog).getByRole("button", { name: "Eliminar" }));
+
+      await waitFor(() => expect(toast.error).toHaveBeenCalledWith("No se pudo eliminar el mensaje"));
+      expect(toast.success).not.toHaveBeenCalled();
+      // El original vuelve y la respuesta recupera su cita.
+      expect(screen.getAllByText("Hola").length).toBeGreaterThan(0);
+      expect(screen.getByRole("button", { name: "Ir al mensaje original" })).toBeInTheDocument();
+      expect(screen.queryByText("Mensaje eliminado")).not.toBeInTheDocument();
+    });
+  });
+});
+
+describe("LiveChat — borrados concurrentes y reconexión (2026-10-09)", () => {
+  interface Row {
+    id: string;
+    content: string;
+    created_at: string;
+    user_id: string;
+    reply_to_id: string | null;
+    reply_to_user_id: string | null;
+    reply_to_user_name: string | null;
+    reply_to_excerpt: string | null;
+  }
+
+  const row = (id: string, user_id: string, content: string, minute: number): Row => ({
+    id,
+    user_id,
+    content,
+    created_at: `2026-10-09T10:0${minute}:00Z`,
+    reply_to_id: null,
+    reply_to_user_id: null,
+    reply_to_user_name: null,
+    reply_to_excerpt: null,
+  });
+
+  type HistoryResult = { data: Row[] | null; error: unknown };
+  // Una entrada por cada consulta de historial/resync, en orden de llamada.
+  let historyCalls: Array<() => Promise<HistoryResult>> = [];
+  let historyQueries = 0;
+  let resolveProfile: (value: { data: { full_name: string } }) => void = () => {};
+
+  const insertHandler = () => messagesChannel.on.mock.calls[0][2] as (payload: { new: Row }) => Promise<void>;
+  const deleteHandler = () => messagesChannel.on.mock.calls[1][2] as (payload: { old: { id?: string } }) => void;
+  const statusCallback = () => messagesChannel.subscribe.mock.calls[0][0] as (status: string) => void;
+  const immediate = (rows: Row[]) => () => Promise.resolve({ data: [...rows].reverse(), error: null });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupChannelChaining();
+    historyCalls = [];
+    historyQueries = 0;
+    (supabase.auth.getSession as ReturnType<typeof vi.fn>).mockResolvedValue({ data: { session: null } });
+    from.mockImplementation((table: string) => {
+      if (table === "profiles") {
+        return {
+          select: () => ({
+            in: () =>
+              Promise.resolve({
+                data: [
+                  { id: "beto", full_name: "Beto" },
+                  { id: "ana", full_name: "Ana" },
+                ],
+              }),
+            // Autor desconocido: el nombre se resuelve cuando el test lo decide.
+            eq: () => ({ maybeSingle: () => new Promise((resolve) => { resolveProfile = resolve; }) }),
+          }),
+        };
+      }
+      if (table === "live_message_reactions") {
+        return { select: () => ({ eq: () => ({ in: () => Promise.resolve({ data: [], error: null }) }) }) };
+      }
+      return {
+        select: () => ({
+          eq: () => ({
+            order: () => ({
+              limit: () => {
+                historyQueries += 1;
+                const next = historyCalls.shift();
+                return next ? next() : Promise.resolve({ data: [], error: null });
+              },
+            }),
+          }),
+        }),
+        insert,
+      };
+    });
+    useAuthStore.setState({ user: student, token: "t" });
+  });
+
+  it("un INSERT cuyo nombre resuelve DESPUÉS de su DELETE no aparece", async () => {
+    historyCalls = [immediate([row("m1", "beto", "Hola", 1)])];
+    render(<LiveChat liveId="live-1" showWelcome={false} />);
+    await screen.findByText("Hola");
+    await waitFor(() => expect(messagesChannel.on).toHaveBeenCalledTimes(2));
+
+    // Autor desconocido ("carlos"): el INSERT queda esperando su nombre.
+    let insertDone: Promise<void> = Promise.resolve();
+    act(() => {
+      insertDone = insertHandler()({ new: row("m2", "carlos", "mensaje borrado", 2) });
+    });
+    // El DELETE gana la carrera: m2 todavía no está en la lista.
+    act(() => deleteHandler()({ old: { id: "m2" } }));
+    await act(async () => {
+      resolveProfile({ data: { full_name: "Carlos" } });
+      await insertDone;
+    });
+
+    expect(screen.queryByText("mensaje borrado")).not.toBeInTheDocument();
+    expect(screen.getByText("Hola")).toBeInTheDocument();
+  });
+
+  it("un historial que resuelve después de un DELETE no resucita el mensaje", async () => {
+    let resolveHistory: (value: HistoryResult) => void = () => {};
+    historyCalls = [() => new Promise<HistoryResult>((resolve) => { resolveHistory = resolve; })];
+    render(<LiveChat liveId="live-1" showWelcome={false} />);
+    await waitFor(() => expect(messagesChannel.on).toHaveBeenCalledTimes(2));
+
+    // La consulta ya salió; el admin borra m2 mientras tanto.
+    act(() => deleteHandler()({ old: { id: "m2" } }));
+    await act(async () => {
+      resolveHistory({ data: [row("m2", "ana", "mensaje borrado", 2), row("m1", "beto", "Hola", 1)], error: null });
+    });
+
+    expect(await screen.findByText("Hola")).toBeInTheDocument();
+    expect(screen.queryByText("mensaje borrado")).not.toBeInTheDocument();
+  });
+
+  it("la primera suscripción (SUBSCRIBED) NO vuelve a pedir los mensajes", async () => {
+    historyCalls = [immediate([row("m1", "beto", "Hola", 1)])];
+    render(<LiveChat liveId="live-1" showWelcome={false} />);
+    await screen.findByText("Hola");
+    await waitFor(() => expect(messagesChannel.subscribe).toHaveBeenCalled());
+
+    act(() => statusCallback()("SUBSCRIBED"));
+    await act(async () => {});
+
+    expect(historyQueries).toBe(1);
+  });
+
+  it("tras reconectar vuelve a pedir los mensajes: quita lo borrado durante la caída y suma lo perdido", async () => {
+    historyCalls = [
+      immediate([row("m1", "beto", "Hola", 1), row("m2", "ana", "se borra en la caída", 2)]),
+      // Resync: m2 ya no existe y apareció m3 mientras estaba caído.
+      immediate([row("m1", "beto", "Hola", 1), row("m3", "ana", "llegó en la caída", 3)]),
+    ];
+    render(<LiveChat liveId="live-1" showWelcome={false} />);
+    await screen.findByText("se borra en la caída");
+    await waitFor(() => expect(messagesChannel.subscribe).toHaveBeenCalled());
+
+    act(() => statusCallback()("SUBSCRIBED"));
+    act(() => statusCallback()("CHANNEL_ERROR"));
+    expect(screen.getByRole("status")).toHaveTextContent("Reconectando…");
+    act(() => statusCallback()("SUBSCRIBED"));
+
+    expect(await screen.findByText("llegó en la caída")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("se borra en la caída")).not.toBeInTheDocument());
+    expect(screen.getByText("Hola")).toBeInTheDocument();
+    expect(historyQueries).toBe(2);
+  });
+
+  it("un mensaje que llega por Realtime mientras corre el resync no se pierde", async () => {
+    let resolveResync: (value: HistoryResult) => void = () => {};
+    historyCalls = [
+      immediate([row("m1", "beto", "Hola", 1)]),
+      () => new Promise<HistoryResult>((resolve) => { resolveResync = resolve; }),
+    ];
+    render(<LiveChat liveId="live-1" showWelcome={false} />);
+    await screen.findByText("Hola");
+    await waitFor(() => expect(messagesChannel.on).toHaveBeenCalledTimes(2));
+
+    act(() => statusCallback()("SUBSCRIBED"));
+    act(() => statusCallback()("SUBSCRIBED"));
+    await waitFor(() => expect(historyQueries).toBe(2));
+    // Llega m2 por Realtime con el resync en vuelo; la consulta salió antes y no lo trae.
+    await act(async () => {
+      await insertHandler()({ new: row("m2", "ana", "llegó en pleno resync", 2) });
+    });
+    await act(async () => {
+      resolveResync({ data: [row("m1", "beto", "Hola", 1)], error: null });
+    });
+
+    expect(screen.getByText("llegó en pleno resync")).toBeInTheDocument();
+  });
+
+  it("un DELETE que llega con el resync en vuelo tampoco resucita", async () => {
+    let resolveResync: (value: HistoryResult) => void = () => {};
+    historyCalls = [
+      immediate([row("m1", "beto", "Hola", 1), row("m2", "ana", "se borra", 2)]),
+      () => new Promise<HistoryResult>((resolve) => { resolveResync = resolve; }),
+    ];
+    render(<LiveChat liveId="live-1" showWelcome={false} />);
+    await screen.findByText("se borra");
+    await waitFor(() => expect(messagesChannel.on).toHaveBeenCalledTimes(2));
+
+    act(() => statusCallback()("SUBSCRIBED"));
+    act(() => statusCallback()("SUBSCRIBED"));
+    await waitFor(() => expect(historyQueries).toBe(2));
+    act(() => deleteHandler()({ old: { id: "m2" } }));
+    // La consulta del resync arrancó antes del borrado y todavía trae m2.
+    await act(async () => {
+      resolveResync({ data: [row("m1", "beto", "Hola", 1), row("m2", "ana", "se borra", 2)], error: null });
+    });
+
+    expect(screen.queryByText("se borra")).not.toBeInTheDocument();
+    expect(screen.getByText("Hola")).toBeInTheDocument();
   });
 });

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { motion } from "motion/react";
-import { Reply } from "lucide-react";
+import { Reply, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { REACTIONS, type ReactionKey } from "@/lib/api/stream/reactions";
 
@@ -13,6 +13,8 @@ interface ReactionPickerProps {
   onClose: () => void;
   /** When provided, appends a "Responder" action after a divider — turns this into a small actions bar. */
   onReply?: () => void;
+  /** Admin moderation only: appends an "Eliminar mensaje" action (the touch counterpart of the desktop hover button). */
+  onDelete?: () => void;
 }
 
 /**
@@ -20,7 +22,7 @@ interface ReactionPickerProps {
  * given, a divider followed by a Reply action. Closes itself on outside
  * click or Escape.
  */
-export function ReactionPicker({ activeKeys, pendingKeys, onSelect, onClose, onReply }: ReactionPickerProps) {
+export function ReactionPicker({ activeKeys, pendingKeys, onSelect, onClose, onReply, onDelete }: ReactionPickerProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -91,6 +93,17 @@ export function ReactionPicker({ activeKeys, pendingKeys, onSelect, onClose, onR
             <Reply size={16} />
           </button>
         </>
+      )}
+      {onDelete && (
+        <button
+          type="button"
+          role="menuitem"
+          aria-label="Eliminar mensaje"
+          onClick={onDelete}
+          className="flex items-center justify-center min-w-11 min-h-11 rounded-xl text-foreground-muted transition-colors hover:bg-danger-surface hover:text-danger"
+        >
+          <Trash2 size={16} />
+        </button>
       )}
     </motion.div>
   );

@@ -303,6 +303,92 @@ describe('LiveHLSPlayer recovery', () => {
     expect(hlsInstance.loadSource).toHaveBeenCalledTimes(delays.length);
   });
 
+  // 2026-10-03: el cartel de error quedaba encima de un vivo que seguía sonando.
+  const exhaustReloads = () => {
+    const delays = [1000, 2000, 4000, 8000, 8000, 8000];
+    for (const delay of delays) {
+      act(() => { handlers.error('error', { fatal: true, type: 'networkError', details: 'fragLoadError' }); });
+      act(() => { vi.advanceTimersByTime(delay + 1000); });
+    }
+    act(() => { handlers.error('error', { fatal: true, type: 'networkError', details: 'fragLoadError' }); });
+  };
+
+  it('avisa onRecovered si tras onFatalError el video vuelve a avanzar 5 s seguidos', () => {
+    const onFatalError = vi.fn();
+    const onRecovered = vi.fn();
+    const { container } = renderPlayer({ onFatalError, onRecovered });
+    const video = driveVideo(container, { paused: false, currentTime: 100 });
+    exhaustReloads();
+    expect(onFatalError).toHaveBeenCalledTimes(1);
+
+    const base = video.currentTime;
+    for (let i = 1; i <= 4; i++) {
+      act(() => { video.currentTime = base + i; vi.advanceTimersByTime(1_000); });
+    }
+    expect(onRecovered).not.toHaveBeenCalled();
+    act(() => { video.currentTime = base + 5; vi.advanceTimersByTime(1_000); });
+    expect(onRecovered).toHaveBeenCalledTimes(1);
+  });
+
+  it('los errores no fatales no impiden que el contador de recargas vuelva a 0', () => {
+    const onFatalError = vi.fn();
+    const { container } = renderPlayer({ onFatalError });
+    const video = driveVideo(container, { paused: false, currentTime: 100 });
+
+    // 5 de las 6 recargas permitidas.
+    const delays = [1000, 2000, 4000, 8000, 8000];
+    for (const delay of delays) {
+      act(() => { handlers.error('error', { fatal: true, type: 'networkError', details: 'fragLoadError' }); });
+      act(() => { vi.advanceTimersByTime(delay + 1000); });
+    }
+
+    // Reproducción estable 16 s, con errores no fatales constantes (como en un vivo largo).
+    act(() => { video.dispatchEvent(new Event('playing')); });
+    for (let i = 1; i <= 16; i++) {
+      act(() => {
+        handlers.error('error', { fatal: false, type: 'mediaError', details: 'bufferStalledError' });
+        video.currentTime = 100 + i;
+        vi.advanceTimersByTime(1_000);
+      });
+    }
+
+    // Con el contador en 0, dos fatales más no agotan los reintentos.
+    for (let i = 0; i < 2; i++) {
+      act(() => { handlers.error('error', { fatal: true, type: 'networkError', details: 'fragLoadError' }); });
+      act(() => { vi.advanceTimersByTime(10_000); });
+    }
+    expect(onFatalError).not.toHaveBeenCalled();
+  });
+
+  it('los errores de media espaciados por reproducción estable siempre se recuperan (el contador se resetea)', () => {
+    const onError = vi.fn();
+    const { container } = renderPlayer({ onError });
+    const video = driveVideo(container, { paused: false, currentTime: 100 });
+    const fatalMediaError = () =>
+      act(() => { handlers.error('error', { fatal: true, type: 'mediaError', details: 'bufferStalledError' }); });
+
+    // 4 errores fatales de media, cada uno seguido de 16 s de reproducción estable.
+    // Sin el reset, el tercero superaría el límite de 2 reintentos.
+    for (let i = 1; i <= 4; i++) {
+      fatalMediaError();
+      expect(hlsInstance.recoverMediaError).toHaveBeenCalledTimes(i);
+      act(() => { video.dispatchEvent(new Event('playing')); });
+      act(() => { vi.advanceTimersByTime(16_000); });
+    }
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('errores de media seguidos sin reproducción estable entre medio sí agotan los reintentos', () => {
+    const onError = vi.fn();
+    renderPlayer({ onError });
+
+    for (let i = 0; i < 3; i++) {
+      act(() => { handlers.error('error', { fatal: true, type: 'mediaError', details: 'bufferStalledError' }); });
+    }
+    expect(hlsInstance.recoverMediaError).toHaveBeenCalledTimes(2);
+    expect(onError).toHaveBeenCalledTimes(1);
+  });
+
   // El caso que hls.js NO reporta: quiere reproducir pero currentTime no avanza.
   it('recarga el manifest si el video no avanza durante 12 s', () => {
     const { container } = renderPlayer();

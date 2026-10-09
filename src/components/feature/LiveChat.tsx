@@ -1,19 +1,25 @@
 import { useState, useEffect, type FormEvent, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Send, Users, ShieldCheck, SmilePlus, Reply } from "lucide-react";
+import { Send, Users, ShieldCheck, SmilePlus, Reply, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/stores/auth.store";
+import { USER_ROLES } from "@/types/user";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChatJumpToLatest } from "@/components/feature/ChatJumpToLatest";
 import { MessageReactions } from "@/components/feature/chat/MessageReactions";
 import { ReactionPicker } from "@/components/feature/chat/ReactionPicker";
 import { QuotedMessage } from "@/components/feature/chat/QuotedMessage";
 import { ReplyComposerPreview } from "@/components/feature/chat/ReplyComposerPreview";
+import { DeleteMessageDialog } from "@/components/feature/chat/DeleteMessageDialog";
 import { useChatScroll } from "@/hooks/useChatScroll";
 import { useLiveReactions } from "@/hooks/useLiveReactions";
+import { useLiveMessageDeletions } from "@/hooks/useLiveMessageDeletions";
+import { useMessageModeration } from "@/hooks/useMessageModeration";
 import { useReplyTarget } from "@/hooks/useReplyTarget";
+import { excludeDeleted } from "@/lib/chat/excludeDeleted";
 import { mergeMessagesById } from "@/lib/chat/mergeMessagesById";
+import { reconcileWindowedMessages } from "@/lib/chat/reconcileWindowedMessages";
 import { scrollWithinList } from "@/lib/chat/scrollWithinList";
 import type { ReplyTo } from "@/lib/chat/replyTo";
 
@@ -37,6 +43,13 @@ interface LiveChatProps {
   onIncomingMessage?: (msg: ChatMessage) => void;
   /** Mensaje de bienvenida fijado; solo tiene sentido antes de que arranque el vivo. */
   showWelcome?: boolean;
+  /**
+   * Muestra la acción «Eliminar mensaje» a los administradores. Es solo
+   * presentación: quien decide si el borrado procede es la política RLS de
+   * `live_messages` (sql/migrate-live-messages-admin-delete.sql). La vista del
+   * alumno nunca lo pasa.
+   */
+  canModerate?: boolean;
 }
 
 const SYSTEM_MESSAGE: ChatMessage = {
@@ -81,7 +94,7 @@ function buildReplyTo(row: MessageRow): ReplyTo | null {
   };
 }
 
-const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingMessage, showWelcome = true }: LiveChatProps) => {
+const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingMessage, showWelcome = true, canModerate = false }: LiveChatProps) => {
   const { user } = useAuthStore();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -101,7 +114,25 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
   // Mensaje enviado sin confirmar: su id se reusa si se reintenta el mismo texto.
   const pendingSendRef = useRef<{ id: string; text: string } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { replyTarget, startReply, cancelReply } = useReplyTarget();
+  const { replyTarget, startReply, cancelReply, cancelReplyFor } = useReplyTarget();
+  const isModerator = canModerate && user?.role === USER_ROLES.ADMIN;
+  // Un único punto para aplicar un borrado, venga de Realtime o del moderador
+  // local: lo marca como eliminado (tombstone), lo quita de la lista y suelta
+  // lo que apunta a él. Un mensaje eliminado ya no se puede reaccionar ni responder.
+  const { tombstonesRef, markDeleted, unmarkDeleted } = useLiveMessageDeletions({
+    liveId,
+    setMessages,
+    onDeleted: (id) => {
+      setOpenPickerId((current) => (current === id ? null : current));
+      cancelReplyFor(id);
+    },
+  });
+  const { pending: pendingDelete, requestDelete, cancelDelete, confirmDelete } = useMessageModeration({
+    messages,
+    setMessages,
+    onRemoved: markDeleted,
+    onRestored: unmarkDeleted,
+  });
   const visibleMessages = showWelcome ? messages : messages.filter((m) => m.id !== SYSTEM_MESSAGE.id);
   // Ventana de mensajes para la que se piden reacciones — recalculada en cada
   // render (el hook la lee por ref) para que un resync tras reconexión use
@@ -123,6 +154,11 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
     startReply({ id: msg.id, userName: msg.user_name, excerpt: msg.content.slice(0, REPLY_EXCERPT_LENGTH) });
     setOpenPickerId(null);
     inputRef.current?.focus();
+  };
+
+  const handleRequestDelete = (msg: ChatMessage) => {
+    setOpenPickerId(null);
+    requestDelete(msg);
   };
 
   // Desplaza el mensaje original a la vista y lo resalta unos instantes.
@@ -159,6 +195,8 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
     // consultar `profiles`. Antes cada mensaje entrante disparaba una
     // consulta en CADA espectador (F38).
     const names = new Map<string, string>();
+    // Mismo Set que mantiene useLiveMessageDeletions (se vacía al cambiar de live).
+    const tombstones = tombstonesRef.current;
 
     const resolveName = async (userId: string): Promise<string> => {
       const known = names.get(userId);
@@ -169,45 +207,51 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
       return name;
     };
 
-    const fetchHistory = async () => {
-      setLoading(true);
-      setHistoryError(false);
-      // Esperar a que Supabase recupere la sesión local antes de conectarse a Realtime
-      await supabase.auth.getSession();
-
-      // 1. Los ÚLTIMOS mensajes (DESC + limit), después en orden de lectura.
-      // Antes traía el historial completo de la clase.
+    // Los ÚLTIMOS HISTORY_LIMIT mensajes (DESC + limit, después en orden de
+    // lectura) con el nombre de cada autor. Lo usan la carga inicial y el
+    // resync tras una reconexión. Lanza si la consulta falla.
+    const loadLatestWindow = async (): Promise<ChatMessage[]> => {
       const { data: rows, error } = await supabase
         .from("live_messages")
         .select("id, content, created_at, user_id, reply_to_id, reply_to_user_id, reply_to_user_name, reply_to_excerpt")
         .eq("live_id", liveId)
         .order("created_at", { ascending: false })
         .limit(HISTORY_LIMIT);
+      if (!rows || error) throw error ?? new Error("Respuesta vacía al cargar los mensajes");
 
-      if (!isActive) return;
+      const history = (rows as MessageRow[]).slice().reverse();
+      const unknownIds = [...new Set(history.map((m) => m.user_id))].filter((id) => !names.has(id));
+      if (unknownIds.length > 0) {
+        const { data: profiles } = await supabase.from("profiles").select("id, full_name").in("id", unknownIds);
+        profiles?.forEach((p) => names.set(p.id, p.full_name));
+      }
+      return history.map((msg) => ({
+        id: msg.id,
+        user_id: msg.user_id,
+        user_name: names.get(msg.user_id) || "Usuario",
+        content: msg.content,
+        created_at: msg.created_at,
+        reply_to: buildReplyTo(msg),
+      }));
+    };
 
-      if (rows && !error) {
-        const history = (rows as MessageRow[]).slice().reverse();
-        const unknownIds = [...new Set(history.map((m) => m.user_id))].filter((id) => !names.has(id));
-        if (unknownIds.length > 0) {
-          const { data: profiles } = await supabase.from("profiles").select("id, full_name").in("id", unknownIds);
-          profiles?.forEach((p) => names.set(p.id, p.full_name));
-        }
+    const fetchHistory = async () => {
+      setLoading(true);
+      setHistoryError(false);
+      // Esperar a que Supabase recupere la sesión local antes de conectarse a Realtime
+      await supabase.auth.getSession();
+
+      try {
+        const loaded = await loadLatestWindow();
         if (!isActive) return;
-
-        const loaded: ChatMessage[] = history.map((msg) => ({
-          id: msg.id,
-          user_id: msg.user_id,
-          user_name: names.get(msg.user_id) || "Usuario",
-          content: msg.content,
-          created_at: msg.created_at,
-          reply_to: buildReplyTo(msg),
-        }));
         // F20: MEZCLAR, no reemplazar. Lo que llegó por Realtime mientras
-        // cargaba el historial ya está en `prev` y antes se perdía.
-        setMessages((prev) => mergeMessagesById(prev, [SYSTEM_MESSAGE, ...loaded]));
-      } else {
-        console.error("[LiveChat] error cargando el historial:", error);
+        // cargaba el historial ya está en `prev` y antes se perdía. Y lo que se
+        // eliminó mientras cargaba (la consulta pudo arrancar antes del borrado)
+        // no vuelve: se descarta por tombstone.
+        setMessages((prev) => mergeMessagesById(prev, excludeDeleted([SYSTEM_MESSAGE, ...loaded], tombstones)));
+      } catch (err) {
+        if (!isActive) return;
+        console.error("[LiveChat] error cargando el historial:", err);
         setHistoryError(true);
         setMessages((prev) => mergeMessagesById(prev, [SYSTEM_MESSAGE]));
       }
@@ -215,11 +259,53 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
       setHistoryReady(true);
     };
 
+    // Resync tras una RECONEXIÓN de Realtime (patrón de useLiveReactions.ts):
+    // durante la caída pudieron perderse tanto DELETEs como INSERTs. El
+    // servidor es la fuente de verdad de la ventana de HISTORY_LIMIT mensajes
+    // — la consulta autenticada usa `.limit()` directo, sin el tope de 200 de
+    // la RPC pública, así que la ventana pedida es la que se recibe.
+    // Si llega otra reconexión con un resync en vuelo, gana el más reciente: la
+    // respuesta de uno viejo se descarta por su token.
+    let resyncToken = 0;
+    let resyncInFlight = false;
+    // INSERTs de Realtime que llegan MIENTRAS corre el resync: la consulta pudo
+    // haber arrancado antes de ellos y reconcileWindowedMessages los tomaría por
+    // borrados. Se reponen al final.
+    let arrivedDuringResync: ChatMessage[] = [];
+
+    const resync = async () => {
+      const token = ++resyncToken;
+      resyncInFlight = true;
+      arrivedDuringResync = [];
+      try {
+        const fetched = await loadLatestWindow();
+        if (!isActive || token !== resyncToken) return;
+        const arrived = arrivedDuringResync;
+        setMessages((prev) => {
+          const reconciled = reconcileWindowedMessages(
+            excludeDeleted(prev, tombstones),
+            excludeDeleted(fetched, tombstones),
+            HISTORY_LIMIT,
+            [SYSTEM_MESSAGE.id]
+          );
+          return excludeDeleted(mergeMessagesById(reconciled, arrived), tombstones);
+        });
+      } catch (err) {
+        console.error("[LiveChat] error al resincronizar tras reconectar:", err);
+      } finally {
+        if (token === resyncToken) {
+          resyncInFlight = false;
+          arrivedDuringResync = [];
+        }
+      }
+    };
+
     fetchHistory();
 
     // 2. Suscribirse a nuevos mensajes (Realtime) desde el inicio, sin esperar
     // el historial, para no perder mensajes concurrentes.
     const channel = supabase.channel(`live_messages_${liveId}`);
+    let hasSubscribedOnce = false;
 
     channel.on(
       "postgres_changes",
@@ -234,7 +320,11 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
           created_at: newMsg.created_at,
           reply_to: buildReplyTo(newMsg),
         };
-        if (!isActive) return;
+        // El DELETE de este mismo mensaje pudo llegar mientras se resolvía el
+        // nombre: `removeMessage` fue un no-op (aún no estaba en la lista), así
+        // que acá hay que descartarlo o quedaría visible.
+        if (!isActive || tombstones.has(incomingMessage.id)) return;
+        if (resyncInFlight) arrivedDuringResync.push(incomingMessage);
 
         let isDuplicate = false;
         setMessages((prev) => {
@@ -250,9 +340,29 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
           onIncomingMessageRef.current?.(incomingMessage);
         }
       }
+    ).on(
+      // Postgres Changes solo filtra un DELETE por columna con `replica identity
+      // full`, que no activamos (misma razón que en useLiveReactions.ts): el
+      // handler llega SIN filtrar por live_id y `old` trae solo la primary key
+      // (`id`). Quitar un id que este chat no tiene es un no-op (removeMessage
+      // devuelve la misma lista).
+      "postgres_changes",
+      { event: "DELETE", schema: "public", table: "live_messages" },
+      (payload: { old: { id?: string } }) => {
+        const deletedId = payload.old?.id;
+        if (!isActive || !deletedId) return;
+        markDeleted(deletedId);
+      }
     ).subscribe((status) => {
+      if (!isActive) return;
       // F23: el indicador refleja la suscripción real, no es decorativo.
-      if (isActive) setConnection(status === "SUBSCRIBED" ? "connected" : "reconnecting");
+      setConnection(status === "SUBSCRIBED" ? "connected" : "reconnecting");
+      // La primera suscripción no resincroniza (el historial ya se está
+      // cargando); un SUBSCRIBED posterior es una reconexión real.
+      if (status === "SUBSCRIBED") {
+        if (hasSubscribedOnce) resync();
+        hasSubscribedOnce = true;
+      }
     });
 
     // Cleanup de la suscripción al desmontar
@@ -260,7 +370,7 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
       isActive = false;
       supabase.removeChannel(channel);
     };
-  }, [liveId]);
+  }, [liveId, tombstonesRef, markDeleted]);
 
   const handleSendMessage = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -475,6 +585,17 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
                         >
                           <SmilePlus size={16} />
                         </button>
+                        {isModerator && (
+                          <button
+                            type="button"
+                            aria-label="Eliminar mensaje"
+                            data-reaction-trigger="true"
+                            onClick={() => handleRequestDelete(msg)}
+                            className="flex items-center justify-center size-8 rounded-full text-foreground-muted hover:bg-danger-surface hover:text-danger"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -496,6 +617,7 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
                           }}
                           onClose={() => setOpenPickerId(null)}
                           onReply={() => handleStartReply(msg)}
+                          onDelete={isModerator ? () => handleRequestDelete(msg) : undefined}
                         />
                       )}
                     </div>
@@ -560,6 +682,8 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
           Encuentro exclusivo • Escuela de la Riqueza
         </p>
       </div>
+
+      {isModerator && <DeleteMessageDialog message={pendingDelete} onConfirm={confirmDelete} onCancel={cancelDelete} />}
     </div>
   );
 };

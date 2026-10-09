@@ -62,6 +62,10 @@ interface LiveHLSPlayerProps {
   // Se agotaron los reintentos de recarga automática — la UI debe mostrar un
   // estado de error con reintento manual (remount vía `key`).
   onFatalError?: () => void;
+  // Tras un `onFatalError`, el video volvió a avanzar solo de forma sostenida:
+  // la UI debe quitar el estado de error (se vio el cartel encima de un vivo
+  // que seguía sonando, 2026-10-03).
+  onRecovered?: () => void;
   onLevelsChange?: (levels: QualityLevel[], currentLevel: number) => void;
 }
 
@@ -83,6 +87,7 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       onPlaying,
       onError,
       onFatalError,
+      onRecovered,
       onLevelsChange,
     },
     ref,
@@ -247,6 +252,8 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
 
       let hls: Hls | null = null;
       let mediaErrorRetries = 0;
+      // Se avisó `onFatalError` y la UI muestra el cartel de error.
+      let fatalReported = false;
       let didSeekToLiveEdge = false;
       let stallTimer: number | null = null;
       let pendingReloadTimeout: number | null = null;
@@ -496,6 +503,7 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           if (!hls || reloadingRef.current) return;
           if (reloadAttempts >= MAX_RELOAD_ATTEMPTS) {
             console.error(`[LiveHLSPlayer] se alcanzó el máximo de ${MAX_RELOAD_ATTEMPTS} reintentos, abandonando`);
+            fatalReported = true;
             onFatalError?.();
             return;
           }
@@ -509,11 +517,15 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           }, delay);
         };
 
-        // Solo reseteamos el contador de reintentos tras reproducción ESTABLE
-        // sostenida (15s sin 'waiting'/'stalled'/error desde el último
-        // 'playing') — resetear en cada 'playing' individual permitía que una
-        // conexión intermitente (play/stall/play/stall...) nunca escalara el
-        // backoff ni disparara onFatalError.
+        // Solo reseteamos los contadores de reintentos (recargas y errores de
+        // media) tras reproducción ESTABLE sostenida (15s sin
+        // 'waiting'/'stalled'/error desde el último 'playing') — resetear en
+        // cada 'playing' individual permitía que una conexión intermitente
+        // (play/stall/play/stall...) nunca escalara el backoff ni disparara
+        // onFatalError. `mediaErrorRetries` se resetea aquí también: sin esto,
+        // tres errores de media espaciados por horas de reproducción sana
+        // agotaban el límite y desde el tercero ya no se llamaba a
+        // `recoverMediaError()` (solo quedaba el watchdog de estancamiento).
         const STABLE_PLAYBACK_MS = 15000;
         let stableTimeoutId: number | null = null;
         clearStableTimer = () => {
@@ -527,6 +539,7 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           stableTimeoutId = window.setTimeout(() => {
             stableTimeoutId = null;
             reloadAttempts = 0;
+            mediaErrorRetries = 0;
           }, STABLE_PLAYBACK_MS);
         };
         video.addEventListener("playing", handlePlaybackRecovered);
@@ -534,9 +547,6 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
         video.addEventListener("stalled", clearStableTimer);
 
         hls.on(Hls.Events.ERROR, (_, data) => {
-          // Cualquier error interrumpe la ventana de estabilidad — no cuenta
-          // como recuperación sostenida.
-          clearStableTimer?.();
           // Los no-fatales también dejan rastro: sin esto el 413 de los segmentos
           // era invisible hasta que el player ya estaba clavado.
           if (!data.fatal) {
@@ -545,6 +555,11 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
             }
             return;
           }
+          // Solo un error FATAL interrumpe la ventana de estabilidad. Antes la
+          // cortaba cualquiera: en un vivo largo los no-fatales (que hls.js
+          // recupera solo) son constantes, el contador de recargas nunca volvía
+          // a 0 y tras 6 recargas espaciadas aparecía el cartel de error.
+          clearStableTimer?.();
           if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
             reloadFromScratch(`network: ${data.details}`);
           } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
@@ -566,15 +581,26 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
         // no avanza. Si pasa STALL_SECONDS así, recargamos el manifest. Es la red de
         // seguridad detrás de la recuperación por evento — el "F5 automático".
         const STALL_SECONDS = 12;
+        // Segundos seguidos avanzando para dar por superado un `onFatalError`.
+        const RECOVERED_SECONDS = 5;
         let lastTime = video.currentTime;
         let stalledFor = 0;
+        let advancingFor = 0;
         stallTimer = window.setInterval(() => {
-          if (!hls || video.paused || video.ended) { stalledFor = 0; lastTime = video.currentTime; return; }
+          if (!hls || video.paused || video.ended) { stalledFor = 0; advancingFor = 0; lastTime = video.currentTime; return; }
           if (video.currentTime > lastTime + 0.2) {
             stalledFor = 0;
             lastTime = video.currentTime;
+            advancingFor += 1;
+            if (fatalReported && advancingFor >= RECOVERED_SECONDS) {
+              fatalReported = false;
+              reloadAttempts = 0;
+              mediaErrorRetries = 0;
+              onRecovered?.();
+            }
             return;
           }
+          advancingFor = 0;
           stalledFor += 1;
           if (stalledFor >= STALL_SECONDS) {
             stalledFor = 0;

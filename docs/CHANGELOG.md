@@ -5,6 +5,42 @@
 
 ---
 
+## 2026-10-09
+
+### Lives — vista previa y moderación del chat para el admin
+- **⚠️ Correr `sql/migrate-live-messages-admin-delete.sql` en Supabase ANTES (o junto con) el deploy del frontend.** Es re-ejecutable. Agrega la policy `DELETE` de `live_messages` solo para admins (antes no existía: nadie podía borrar mensajes) y verifica que la tabla esté en la publicación `supabase_realtime`. Las reacciones caen por `ON DELETE CASCADE` y las respuestas quedan como «Mensaje eliminado» por el `ON DELETE SET NULL` + trigger existente.
+- **Panel de Eventos en Vivo**: nueva tarjeta «Vista previa y chat» (`src/components/feature/admin-live/`) con el video (`LiveHLSPlayer`, modo Fluidez) y el chat de la sala. Usa el sondeo de OBS existente (`obsConnected`). Arranca siempre en silencio (el audio con ~8 s de retraso se cuela en el micrófono de OBS). Si OBS está conectado y el video no empieza en ~20 s, muestra un aviso con «Reintentar». Plegar la tarjeta desmonta player y chat.
+- **Moderar el chat (solo eliminar mensajes)**: `LiveChat` acepta `canModerate`; con rol admin muestra «Eliminar mensaje» con confirmación, de forma optimista con reversión. La autoridad real es la policy RLS; `deleteLiveMessage` trata 0 filas borradas como fallo porque con RLS un DELETE bloqueado no devuelve error.
+- **Borrado en tiempo real**: `LiveChat` escucha `DELETE` de `live_messages` (sin filtro por sala, como `useLiveReactions`) y aplica `removeMessage`. El chat público usa `reconcileWindowedMessages` para que lo borrado desaparezca en el siguiente sondeo sin perder mensajes más viejos que la ventana.
+
+### Lives — panel de transmisión unificado en el admin
+- **Panel de transmisión** (`AdminBroadcastPanel`, `BroadcastControls`): vista previa, chat moderable y controles (estado, OBS, audio, pausar/reanudar, finalizar) en un solo bloque sobre el editor. Reemplaza la tarjeta «Control de Transmisión» y la de «Vista previa y chat». Plegado, los controles siguen visibles. Sala programada: panel compacto con «Iniciar transmisión».
+- **Fix**: la vista previa también se monta con la sala en estado `live` aunque el sondeo de OBS esté apagado (en `npm run dev`) o caído. En esos casos el indicador muestra «Estado de OBS no disponible» en lugar de «Sin señal».
+- **Pausa**: la vista previa muestra el mismo aviso que ven los alumnos («En pausa — así lo ven los alumnos») y ofrece «Ver señal de OBS» para revisar la escena sin reanudar. La vista se restablece al reanudar o pausar de nuevo. Recordatorio: «Pausar» solo tapa la pantalla del alumno; OBS y Cloudflare siguen transmitiendo y grabando.
+- **Espectadores**: contador «N viendo» con la lista de registrados y «+K invitados». `useLivePresence` acepta `observeOnly`, así el admin escucha la presencia sin contarse.
+- **Modo de latencia de la vista previa**: el admin puede elegir Fluidez, Baja latencia o Clase completa para ver lo mismo que un alumno con ese modo. Es un estado local del panel: no altera la preferencia del alumno ni guarda posición de reproducción.
+
+### Lives — borrados del chat más robustos (hallazgos de la revisión previa al push)
+- **LiveChat**: los mensajes eliminados ya no reaparecen. Sus ids se guardan como eliminados (`useLiveMessageDeletions`, `excludeDeleted`) y se filtran en un INSERT que llega tarde, en la carga del historial y en la resincronización. Al reconectar Realtime se vuelven a pedir los últimos 200 mensajes y se concilian con `reconcileWindowedMessages`: se quita lo borrado durante la caída y se suma lo que se perdió.
+- **Moderación**: `deleteLiveMessage` distingue «ya estaba eliminado» (otro admin o doble clic: éxito, sin restaurar) de un rechazo real (`MessageDeleteRefusedError`: se revierte y se avisa).
+- **PublicLiveChat**: se descarta una respuesta de sondeo más vieja que la última aplicada, así no desaparecen mensajes recién llegados. La ventana de mensajes queda acotada al tope de 200 de la RPC.
+- **LiveHLSPlayer**: el contador de errores de media también se reinicia tras 15 s de reproducción estable (antes, desde el tercer error espaciado ya no se intentaba `recoverMediaError()`).
+
+## 2026-10-03
+
+### Lives — "Error de reproducción" encima de un vivo que seguía sonando
+- **Síntoma**: a mitad de la clase aparecía el cartel "Error de reproducción" mientras el audio seguía reproduciéndose. El monitor no registró ningún corte en Cloudflare.
+- **Causa 1**: `LiveHLSPlayer` permite 6 recargas por montaje y vuelve el contador a 0 tras 15 s de reproducción estable, pero **cualquier** error de hls.js (incluso los no fatales que se recuperan solos, constantes en un vivo largo) cortaba esa ventana. El contador acumulaba recargas espaciadas de toda la clase hasta llamar a `onFatalError`.
+- **Causa 2**: una vez en `playerError`, nada lo quitaba aunque el video volviera a avanzar. Solo "Reintentar" lo hacía.
+- **Fix**: solo los errores **fatales** cortan la ventana de estabilidad. Nuevo `onRecovered`: si tras `onFatalError` el video avanza 5 s seguidos, se reinician los contadores y `useLivePlayback` quita el cartel. Dos tests nuevos en `LiveHLSPlayer.test.tsx`, verificados en rojo contra el código anterior.
+
+### Lives — clase sin video: Cloudflare rechazaba los fragmentos de OBS
+- **Síntoma**: los alumnos veían "Error de reproducción" o el reproductor cargando sin fin. Cloudflare mostraba el Live Input "Connected" con 10,8 Mbit/s de entrada y "GOP: Unavailable".
+- **Causa (verificada pidiendo los fragmentos)**: Cloudflare respondía `413 segment size exceeds 10MB: 11013050 bytes`. OBS tenía el intervalo de keyframes en automático (fragmentos de 8,333 s = 250 cuadros a 30 fps), y a 10,8 Mbit/s cada fragmento pesaba ~11 MB. Siempre había estado en automático: antes funcionaba porque la tasa de bits quedaba por debajo de ~9,6 Mbit/s (probablemente control de tasa variable, que sube con movimiento o poca luz).
+- **Solución**: configuración de OBS documentada en `docs/OBS_CONFIGURACION.md` (CBR 6000 kbps, keyframe 2 s, B-frames 0). No hubo cambios de código.
+- **Otros aprendizajes del día**: al principio el manifiesto respondía `204` (OBS todavía no entregaba video). Además, finalizar la sala y crear una nueva cambió el link público y dejó afuera a quienes tenían el original; corresponde **Reactivar** la sala existente.
+- **Corrección en `CLAUDE.md`**: la clave de OBS es la RTMPS Key del Live Input, no el Input ID.
+
 ## 2026-09-28
 
 ### Lives — no se podía eliminar una sala con respuestas en el chat
