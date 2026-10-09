@@ -7,6 +7,11 @@
 
 ## 2026-10-09
 
+### Seguridad — cualquier usuario podía hacerse admin
+- **Hallazgo (verificado en Supabase)**: la policy «Users can update own profile» de `profiles` es `USING (auth.uid() = id)` sin restricción de columnas, y la tabla no tenía triggers. Cualquier usuario logueado podía hacer desde la consola `update({ role: "admin" })` sobre su propio perfil y quedar como admin (todas las policies de admin confían en `profiles.role`), regalarse `plan = 'vip'` o quitarse una suspensión.
+- **Fix**: `sql/migrate-profiles-protect-privileged-columns.sql`. Trigger `BEFORE INSERT OR UPDATE` que, cuando la escritura viene directo del cliente (`current_user` = `authenticated`/`anon`), rechaza cambios en `role`, `plan`, `is_suspended` y `email`, y fuerza valores por defecto en un INSERT. Las RPC del admin y los triggers de registro y de email son `SECURITY DEFINER` (verificado: `admin_toggle_suspend`, `admin_delete_user`, `admin_update_user_plan`, `handle_new_user`, `handle_user_update`), así que siguen funcionando. El alumno sigue pudiendo editar `full_name` y `avatar_url`.
+- **Pendiente**: la policy SELECT «Profiles are viewable by everyone» (`true`, aplicada a `public`) deja leer email, plan y rol de todos los usuarios sin iniciar sesión.
+
 ### Lives — vista previa y moderación del chat para el admin
 - **⚠️ Correr `sql/migrate-live-messages-admin-delete.sql` en Supabase ANTES (o junto con) el deploy del frontend.** Es re-ejecutable. Agrega la policy `DELETE` de `live_messages` solo para admins (antes no existía: nadie podía borrar mensajes) y verifica que la tabla esté en la publicación `supabase_realtime`. Las reacciones caen por `ON DELETE CASCADE` y las respuestas quedan como «Mensaje eliminado» por el `ON DELETE SET NULL` + trigger existente.
 - **Panel de Eventos en Vivo**: nueva tarjeta «Vista previa y chat» (`src/components/feature/admin-live/`) con el video (`LiveHLSPlayer`, modo Fluidez) y el chat de la sala. Usa el sondeo de OBS existente (`obsConnected`). Arranca siempre en silencio (el audio con ~8 s de retraso se cuela en el micrófono de OBS). Si OBS está conectado y el video no empieza en ~20 s, muestra un aviso con «Reintentar». Plegar la tarjeta desmonta player y chat.
