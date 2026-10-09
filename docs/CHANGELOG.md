@@ -5,6 +5,14 @@
 
 ---
 
+## 2026-10-09
+
+### Lives — vista previa y moderación del chat para el admin
+- **⚠️ Correr `sql/migrate-live-messages-admin-delete.sql` en Supabase ANTES (o junto con) el deploy del frontend.** Es re-ejecutable. Agrega la policy `DELETE` de `live_messages` solo para admins (antes no existía: nadie podía borrar mensajes) y verifica que la tabla esté en la publicación `supabase_realtime`. Las reacciones caen por `ON DELETE CASCADE` y las respuestas quedan como «Mensaje eliminado» por el `ON DELETE SET NULL` + trigger existente.
+- **Panel de Eventos en Vivo**: nueva tarjeta «Vista previa y chat» (`src/components/feature/admin-live/`) con el video (`LiveHLSPlayer`, modo Fluidez) y el chat de la sala. Usa el sondeo de OBS existente (`obsConnected`). Arranca siempre en silencio (el audio con ~8 s de retraso se cuela en el micrófono de OBS). Si OBS está conectado y el video no empieza en ~20 s, muestra un aviso con «Reintentar». Plegar la tarjeta desmonta player y chat.
+- **Moderar el chat (solo eliminar mensajes)**: `LiveChat` acepta `canModerate`; con rol admin muestra «Eliminar mensaje» con confirmación, de forma optimista con reversión. La autoridad real es la policy RLS; `deleteLiveMessage` trata 0 filas borradas como fallo porque con RLS un DELETE bloqueado no devuelve error.
+- **Borrado en tiempo real**: `LiveChat` escucha `DELETE` de `live_messages` (sin filtro por sala, como `useLiveReactions`) y aplica `removeMessage`. El chat público usa `reconcileWindowedMessages` para que lo borrado desaparezca en el siguiente sondeo sin perder mensajes más viejos que la ventana.
+
 ## 2026-10-03
 
 ### Lives — "Error de reproducción" encima de un vivo que seguía sonando

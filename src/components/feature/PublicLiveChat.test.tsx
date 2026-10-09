@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { render, screen, act, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import PublicLiveChat from "./PublicLiveChat";
 import { getPublicLiveMessages } from "@/lib/api/stream/lives";
@@ -112,5 +112,65 @@ describe("PublicLiveChat — respuestas (2026-09-27)", () => {
     await screen.findByText("Va de nuevo");
     expect(screen.getByText("Mensaje eliminado")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Ir al mensaje original" })).not.toBeInTheDocument();
+  });
+});
+
+describe("PublicLiveChat — moderación (2026-10-09)", () => {
+  const publicMessage = (id: string, minute: number, extra: Record<string, unknown> = {}) => ({
+    id,
+    user_id: "beto",
+    message: `mensaje ${id}`,
+    created_at: `2026-10-09T10:0${minute}:00Z`,
+    user_name: "Beto",
+    reply_to_id: null,
+    reply_to_user_name: null,
+    reply_to_excerpt: null,
+    ...extra,
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("un mensaje eliminado por el admin desaparece en el siguiente sondeo", async () => {
+    // El sondeo de 4 s se dispara a mano: faltar timers falsos evita que
+    // findBy* (que también usa setInterval) se cuelgue.
+    const realSetInterval = window.setInterval.bind(window);
+    let poll: () => void = () => {};
+    vi.spyOn(window, "setInterval").mockImplementation(((handler: () => void, delay?: number) => {
+      if (delay === 4000) {
+        poll = handler;
+        return 0;
+      }
+      return realSetInterval(handler, delay);
+    }) as typeof window.setInterval);
+    (fetchPublicLiveReactions as ReturnType<typeof vi.fn>).mockResolvedValue(new Map());
+    (getPublicLiveMessages as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce([
+        publicMessage("m1", 1),
+        publicMessage("m2", 2),
+        publicMessage("m3", 3, { reply_to_id: "m2", reply_to_user_name: "Beto", reply_to_excerpt: "cita de m2" }),
+      ])
+      // Segundo sondeo: m2 eliminado; la respuesta m3 llega con la cita ya limpia.
+      .mockResolvedValue([
+        publicMessage("m1", 1),
+        publicMessage("m3", 3, { reply_to_id: null, reply_to_user_name: "Beto", reply_to_excerpt: null }),
+      ]);
+
+    render(
+      <MemoryRouter>
+        <PublicLiveChat token="token-1" loginPath="/login" showWelcome={false} />
+      </MemoryRouter>
+    );
+    await screen.findByText("mensaje m2");
+
+    await act(async () => {
+      poll();
+    });
+
+    await waitFor(() => expect(screen.queryByText("mensaje m2")).not.toBeInTheDocument());
+    expect(screen.getByText("mensaje m1")).toBeInTheDocument();
+    expect(screen.getByText("mensaje m3")).toBeInTheDocument();
+    expect(screen.getByText("Mensaje eliminado")).toBeInTheDocument();
   });
 });

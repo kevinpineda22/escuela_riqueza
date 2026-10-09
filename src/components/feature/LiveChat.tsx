@@ -1,19 +1,23 @@
 import { useState, useEffect, type FormEvent, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Send, Users, ShieldCheck, SmilePlus, Reply } from "lucide-react";
+import { Send, Users, ShieldCheck, SmilePlus, Reply, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/stores/auth.store";
+import { USER_ROLES } from "@/types/user";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChatJumpToLatest } from "@/components/feature/ChatJumpToLatest";
 import { MessageReactions } from "@/components/feature/chat/MessageReactions";
 import { ReactionPicker } from "@/components/feature/chat/ReactionPicker";
 import { QuotedMessage } from "@/components/feature/chat/QuotedMessage";
 import { ReplyComposerPreview } from "@/components/feature/chat/ReplyComposerPreview";
+import { DeleteMessageDialog } from "@/components/feature/chat/DeleteMessageDialog";
 import { useChatScroll } from "@/hooks/useChatScroll";
 import { useLiveReactions } from "@/hooks/useLiveReactions";
+import { useMessageModeration } from "@/hooks/useMessageModeration";
 import { useReplyTarget } from "@/hooks/useReplyTarget";
 import { mergeMessagesById } from "@/lib/chat/mergeMessagesById";
+import { removeMessage } from "@/lib/chat/removeMessage";
 import { scrollWithinList } from "@/lib/chat/scrollWithinList";
 import type { ReplyTo } from "@/lib/chat/replyTo";
 
@@ -37,6 +41,13 @@ interface LiveChatProps {
   onIncomingMessage?: (msg: ChatMessage) => void;
   /** Mensaje de bienvenida fijado; solo tiene sentido antes de que arranque el vivo. */
   showWelcome?: boolean;
+  /**
+   * Muestra la acción «Eliminar mensaje» a los administradores. Es solo
+   * presentación: quien decide si el borrado procede es la política RLS de
+   * `live_messages` (sql/migrate-live-messages-admin-delete.sql). La vista del
+   * alumno nunca lo pasa.
+   */
+  canModerate?: boolean;
 }
 
 const SYSTEM_MESSAGE: ChatMessage = {
@@ -81,7 +92,7 @@ function buildReplyTo(row: MessageRow): ReplyTo | null {
   };
 }
 
-const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingMessage, showWelcome = true }: LiveChatProps) => {
+const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingMessage, showWelcome = true, canModerate = false }: LiveChatProps) => {
   const { user } = useAuthStore();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -101,7 +112,18 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
   // Mensaje enviado sin confirmar: su id se reusa si se reintenta el mismo texto.
   const pendingSendRef = useRef<{ id: string; text: string } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { replyTarget, startReply, cancelReply } = useReplyTarget();
+  const { replyTarget, startReply, cancelReply, cancelReplyFor } = useReplyTarget();
+  const cancelReplyForRef = useRef(cancelReplyFor);
+  const isModerator = canModerate && user?.role === USER_ROLES.ADMIN;
+  const { pending: pendingDelete, requestDelete, cancelDelete, confirmDelete } = useMessageModeration({
+    messages,
+    setMessages,
+    // Un mensaje eliminado ya no se puede reaccionar ni responder.
+    onRemoved: (id) => {
+      setOpenPickerId((current) => (current === id ? null : current));
+      cancelReplyFor(id);
+    },
+  });
   const visibleMessages = showWelcome ? messages : messages.filter((m) => m.id !== SYSTEM_MESSAGE.id);
   // Ventana de mensajes para la que se piden reacciones — recalculada en cada
   // render (el hook la lee por ref) para que un resync tras reconexión use
@@ -123,6 +145,11 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
     startReply({ id: msg.id, userName: msg.user_name, excerpt: msg.content.slice(0, REPLY_EXCERPT_LENGTH) });
     setOpenPickerId(null);
     inputRef.current?.focus();
+  };
+
+  const handleRequestDelete = (msg: ChatMessage) => {
+    setOpenPickerId(null);
+    requestDelete(msg);
   };
 
   // Desplaza el mensaje original a la vista y lo resalta unos instantes.
@@ -147,10 +174,11 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
     if (picker) scrollWithinList(list, picker, "nearest");
   }, [openPickerId, listRef]);
 
-  // Mantener el callback siempre actualizado sin reabrir la suscripción Realtime
+  // Mantener los callbacks siempre actualizados sin reabrir la suscripción Realtime
   useEffect(() => {
     onIncomingMessageRef.current = onIncomingMessage;
-  }, [onIncomingMessage]);
+    cancelReplyForRef.current = cancelReplyFor;
+  }, [onIncomingMessage, cancelReplyFor]);
 
   // Cargar mensajes iniciales y suscribirse a nuevos
   useEffect(() => {
@@ -249,6 +277,21 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
         if (!isDuplicate) {
           onIncomingMessageRef.current?.(incomingMessage);
         }
+      }
+    ).on(
+      // Postgres Changes solo filtra un DELETE por columna con `replica identity
+      // full`, que no activamos (misma razón que en useLiveReactions.ts): el
+      // handler llega SIN filtrar por live_id y `old` trae solo la primary key
+      // (`id`). Quitar un id que este chat no tiene es un no-op (removeMessage
+      // devuelve la misma lista).
+      "postgres_changes",
+      { event: "DELETE", schema: "public", table: "live_messages" },
+      (payload: { old: { id?: string } }) => {
+        const deletedId = payload.old?.id;
+        if (!isActive || !deletedId) return;
+        setMessages((prev) => removeMessage(prev, deletedId));
+        setOpenPickerId((current) => (current === deletedId ? null : current));
+        cancelReplyForRef.current(deletedId);
       }
     ).subscribe((status) => {
       // F23: el indicador refleja la suscripción real, no es decorativo.
@@ -475,6 +518,17 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
                         >
                           <SmilePlus size={16} />
                         </button>
+                        {isModerator && (
+                          <button
+                            type="button"
+                            aria-label="Eliminar mensaje"
+                            data-reaction-trigger="true"
+                            onClick={() => handleRequestDelete(msg)}
+                            className="flex items-center justify-center size-8 rounded-full text-foreground-muted hover:bg-danger-surface hover:text-danger"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -496,6 +550,7 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
                           }}
                           onClose={() => setOpenPickerId(null)}
                           onReply={() => handleStartReply(msg)}
+                          onDelete={isModerator ? () => handleRequestDelete(msg) : undefined}
                         />
                       )}
                     </div>
@@ -560,6 +615,8 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
           Encuentro exclusivo • Escuela de la Riqueza
         </p>
       </div>
+
+      {isModerator && <DeleteMessageDialog message={pendingDelete} onConfirm={confirmDelete} onCancel={cancelDelete} />}
     </div>
   );
 };

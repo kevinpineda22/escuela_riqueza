@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ChatJumpToLatest } from "@/components/feature/ChatJumpToLatest";
 import { useChatScroll } from "@/hooks/useChatScroll";
 import { getPublicLiveMessages, type PublicChatMessage } from "@/lib/api/stream/lives";
-import { mergeMessagesById } from "@/lib/chat/mergeMessagesById";
+import { reconcileWindowedMessages } from "@/lib/chat/reconcileWindowedMessages";
 import { scrollWithinList } from "@/lib/chat/scrollWithinList";
 import { MessageReactions } from "@/components/feature/chat/MessageReactions";
 import { QuotedMessage } from "@/components/feature/chat/QuotedMessage";
@@ -74,7 +74,9 @@ const PublicLiveChat = ({ token, loginPath, showWelcome = true }: PublicLiveChat
       try {
         const fetched = await getPublicLiveMessages(token, MESSAGE_WINDOW);
         if (!isActive) return;
-        setMessages((prev) => mergeMessagesById(prev, fetched));
+        // El servidor es la fuente de verdad de su ventana: un mensaje que el
+        // admin eliminó deja de venir y tiene que salir de la pantalla también.
+        setMessages((prev) => reconcileWindowedMessages(prev, fetched, MESSAGE_WINDOW, [SYSTEM_MESSAGE.id]));
       } catch (err) {
         console.error("[PublicLiveChat] error fetching messages:", err);
       } finally {

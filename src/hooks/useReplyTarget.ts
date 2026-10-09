@@ -5,6 +5,8 @@ export interface UseReplyTargetResult {
   replyTarget: ReplyTarget | null;
   startReply: (target: ReplyTarget) => void;
   cancelReply: () => void;
+  /** Cancels the reply only if it targets `messageId` (e.g. that message was just deleted). */
+  cancelReplyFor: (messageId: string) => void;
 }
 
 /**
@@ -18,5 +20,6 @@ export function useReplyTarget(): UseReplyTargetResult {
     replyTarget,
     startReply: setReplyTarget,
     cancelReply: () => setReplyTarget(null),
+    cancelReplyFor: (messageId) => setReplyTarget((current) => (current?.id === messageId ? null : current)),
   };
 }

@@ -7,6 +7,7 @@ import { authedFetch } from "@/lib/api/client";
 import { toast } from "@/components/ui/toaster";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import RecordingPlayer from "@/components/feature/RecordingPlayer";
+import { AdminLivePreview } from "@/components/feature/admin-live/AdminLivePreview";
 
 const CF_SUBDOMAIN = import.meta.env.VITE_CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN || "";
 const PRESET_INPUT_IDS = [
@@ -1041,6 +1042,8 @@ const AdminLiveManager = () => {
               </button>
             )}
           </div>
+
+          <AdminLivePreview live={activeLive} obsConnected={obsConnected} />
         </div>
       )}
 

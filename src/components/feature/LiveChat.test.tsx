@@ -3,7 +3,17 @@ import { render, screen, fireEvent, waitFor, act, within } from "@testing-librar
 import LiveChat from "./LiveChat";
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/stores/auth.store";
+import { toast } from "@/components/ui/toaster";
+import { deleteLiveMessage } from "@/lib/api/stream/messages";
 import type { User } from "@/types/user";
+
+vi.mock("@/components/ui/toaster", () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
+
+vi.mock("@/lib/api/stream/messages", () => ({
+  deleteLiveMessage: vi.fn(),
+}));
 
 // LiveChat.tsx se suscribe al canal de mensajes; useLiveReactions (hook
 // aparte, ver useLiveReactions.ts) se suscribe a su PROPIO canal
@@ -728,5 +738,237 @@ describe("LiveChat — respuestas (2026-09-27)", () => {
     expect(scrollIntoView).not.toHaveBeenCalled();
     const originalBubble = container.querySelector('[data-message-id="m1"] [data-reaction-trigger="true"]');
     expect(originalBubble).toHaveClass("ring-accent");
+  });
+});
+
+describe("LiveChat — moderación y borrado en tiempo real (2026-10-09)", () => {
+  interface Row {
+    id: string;
+    content: string;
+    created_at: string;
+    user_id: string;
+    reply_to_id: string | null;
+    reply_to_user_id: string | null;
+    reply_to_user_name: string | null;
+    reply_to_excerpt: string | null;
+  }
+
+  const history: Row[] = [
+    {
+      id: "m1",
+      user_id: "beto",
+      content: "Hola",
+      created_at: "2026-10-09T10:00:00Z",
+      reply_to_id: null,
+      reply_to_user_id: null,
+      reply_to_user_name: null,
+      reply_to_excerpt: null,
+    },
+    {
+      id: "m2",
+      user_id: "ana",
+      content: "Te contesto",
+      created_at: "2026-10-09T10:01:00Z",
+      reply_to_id: "m1",
+      reply_to_user_id: "beto",
+      reply_to_user_name: "Beto",
+      reply_to_excerpt: "Hola",
+    },
+  ];
+
+  const admin = { id: "admin-1", fullName: "Iván", role: "admin" } as User;
+  const regular = { id: "user-1", fullName: "Alumno", role: "student" } as User;
+
+  // El canal de mensajes registra [0] INSERT y [1] DELETE.
+  const deleteHandler = () => messagesChannel.on.mock.calls[1][2] as (payload: { old: { id?: string } }) => void;
+  const deleteMock = deleteLiveMessage as unknown as ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupChannelChaining();
+    (supabase.auth.getSession as ReturnType<typeof vi.fn>).mockResolvedValue({ data: { session: null } });
+    from.mockImplementation((table: string) => {
+      if (table === "profiles") {
+        return {
+          select: () => ({
+            in: () =>
+              Promise.resolve({
+                data: [
+                  { id: "beto", full_name: "Beto" },
+                  { id: "ana", full_name: "Ana" },
+                ],
+              }),
+            eq: () => ({ maybeSingle: () => Promise.resolve({ data: { full_name: "Beto" } }) }),
+          }),
+        };
+      }
+      if (table === "live_message_reactions") {
+        return { select: () => ({ eq: () => ({ in: () => Promise.resolve({ data: [], error: null }) }) }) };
+      }
+      return {
+        select: () => ({
+          eq: () => ({ order: () => ({ limit: () => Promise.resolve({ data: [...history].reverse(), error: null }) }) }),
+        }),
+        insert,
+      };
+    });
+    deleteMock.mockResolvedValue(undefined);
+    useAuthStore.setState({ user: regular, token: "t" });
+  });
+
+  async function renderChat(props: { canModerate?: boolean } = {}) {
+    render(<LiveChat liveId="live-1" showWelcome={false} {...props} />);
+    await screen.findByText("Te contesto");
+  }
+
+  describe("DELETE por Realtime", () => {
+    it("quita el mensaje eliminado para todos", async () => {
+      await renderChat();
+      await waitFor(() => expect(messagesChannel.on).toHaveBeenCalledTimes(2));
+
+      act(() => deleteHandler()({ old: { id: "m2" } }));
+
+      expect(screen.queryByText("Te contesto")).not.toBeInTheDocument();
+      expect(screen.getAllByText("Hola").length).toBeGreaterThan(0);
+    });
+
+    it("las respuestas al mensaje eliminado pasan a mostrar 'Mensaje eliminado' sin botón de salto", async () => {
+      await renderChat();
+      expect(screen.getByRole("button", { name: "Ir al mensaje original" })).toBeInTheDocument();
+      await waitFor(() => expect(messagesChannel.on).toHaveBeenCalledTimes(2));
+
+      act(() => deleteHandler()({ old: { id: "m1" } }));
+
+      expect(await screen.findByText("Mensaje eliminado")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Ir al mensaje original" })).not.toBeInTheDocument();
+      expect(screen.queryByText("Hola")).not.toBeInTheDocument();
+    });
+
+    it("un id que este chat no tiene no cambia nada", async () => {
+      await renderChat();
+      await waitFor(() => expect(messagesChannel.on).toHaveBeenCalledTimes(2));
+
+      act(() => deleteHandler()({ old: { id: "de-otra-sala" } }));
+      act(() => deleteHandler()({ old: {} }));
+
+      expect(screen.getByText("Te contesto")).toBeInTheDocument();
+      expect(screen.queryByText("Mensaje eliminado")).not.toBeInTheDocument();
+    });
+
+    it("cancela la respuesta en curso al mensaje eliminado", async () => {
+      await renderChat();
+      fireEvent.click(screen.getByText("Te contesto"));
+      const menu = await screen.findByRole("menu");
+      fireEvent.click(within(menu).getByRole("menuitem", { name: "Responder" }));
+      await screen.findByText("Respondiendo a Ana");
+      await waitFor(() => expect(messagesChannel.on).toHaveBeenCalledTimes(2));
+
+      act(() => deleteHandler()({ old: { id: "m2" } }));
+
+      await waitFor(() => expect(screen.queryByText("Respondiendo a Ana")).not.toBeInTheDocument());
+    });
+
+    it("no cancela una respuesta a otro mensaje", async () => {
+      await renderChat();
+      fireEvent.click(screen.getByText("Te contesto"));
+      const menu = await screen.findByRole("menu");
+      fireEvent.click(within(menu).getByRole("menuitem", { name: "Responder" }));
+      await screen.findByText("Respondiendo a Ana");
+      await waitFor(() => expect(messagesChannel.on).toHaveBeenCalledTimes(2));
+
+      act(() => deleteHandler()({ old: { id: "m1" } }));
+
+      expect(screen.getByText("Respondiendo a Ana")).toBeInTheDocument();
+    });
+
+    it("cierra el picker de reacciones abierto sobre el mensaje eliminado", async () => {
+      await renderChat();
+      fireEvent.click(screen.getByText("Te contesto"));
+      await screen.findByRole("menu");
+      await waitFor(() => expect(messagesChannel.on).toHaveBeenCalledTimes(2));
+
+      act(() => deleteHandler()({ old: { id: "m2" } }));
+
+      await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+    });
+  });
+
+  describe("acción de moderar", () => {
+    it("no aparece sin canModerate, ni siquiera para un admin", async () => {
+      useAuthStore.setState({ user: admin, token: "t" });
+      await renderChat();
+
+      expect(screen.queryByRole("button", { name: "Eliminar mensaje" })).not.toBeInTheDocument();
+    });
+
+    it("no aparece con canModerate si el usuario no es admin", async () => {
+      await renderChat({ canModerate: true });
+
+      expect(screen.queryByRole("button", { name: "Eliminar mensaje" })).not.toBeInTheDocument();
+    });
+
+    it("aparece en cada mensaje para un admin con canModerate", async () => {
+      useAuthStore.setState({ user: admin, token: "t" });
+      await renderChat({ canModerate: true });
+
+      expect(screen.getAllByRole("button", { name: "Eliminar mensaje" })).toHaveLength(2);
+    });
+
+    it("en celular se llega desde el menú de acciones de la burbuja", async () => {
+      useAuthStore.setState({ user: admin, token: "t" });
+      await renderChat({ canModerate: true });
+
+      fireEvent.click(screen.getByText("Te contesto"));
+      const menu = await screen.findByRole("menu");
+
+      expect(within(menu).getByRole("menuitem", { name: "Eliminar mensaje" })).toBeInTheDocument();
+    });
+
+    it("pide confirmación mostrando el mensaje antes de eliminar", async () => {
+      useAuthStore.setState({ user: admin, token: "t" });
+      await renderChat({ canModerate: true });
+
+      fireEvent.click(screen.getAllByRole("button", { name: "Eliminar mensaje" })[0]);
+
+      const dialog = await screen.findByRole("dialog");
+      expect(within(dialog).getByText("Hola")).toBeInTheDocument();
+      expect(deleteMock).not.toHaveBeenCalled();
+      // Cancelar no borra nada.
+      fireEvent.click(within(dialog).getByRole("button", { name: "Cancelar" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+      expect(deleteMock).not.toHaveBeenCalled();
+    });
+
+    it("al confirmar elimina, quita el mensaje al instante y avisa", async () => {
+      useAuthStore.setState({ user: admin, token: "t" });
+      await renderChat({ canModerate: true });
+
+      fireEvent.click(screen.getAllByRole("button", { name: "Eliminar mensaje" })[0]);
+      const dialog = await screen.findByRole("dialog");
+      fireEvent.click(within(dialog).getByRole("button", { name: "Eliminar" }));
+
+      await waitFor(() => expect(deleteMock).toHaveBeenCalledWith("m1"));
+      await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Mensaje eliminado"));
+      // «Hola» desapareció y la respuesta quedó citando un mensaje eliminado.
+      expect(screen.queryByText("Hola")).not.toBeInTheDocument();
+      expect(screen.getByText("Mensaje eliminado")).toBeInTheDocument();
+    });
+
+    it("si falla, devuelve el mensaje y sus citas y muestra el error", async () => {
+      deleteMock.mockRejectedValue(new Error("RLS"));
+      useAuthStore.setState({ user: admin, token: "t" });
+      await renderChat({ canModerate: true });
+
+      fireEvent.click(screen.getAllByRole("button", { name: "Eliminar mensaje" })[0]);
+      const dialog = await screen.findByRole("dialog");
+      fireEvent.click(within(dialog).getByRole("button", { name: "Eliminar" }));
+
+      await waitFor(() => expect(toast.error).toHaveBeenCalledWith("No se pudo eliminar el mensaje"));
+      expect(toast.success).not.toHaveBeenCalled();
+      // El original vuelve y la respuesta recupera su cita.
+      expect(screen.getAllByText("Hola").length).toBeGreaterThan(0);
+      expect(screen.getByRole("button", { name: "Ir al mensaje original" })).toBeInTheDocument();
+      expect(screen.queryByText("Mensaje eliminado")).not.toBeInTheDocument();
+    });
   });
 });
