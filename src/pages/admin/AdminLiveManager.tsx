@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Radio, Image as ImageIcon, Settings2, Save, Plus, Trash2, PlayCircle, PauseCircle, StopCircle, Calendar, Clock, Monitor, Copy, Upload, Download, Video, Info, Archive, Pencil, Check, X, Link2 } from "lucide-react";
+import { Radio, Image as ImageIcon, Settings2, Save, Plus, Trash2, PlayCircle, Calendar, Clock, Monitor, Copy, Upload, Download, Video, Info, Archive, Pencil, Check, X, Link2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fetchLives, fetchEndedLives, fetchRecording, createLive, updateLive, deleteLive, setActiveLive as apiSetActiveLive, deactivateAllLives, checkLiveInputStatus, archiveRecording, fetchRecordingUrl, setLivePublic, setLiveReplayPublic, buildPublicLiveUrl, type LiveEvent, type StreamRecording } from "@/lib/api/stream/lives";
 import { supabase } from "@/lib/supabase";
@@ -7,7 +7,7 @@ import { authedFetch } from "@/lib/api/client";
 import { toast } from "@/components/ui/toaster";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import RecordingPlayer from "@/components/feature/RecordingPlayer";
-import { AdminLivePreview } from "@/components/feature/admin-live/AdminLivePreview";
+import { AdminBroadcastPanel } from "@/components/feature/admin-live/AdminBroadcastPanel";
 
 const CF_SUBDOMAIN = import.meta.env.VITE_CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN || "";
 const PRESET_INPUT_IDS = [
@@ -180,6 +180,8 @@ const AdminLiveManager = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [customInputId, setCustomInputId] = useState(false);
   const [obsConnected, setObsConnected] = useState(false);
+  // Sondeo de OBS apagado (DEV o errores repetidos): "sin señal" no sería un dato fiable.
+  const [obsUnavailable, setObsUnavailable] = useState(false);
   const [archivingId, setArchivingId] = useState<string | null>(null);
   const [linkingId, setLinkingId] = useState<string | null>(null);
   // Selector de grabación: se abre cuando el Live Input tiene más de una transmisión.
@@ -212,12 +214,13 @@ const AdminLiveManager = () => {
     let failCount = 0;
     const check = async () => {
       const { connected, isError, disabled } = await checkLiveInputStatus(activeLive.stream_live_input_id!);
-      if (disabled) { clearInterval(poll); return; }
+      if (disabled) { setObsUnavailable(true); clearInterval(poll); return; }
       if (isError) {
         failCount++;
-        if (failCount >= 3) { clearInterval(poll); return; }
+        if (failCount >= 3) { setObsUnavailable(true); clearInterval(poll); return; }
       } else {
         failCount = 0;
+        setObsUnavailable(false);
       }
       setObsConnected(prev => connected !== prev ? connected : prev);
 
@@ -689,8 +692,6 @@ const AdminLiveManager = () => {
     </div>
   );
 
-  const isLive = formData.status === "live" && !formData.is_paused;
-
   return (
     <div className="max-w-5xl mx-auto pb-20">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
@@ -732,6 +733,17 @@ const AdminLiveManager = () => {
 
       {activeTab === "editor" && activeLive && (
         <div className="space-y-6">
+          <AdminBroadcastPanel
+            live={activeLive}
+            obsConnected={obsConnected}
+            obsUnavailable={obsUnavailable}
+            isSaving={isSaving}
+            onStart={() => handleToggleLive(true)}
+            onPause={() => handlePauseResume(true)}
+            onResume={() => handlePauseResume(false)}
+            onFinalize={handleFinalize}
+          />
+
           {/* Información del Evento */}
           <div className="bg-surface-page border border-line-subtle rounded-2xl p-6">
             <h3 className="text-lg font-bold text-foreground-strong mb-4 flex items-center gap-2">
@@ -991,59 +1003,6 @@ const AdminLiveManager = () => {
               </div>
             </div>
           </div>
-
-          {/* Control de Transmisión */}
-          <div className={cn("border rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4 transition-colors", isLive ? "bg-red-500/10 border-red-500/30" : formData.is_paused ? "bg-yellow-500/10 border-yellow-500/30" : obsConnected ? "bg-red-500/5 border-red-500/20" : "bg-surface-page border-line-subtle")}>
-              <div>
-                <h3 className={cn("text-lg font-bold flex items-center gap-2", isLive ? "text-danger" : formData.is_paused ? "text-yellow-500 light:text-warning" : "text-foreground-strong")}>
-                  Control de Transmisión {isLive && "(¡EN VIVO!)"} {formData.is_paused && "(PAUSADO)"}
-                  {obsConnected && !isLive && !formData.is_paused && <span className="text-[10px] bg-red-500/20 text-red-500 light:text-danger border border-red-500/50 px-2 py-0.5 rounded-full animate-pulse uppercase">OBS Detectado</span>}
-                </h3>
-                <p className="text-sm text-foreground-muted max-w-md mt-1">
-                  {isLive
-                    ? "La transmisión está activa. Los usuarios VIP pueden ver el evento en vivo."
-                    : formData.is_paused
-                    ? "La sala está en pausa: los alumnos ven un aviso de pausa. OBS sigue emitiendo; la pausa es solo de la sala."
-                    : "Activa la sala para que los usuarios vean la transmisión."}
-                </p>
-              {formData.starts_at && !isLive && (
-                <p className="text-xs text-accent mt-2 flex items-center gap-1">
-                  <Calendar size={12} /> Programado: {new Date(formData.starts_at).toLocaleString("es-CO")}
-                </p>
-              )}
-            </div>
-            {/* F29: "Detener" pausaba la sala (no OBS) y compartía ícono con
-                Finalizar; desde la pausa no se podía finalizar. Ahora cada
-                acción dice qué hace y Finalizar está en vivo y en pausa. */}
-            {isLive || formData.is_paused ? (
-              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                {isLive ? (
-                  <button onClick={() => handlePauseResume(true)}
-                    title="Los alumnos ven 'Transmisión en pausa'. OBS sigue emitiendo."
-                    className="flex-1 sm:flex-none bg-yellow-600 hover:bg-yellow-700 text-white font-bold px-4 sm:px-6 py-3 rounded-xl flex items-center justify-center gap-2 whitespace-nowrap transition-colors">
-                    <PauseCircle size={20} /> Pausar
-                  </button>
-                ) : (
-                  <button onClick={() => handlePauseResume(false)}
-                    className="flex-1 sm:flex-none bg-yellow-600 hover:bg-yellow-700 text-white font-bold px-4 sm:px-6 py-3 rounded-xl flex items-center justify-center gap-2 whitespace-nowrap shadow-lg shadow-yellow-900/50 transition-colors">
-                    <PlayCircle size={20} /> Reanudar
-                  </button>
-                )}
-                <button onClick={handleFinalize}
-                  title="Cierra la clase para los alumnos y la pasa a Finalizados."
-                  className="flex-1 sm:flex-none bg-red-800/50 hover:bg-red-800 text-danger light:bg-red-700 light:hover:bg-red-800 light:text-white font-bold px-4 sm:px-6 py-3 rounded-xl flex items-center justify-center gap-2 whitespace-nowrap transition-colors border border-red-800/30">
-                  <StopCircle size={20} /> Finalizar clase
-                </button>
-              </div>
-            ) : (
-              <button onClick={() => handleToggleLive(true)}
-                className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white font-bold px-4 sm:px-6 py-3 rounded-xl flex items-center justify-center gap-2 whitespace-nowrap shadow-lg shadow-red-900/50 transition-colors">
-                <PlayCircle size={20} /> {obsConnected ? "Iniciar Transmisión" : "Forzar EN VIVO"}
-              </button>
-            )}
-          </div>
-
-          <AdminLivePreview live={activeLive} obsConnected={obsConnected} />
         </div>
       )}
 

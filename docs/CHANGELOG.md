@@ -13,6 +13,13 @@
 - **Moderar el chat (solo eliminar mensajes)**: `LiveChat` acepta `canModerate`; con rol admin muestra «Eliminar mensaje» con confirmación, de forma optimista con reversión. La autoridad real es la policy RLS; `deleteLiveMessage` trata 0 filas borradas como fallo porque con RLS un DELETE bloqueado no devuelve error.
 - **Borrado en tiempo real**: `LiveChat` escucha `DELETE` de `live_messages` (sin filtro por sala, como `useLiveReactions`) y aplica `removeMessage`. El chat público usa `reconcileWindowedMessages` para que lo borrado desaparezca en el siguiente sondeo sin perder mensajes más viejos que la ventana.
 
+### Lives — panel de transmisión unificado en el admin
+- **Panel de transmisión** (`AdminBroadcastPanel`, `BroadcastControls`): vista previa, chat moderable y controles (estado, OBS, audio, pausar/reanudar, finalizar) en un solo bloque sobre el editor. Reemplaza la tarjeta «Control de Transmisión» y la de «Vista previa y chat». Plegado, los controles siguen visibles. Sala programada: panel compacto con «Iniciar transmisión».
+- **Fix**: la vista previa también se monta con la sala en estado `live` aunque el sondeo de OBS esté apagado (en `npm run dev`) o caído. En esos casos el indicador muestra «Estado de OBS no disponible» en lugar de «Sin señal».
+- **Pausa**: la vista previa muestra el mismo aviso que ven los alumnos («En pausa — así lo ven los alumnos») y ofrece «Ver señal de OBS» para revisar la escena sin reanudar. La vista se restablece al reanudar o pausar de nuevo. Recordatorio: «Pausar» solo tapa la pantalla del alumno; OBS y Cloudflare siguen transmitiendo y grabando.
+- **Espectadores**: contador «N viendo» con la lista de registrados y «+K invitados». `useLivePresence` acepta `observeOnly`, así el admin escucha la presencia sin contarse.
+- **Modo de latencia de la vista previa**: el admin puede elegir Fluidez, Baja latencia o Clase completa para ver lo mismo que un alumno con ese modo. Es un estado local del panel: no altera la preferencia del alumno ni guarda posición de reproducción.
+
 ## 2026-10-03
 
 ### Lives — "Error de reproducción" encima de un vivo que seguía sonando

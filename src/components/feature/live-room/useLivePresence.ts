@@ -10,6 +10,12 @@ interface UseLivePresenceOptions {
   /** Sin sesión, id anónimo (key `anon-<id>`); sin él no se trackea. */
   anonId?: string;
   enabled: boolean;
+  /**
+   * Solo escucha: se suscribe al canal y recibe `sync` pero NO se trackea, así
+   * el observador (ej. el admin) no se cuenta como espectador. No exige
+   * `user` ni `anonId`.
+   */
+  observeOnly?: boolean;
 }
 
 /**
@@ -18,7 +24,7 @@ interface UseLivePresenceOptions {
  * usuario, así que alguien con sesión abierto en ambas no se cuenta dos veces.
  * Al cerrar la pestaña Supabase lo saca solo (~30 s).
  */
-export function useLivePresence({ liveId, user, anonId, enabled }: UseLivePresenceOptions) {
+export function useLivePresence({ liveId, user, anonId, enabled, observeOnly = false }: UseLivePresenceOptions) {
   // `viewers` solo trae registrados (con user_id) para la lista con nombres;
   // `totalViewers` cuenta todas las presencias, anónimos incluidos.
   const [viewers, setViewers] = useState<ViewerInfo[]>([]);
@@ -30,10 +36,11 @@ export function useLivePresence({ liveId, user, anonId, enabled }: UseLivePresen
   const plan = user?.plan;
 
   useEffect(() => {
-    if (!enabled || (!userId && !anonId)) return;
+    if (!enabled || (!observeOnly && !userId && !anonId)) return;
 
     const channel = supabase.channel(`live_presence:${liveId}`, {
-      config: { presence: { key: userId ?? `anon-${anonId}` } },
+      // Sin key propia el observador no ocupa una entrada en el estado de presencia.
+      config: observeOnly ? {} : { presence: { key: userId ?? `anon-${anonId}` } },
     });
 
     const myPresence: ViewerInfo | { name: string; anonymous: true; online_at: string } =
@@ -59,16 +66,16 @@ export function useLivePresence({ liveId, user, anonId, enabled }: UseLivePresen
         setTotalViewers(Object.keys(state).length);
       })
       .subscribe(async (status) => {
-        if (status === "SUBSCRIBED") {
+        if (status === "SUBSCRIBED" && !observeOnly) {
           await channel.track(myPresence);
         }
       });
 
     return () => {
-      channel.untrack().catch(() => {});
+      if (!observeOnly) channel.untrack().catch(() => {});
       supabase.removeChannel(channel);
     };
-  }, [liveId, enabled, anonId, userId, fullName, avatarUrl, plan]);
+  }, [liveId, enabled, observeOnly, anonId, userId, fullName, avatarUrl, plan]);
 
   return { viewers, totalViewers };
 }
