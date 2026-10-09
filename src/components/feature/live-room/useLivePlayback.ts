@@ -146,6 +146,7 @@ export function useLivePlayback() {
         setActiveQualityLevel(current);
       },
       onFatalError: () => setPlayerError(true),
+      onRecovered: () => setPlayerError(false),
     },
   };
 

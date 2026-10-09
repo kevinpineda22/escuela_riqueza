@@ -5,6 +5,21 @@
 
 ---
 
+## 2026-10-03
+
+### Lives — "Error de reproducción" encima de un vivo que seguía sonando
+- **Síntoma**: a mitad de la clase aparecía el cartel "Error de reproducción" mientras el audio seguía reproduciéndose. El monitor no registró ningún corte en Cloudflare.
+- **Causa 1**: `LiveHLSPlayer` permite 6 recargas por montaje y vuelve el contador a 0 tras 15 s de reproducción estable, pero **cualquier** error de hls.js (incluso los no fatales que se recuperan solos, constantes en un vivo largo) cortaba esa ventana. El contador acumulaba recargas espaciadas de toda la clase hasta llamar a `onFatalError`.
+- **Causa 2**: una vez en `playerError`, nada lo quitaba aunque el video volviera a avanzar. Solo "Reintentar" lo hacía.
+- **Fix**: solo los errores **fatales** cortan la ventana de estabilidad. Nuevo `onRecovered`: si tras `onFatalError` el video avanza 5 s seguidos, se reinician los contadores y `useLivePlayback` quita el cartel. Dos tests nuevos en `LiveHLSPlayer.test.tsx`, verificados en rojo contra el código anterior.
+
+### Lives — clase sin video: Cloudflare rechazaba los fragmentos de OBS
+- **Síntoma**: los alumnos veían "Error de reproducción" o el reproductor cargando sin fin. Cloudflare mostraba el Live Input "Connected" con 10,8 Mbit/s de entrada y "GOP: Unavailable".
+- **Causa (verificada pidiendo los fragmentos)**: Cloudflare respondía `413 segment size exceeds 10MB: 11013050 bytes`. OBS tenía el intervalo de keyframes en automático (fragmentos de 8,333 s = 250 cuadros a 30 fps), y a 10,8 Mbit/s cada fragmento pesaba ~11 MB. Siempre había estado en automático: antes funcionaba porque la tasa de bits quedaba por debajo de ~9,6 Mbit/s (probablemente control de tasa variable, que sube con movimiento o poca luz).
+- **Solución**: configuración de OBS documentada en `docs/OBS_CONFIGURACION.md` (CBR 6000 kbps, keyframe 2 s, B-frames 0). No hubo cambios de código.
+- **Otros aprendizajes del día**: al principio el manifiesto respondía `204` (OBS todavía no entregaba video). Además, finalizar la sala y crear una nueva cambió el link público y dejó afuera a quienes tenían el original; corresponde **Reactivar** la sala existente.
+- **Corrección en `CLAUDE.md`**: la clave de OBS es la RTMPS Key del Live Input, no el Input ID.
+
 ## 2026-09-28
 
 ### Lives — no se podía eliminar una sala con respuestas en el chat
