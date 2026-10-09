@@ -111,6 +111,7 @@ Hacer una transmisión de prueba antes y otra después de los Paquetes 1–3, en
 ## 4. Fuera de alcance (por ahora)
 
 - Panel de "salud de transmisión" con porcentajes, bitrate, alumnos conectados, buffering promedio. Requiere telemetría que no existe; se decide después del Paquete 4.
+  - **Pedido del cliente (2026-10-09), anotado para después**: el admin quiere "llevar control de todo lo que pasa en la transmisión". La vista previa del panel solo muestra lo que llega a la conexión del admin. Propuesta: que `LiveHLSPlayer` de cada alumno reporte sus eventos (cortes de buffering, recargas, `onFatalError`, cartel de error) a una tabla con RLS de solo inserción propia, y que el panel de transmisión muestre "N alumnos con problemas de reproducción ahora". Reutiliza las métricas del Paquete 4.
 - Migrar OBS a WHIP para latencia sub-segundo. Primero estabilidad, después latencia.
 - Revisar el keyframe de OBS (el repo recomienda 1 s; Cloudflare sugiere 2–8 s, empezando por 4 para diagnosticar). Contrastar con métricas reales antes de cambiar la guía.
 
