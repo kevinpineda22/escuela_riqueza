@@ -229,7 +229,7 @@ Ver `env.example` (copiar a `.env.local` para desarrollo). Reglas:
 ### 7.4 Lives en vivo
 - Iván desde el panel admin crea una sala (`AdminLiveManager`) con título, `starts_at`, `stream_live_input_id`, `background_image_url` y `allowed_plans`.
 - Tabla `lives`: `id, title, description, starts_at (NOT NULL), duration_minutes, stream_live_input_id, required_plan, status (scheduled/live/ended), background_image_url, allowed_plans (text[]), is_active, recording_stream_uid, created_at`.
-- Iván emite desde OBS apuntando al RTMP de Cloudflare (servidor `rtmps://live.cloudflare.com:443/live/`, clave = Input ID).
+- Iván emite desde OBS apuntando al RTMP de Cloudflare (servidor `rtmps://live.cloudflare.com:443/live/`, clave = la **RTMPS Key** del Live Input, que NO es el Input ID). **Configuración obligatoria de OBS (CBR 6000 kbps, keyframe 2 s, B-frames 0) en `@docs/OBS_CONFIGURACION.md`**: Cloudflare rechaza fragmentos de más de 10 MB y con keyframe automático (~8,3 s) + tasa alta nadie ve el vivo (incidente 2026-10-03).
 - **Reproducción**: en `VIPLiveRoom` se usa `<Stream>` de `@cloudflare/stream-react` (HLS estándar, latencia 5-10s). El iframe raw + SDK manual fue removido por causar `removeChild` errors en móviles — ver CHANGELOG 2026-05-16.
 - Solo una sala `is_active = true` a la vez. Admin la elige con botón Activar/Inactivar.
 - VIP ve countdown desde `starts_at` → intro cinemática → player.
