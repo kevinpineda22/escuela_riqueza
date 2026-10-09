@@ -8,6 +8,8 @@ interface UseMessageModerationParams<T extends RemovableMessage> {
   setMessages: Dispatch<SetStateAction<T[]>>;
   /** Called as soon as the message is removed locally, to drop UI that points at it (open picker, reply composer). */
   onRemoved: (messageId: string) => void;
+  /** Called when the delete is rolled back (the server refused it or the request failed). */
+  onRestored?: (messageId: string) => void;
 }
 
 export interface UseMessageModerationResult<T extends RemovableMessage> {
@@ -22,11 +24,17 @@ export interface UseMessageModerationResult<T extends RemovableMessage> {
  * Admin delete flow for a live chat: ask for confirmation, remove the message
  * optimistically (everyone else gets it through the Realtime DELETE event),
  * and roll back with a toast if the server refuses.
+ *
+ * `deleteLiveMessage` resolves with "already-deleted" when somebody else got
+ * there first (another admin, a double click). That is a success for the
+ * admin's intent — the message is gone — so there is NO rollback (restoring
+ * it would resurrect a ghost) and the same success toast is shown.
  */
 export function useMessageModeration<T extends RemovableMessage>({
   messages,
   setMessages,
   onRemoved,
+  onRestored,
 }: UseMessageModerationParams<T>): UseMessageModerationResult<T> {
   const [pending, setPending] = useState<T | null>(null);
 
@@ -43,6 +51,7 @@ export function useMessageModeration<T extends RemovableMessage>({
       toast.success("Mensaje eliminado");
     } catch (err) {
       console.error("[useMessageModeration] error al eliminar el mensaje:", err);
+      onRestored?.(target.id);
       setMessages((prev) => restoreMessage(prev, snapshot, target.id));
       toast.error("No se pudo eliminar el mensaje");
     }

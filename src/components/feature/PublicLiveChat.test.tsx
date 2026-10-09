@@ -173,4 +173,46 @@ describe("PublicLiveChat — moderación (2026-10-09)", () => {
     expect(screen.getByText("mensaje m3")).toBeInTheDocument();
     expect(screen.getByText("Mensaje eliminado")).toBeInTheDocument();
   });
+
+  it("una respuesta vieja que llega después de una más nueva no borra mensajes recién agregados", async () => {
+    const realSetInterval = window.setInterval.bind(window);
+    let poll: () => void = () => {};
+    vi.spyOn(window, "setInterval").mockImplementation(((handler: () => void, delay?: number) => {
+      if (delay === 4000) {
+        poll = handler;
+        return 0;
+      }
+      return realSetInterval(handler, delay);
+    }) as typeof window.setInterval);
+    (fetchPublicLiveReactions as ReturnType<typeof vi.fn>).mockResolvedValue(new Map());
+    (getPublicLiveMessages as ReturnType<typeof vi.fn>).mockReset();
+
+    type Msg = ReturnType<typeof publicMessage>;
+    let resolveSlow: (value: Msg[]) => void = () => {};
+    (getPublicLiveMessages as ReturnType<typeof vi.fn>)
+      // Primera petición (la inicial): lenta, se resuelve al final.
+      .mockImplementationOnce(() => new Promise<Msg[]>((resolve) => { resolveSlow = resolve; }))
+      // Segunda (el sondeo): rápida, ya trae m3.
+      .mockResolvedValueOnce([publicMessage("m1", 1), publicMessage("m2", 2), publicMessage("m3", 3)]);
+
+    render(
+      <MemoryRouter>
+        <PublicLiveChat token="token-1" loginPath="/login" showWelcome={false} />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(getPublicLiveMessages).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      poll();
+    });
+    await screen.findByText("mensaje m3");
+
+    // Llega la respuesta lenta y vieja (sin m3): no debe purgar m3.
+    await act(async () => {
+      resolveSlow([publicMessage("m1", 1), publicMessage("m2", 2)]);
+    });
+
+    expect(screen.getByText("mensaje m3")).toBeInTheDocument();
+    expect(screen.getByText("mensaje m1")).toBeInTheDocument();
+  });
 });

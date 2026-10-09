@@ -35,8 +35,14 @@ const SYSTEM_MESSAGE: PublicChatMessage = {
 };
 
 const POLL_INTERVAL_MS = 4000;
+// Tope que el servidor aplica a `p_limit` en get_public_live_messages
+// (`LEAST(GREATEST(p_limit, 1), 200)`, ver sql/migrate-live-message-replies.sql).
+// Si la ventana pedida lo superara, el servidor devolvería menos de lo pedido,
+// `reconcileWindowedMessages` creería que recibió TODO el historial y purgaría
+// mensajes legítimos más viejos. Por eso la ventana nunca puede exceder este tope.
+const SERVER_MAX_LIMIT = 200;
 // Misma ventana para mensajes y reacciones — el default de getPublicLiveMessages.
-const MESSAGE_WINDOW = 100;
+const MESSAGE_WINDOW = Math.min(100, SERVER_MAX_LIMIT);
 
 /**
  * Chat de solo lectura para el link público de un live. A diferencia de
@@ -69,11 +75,23 @@ const PublicLiveChat = ({ token, loginPath, showWelcome = true }: PublicLiveChat
 
   useEffect(() => {
     let isActive = true;
+    // Los sondeos no esperan al anterior: una respuesta lenta puede llegar
+    // DESPUÉS de una más nueva. Aplicarla haría que reconcileWindowedMessages
+    // borrara los mensajes recién agregados (parpadeo). Cada petición toma un
+    // número creciente y se descarta la que sea más vieja que la última ya
+    // aplicada (se eligió descartar y no saltar el tick: no retrasa las
+    // actualizaciones cuando una petición se cuelga).
+    let messagesRequestSeq = 0;
+    let lastAppliedMessagesSeq = 0;
+    let reactionsRequestSeq = 0;
+    let lastAppliedReactionsSeq = 0;
 
     const fetchMessages = async () => {
+      const seq = ++messagesRequestSeq;
       try {
         const fetched = await getPublicLiveMessages(token, MESSAGE_WINDOW);
-        if (!isActive) return;
+        if (!isActive || seq < lastAppliedMessagesSeq) return;
+        lastAppliedMessagesSeq = seq;
         // El servidor es la fuente de verdad de su ventana: un mensaje que el
         // admin eliminó deja de venir y tiene que salir de la pantalla también.
         setMessages((prev) => reconcileWindowedMessages(prev, fetched, MESSAGE_WINDOW, [SYSTEM_MESSAGE.id]));
@@ -87,9 +105,11 @@ const PublicLiveChat = ({ token, loginPath, showWelcome = true }: PublicLiveChat
     // Mismo cadence/efecto que los mensajes: solo lectura, sin Realtime (anon
     // no tiene sesión para suscribirse).
     const fetchReactions = async () => {
+      const seq = ++reactionsRequestSeq;
       try {
         const fetched = await fetchPublicLiveReactions(token, MESSAGE_WINDOW);
-        if (!isActive) return;
+        if (!isActive || seq < lastAppliedReactionsSeq) return;
+        lastAppliedReactionsSeq = seq;
         setReactions(fetched);
       } catch (err) {
         console.error("[PublicLiveChat] error fetching reactions:", err);

@@ -360,6 +360,35 @@ describe('LiveHLSPlayer recovery', () => {
     expect(onFatalError).not.toHaveBeenCalled();
   });
 
+  it('los errores de media espaciados por reproducción estable siempre se recuperan (el contador se resetea)', () => {
+    const onError = vi.fn();
+    const { container } = renderPlayer({ onError });
+    const video = driveVideo(container, { paused: false, currentTime: 100 });
+    const fatalMediaError = () =>
+      act(() => { handlers.error('error', { fatal: true, type: 'mediaError', details: 'bufferStalledError' }); });
+
+    // 4 errores fatales de media, cada uno seguido de 16 s de reproducción estable.
+    // Sin el reset, el tercero superaría el límite de 2 reintentos.
+    for (let i = 1; i <= 4; i++) {
+      fatalMediaError();
+      expect(hlsInstance.recoverMediaError).toHaveBeenCalledTimes(i);
+      act(() => { video.dispatchEvent(new Event('playing')); });
+      act(() => { vi.advanceTimersByTime(16_000); });
+    }
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('errores de media seguidos sin reproducción estable entre medio sí agotan los reintentos', () => {
+    const onError = vi.fn();
+    renderPlayer({ onError });
+
+    for (let i = 0; i < 3; i++) {
+      act(() => { handlers.error('error', { fatal: true, type: 'mediaError', details: 'bufferStalledError' }); });
+    }
+    expect(hlsInstance.recoverMediaError).toHaveBeenCalledTimes(2);
+    expect(onError).toHaveBeenCalledTimes(1);
+  });
+
   // El caso que hls.js NO reporta: quiere reproducir pero currentTime no avanza.
   it('recarga el manifest si el video no avanza durante 12 s', () => {
     const { container } = renderPlayer();

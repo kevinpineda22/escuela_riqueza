@@ -517,11 +517,15 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           }, delay);
         };
 
-        // Solo reseteamos el contador de reintentos tras reproducción ESTABLE
-        // sostenida (15s sin 'waiting'/'stalled'/error desde el último
-        // 'playing') — resetear en cada 'playing' individual permitía que una
-        // conexión intermitente (play/stall/play/stall...) nunca escalara el
-        // backoff ni disparara onFatalError.
+        // Solo reseteamos los contadores de reintentos (recargas y errores de
+        // media) tras reproducción ESTABLE sostenida (15s sin
+        // 'waiting'/'stalled'/error desde el último 'playing') — resetear en
+        // cada 'playing' individual permitía que una conexión intermitente
+        // (play/stall/play/stall...) nunca escalara el backoff ni disparara
+        // onFatalError. `mediaErrorRetries` se resetea aquí también: sin esto,
+        // tres errores de media espaciados por horas de reproducción sana
+        // agotaban el límite y desde el tercero ya no se llamaba a
+        // `recoverMediaError()` (solo quedaba el watchdog de estancamiento).
         const STABLE_PLAYBACK_MS = 15000;
         let stableTimeoutId: number | null = null;
         clearStableTimer = () => {
@@ -535,6 +539,7 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           stableTimeoutId = window.setTimeout(() => {
             stableTimeoutId = null;
             reloadAttempts = 0;
+            mediaErrorRetries = 0;
           }, STABLE_PLAYBACK_MS);
         };
         video.addEventListener("playing", handlePlaybackRecovered);

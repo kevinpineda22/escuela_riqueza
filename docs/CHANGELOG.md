@@ -20,6 +20,12 @@
 - **Espectadores**: contador «N viendo» con la lista de registrados y «+K invitados». `useLivePresence` acepta `observeOnly`, así el admin escucha la presencia sin contarse.
 - **Modo de latencia de la vista previa**: el admin puede elegir Fluidez, Baja latencia o Clase completa para ver lo mismo que un alumno con ese modo. Es un estado local del panel: no altera la preferencia del alumno ni guarda posición de reproducción.
 
+### Lives — borrados del chat más robustos (hallazgos de la revisión previa al push)
+- **LiveChat**: los mensajes eliminados ya no reaparecen. Sus ids se guardan como eliminados (`useLiveMessageDeletions`, `excludeDeleted`) y se filtran en un INSERT que llega tarde, en la carga del historial y en la resincronización. Al reconectar Realtime se vuelven a pedir los últimos 200 mensajes y se concilian con `reconcileWindowedMessages`: se quita lo borrado durante la caída y se suma lo que se perdió.
+- **Moderación**: `deleteLiveMessage` distingue «ya estaba eliminado» (otro admin o doble clic: éxito, sin restaurar) de un rechazo real (`MessageDeleteRefusedError`: se revierte y se avisa).
+- **PublicLiveChat**: se descarta una respuesta de sondeo más vieja que la última aplicada, así no desaparecen mensajes recién llegados. La ventana de mensajes queda acotada al tope de 200 de la RPC.
+- **LiveHLSPlayer**: el contador de errores de media también se reinicia tras 15 s de reproducción estable (antes, desde el tercer error espaciado ya no se intentaba `recoverMediaError()`).
+
 ## 2026-10-03
 
 ### Lives — "Error de reproducción" encima de un vivo que seguía sonando

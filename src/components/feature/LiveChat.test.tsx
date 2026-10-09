@@ -972,3 +972,199 @@ describe("LiveChat — moderación y borrado en tiempo real (2026-10-09)", () =>
     });
   });
 });
+
+describe("LiveChat — borrados concurrentes y reconexión (2026-10-09)", () => {
+  interface Row {
+    id: string;
+    content: string;
+    created_at: string;
+    user_id: string;
+    reply_to_id: string | null;
+    reply_to_user_id: string | null;
+    reply_to_user_name: string | null;
+    reply_to_excerpt: string | null;
+  }
+
+  const row = (id: string, user_id: string, content: string, minute: number): Row => ({
+    id,
+    user_id,
+    content,
+    created_at: `2026-10-09T10:0${minute}:00Z`,
+    reply_to_id: null,
+    reply_to_user_id: null,
+    reply_to_user_name: null,
+    reply_to_excerpt: null,
+  });
+
+  type HistoryResult = { data: Row[] | null; error: unknown };
+  // Una entrada por cada consulta de historial/resync, en orden de llamada.
+  let historyCalls: Array<() => Promise<HistoryResult>> = [];
+  let historyQueries = 0;
+  let resolveProfile: (value: { data: { full_name: string } }) => void = () => {};
+
+  const insertHandler = () => messagesChannel.on.mock.calls[0][2] as (payload: { new: Row }) => Promise<void>;
+  const deleteHandler = () => messagesChannel.on.mock.calls[1][2] as (payload: { old: { id?: string } }) => void;
+  const statusCallback = () => messagesChannel.subscribe.mock.calls[0][0] as (status: string) => void;
+  const immediate = (rows: Row[]) => () => Promise.resolve({ data: [...rows].reverse(), error: null });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupChannelChaining();
+    historyCalls = [];
+    historyQueries = 0;
+    (supabase.auth.getSession as ReturnType<typeof vi.fn>).mockResolvedValue({ data: { session: null } });
+    from.mockImplementation((table: string) => {
+      if (table === "profiles") {
+        return {
+          select: () => ({
+            in: () =>
+              Promise.resolve({
+                data: [
+                  { id: "beto", full_name: "Beto" },
+                  { id: "ana", full_name: "Ana" },
+                ],
+              }),
+            // Autor desconocido: el nombre se resuelve cuando el test lo decide.
+            eq: () => ({ maybeSingle: () => new Promise((resolve) => { resolveProfile = resolve; }) }),
+          }),
+        };
+      }
+      if (table === "live_message_reactions") {
+        return { select: () => ({ eq: () => ({ in: () => Promise.resolve({ data: [], error: null }) }) }) };
+      }
+      return {
+        select: () => ({
+          eq: () => ({
+            order: () => ({
+              limit: () => {
+                historyQueries += 1;
+                const next = historyCalls.shift();
+                return next ? next() : Promise.resolve({ data: [], error: null });
+              },
+            }),
+          }),
+        }),
+        insert,
+      };
+    });
+    useAuthStore.setState({ user: student, token: "t" });
+  });
+
+  it("un INSERT cuyo nombre resuelve DESPUÉS de su DELETE no aparece", async () => {
+    historyCalls = [immediate([row("m1", "beto", "Hola", 1)])];
+    render(<LiveChat liveId="live-1" showWelcome={false} />);
+    await screen.findByText("Hola");
+    await waitFor(() => expect(messagesChannel.on).toHaveBeenCalledTimes(2));
+
+    // Autor desconocido ("carlos"): el INSERT queda esperando su nombre.
+    let insertDone: Promise<void> = Promise.resolve();
+    act(() => {
+      insertDone = insertHandler()({ new: row("m2", "carlos", "mensaje borrado", 2) });
+    });
+    // El DELETE gana la carrera: m2 todavía no está en la lista.
+    act(() => deleteHandler()({ old: { id: "m2" } }));
+    await act(async () => {
+      resolveProfile({ data: { full_name: "Carlos" } });
+      await insertDone;
+    });
+
+    expect(screen.queryByText("mensaje borrado")).not.toBeInTheDocument();
+    expect(screen.getByText("Hola")).toBeInTheDocument();
+  });
+
+  it("un historial que resuelve después de un DELETE no resucita el mensaje", async () => {
+    let resolveHistory: (value: HistoryResult) => void = () => {};
+    historyCalls = [() => new Promise<HistoryResult>((resolve) => { resolveHistory = resolve; })];
+    render(<LiveChat liveId="live-1" showWelcome={false} />);
+    await waitFor(() => expect(messagesChannel.on).toHaveBeenCalledTimes(2));
+
+    // La consulta ya salió; el admin borra m2 mientras tanto.
+    act(() => deleteHandler()({ old: { id: "m2" } }));
+    await act(async () => {
+      resolveHistory({ data: [row("m2", "ana", "mensaje borrado", 2), row("m1", "beto", "Hola", 1)], error: null });
+    });
+
+    expect(await screen.findByText("Hola")).toBeInTheDocument();
+    expect(screen.queryByText("mensaje borrado")).not.toBeInTheDocument();
+  });
+
+  it("la primera suscripción (SUBSCRIBED) NO vuelve a pedir los mensajes", async () => {
+    historyCalls = [immediate([row("m1", "beto", "Hola", 1)])];
+    render(<LiveChat liveId="live-1" showWelcome={false} />);
+    await screen.findByText("Hola");
+    await waitFor(() => expect(messagesChannel.subscribe).toHaveBeenCalled());
+
+    act(() => statusCallback()("SUBSCRIBED"));
+    await act(async () => {});
+
+    expect(historyQueries).toBe(1);
+  });
+
+  it("tras reconectar vuelve a pedir los mensajes: quita lo borrado durante la caída y suma lo perdido", async () => {
+    historyCalls = [
+      immediate([row("m1", "beto", "Hola", 1), row("m2", "ana", "se borra en la caída", 2)]),
+      // Resync: m2 ya no existe y apareció m3 mientras estaba caído.
+      immediate([row("m1", "beto", "Hola", 1), row("m3", "ana", "llegó en la caída", 3)]),
+    ];
+    render(<LiveChat liveId="live-1" showWelcome={false} />);
+    await screen.findByText("se borra en la caída");
+    await waitFor(() => expect(messagesChannel.subscribe).toHaveBeenCalled());
+
+    act(() => statusCallback()("SUBSCRIBED"));
+    act(() => statusCallback()("CHANNEL_ERROR"));
+    expect(screen.getByRole("status")).toHaveTextContent("Reconectando…");
+    act(() => statusCallback()("SUBSCRIBED"));
+
+    expect(await screen.findByText("llegó en la caída")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("se borra en la caída")).not.toBeInTheDocument());
+    expect(screen.getByText("Hola")).toBeInTheDocument();
+    expect(historyQueries).toBe(2);
+  });
+
+  it("un mensaje que llega por Realtime mientras corre el resync no se pierde", async () => {
+    let resolveResync: (value: HistoryResult) => void = () => {};
+    historyCalls = [
+      immediate([row("m1", "beto", "Hola", 1)]),
+      () => new Promise<HistoryResult>((resolve) => { resolveResync = resolve; }),
+    ];
+    render(<LiveChat liveId="live-1" showWelcome={false} />);
+    await screen.findByText("Hola");
+    await waitFor(() => expect(messagesChannel.on).toHaveBeenCalledTimes(2));
+
+    act(() => statusCallback()("SUBSCRIBED"));
+    act(() => statusCallback()("SUBSCRIBED"));
+    await waitFor(() => expect(historyQueries).toBe(2));
+    // Llega m2 por Realtime con el resync en vuelo; la consulta salió antes y no lo trae.
+    await act(async () => {
+      await insertHandler()({ new: row("m2", "ana", "llegó en pleno resync", 2) });
+    });
+    await act(async () => {
+      resolveResync({ data: [row("m1", "beto", "Hola", 1)], error: null });
+    });
+
+    expect(screen.getByText("llegó en pleno resync")).toBeInTheDocument();
+  });
+
+  it("un DELETE que llega con el resync en vuelo tampoco resucita", async () => {
+    let resolveResync: (value: HistoryResult) => void = () => {};
+    historyCalls = [
+      immediate([row("m1", "beto", "Hola", 1), row("m2", "ana", "se borra", 2)]),
+      () => new Promise<HistoryResult>((resolve) => { resolveResync = resolve; }),
+    ];
+    render(<LiveChat liveId="live-1" showWelcome={false} />);
+    await screen.findByText("se borra");
+    await waitFor(() => expect(messagesChannel.on).toHaveBeenCalledTimes(2));
+
+    act(() => statusCallback()("SUBSCRIBED"));
+    act(() => statusCallback()("SUBSCRIBED"));
+    await waitFor(() => expect(historyQueries).toBe(2));
+    act(() => deleteHandler()({ old: { id: "m2" } }));
+    // La consulta del resync arrancó antes del borrado y todavía trae m2.
+    await act(async () => {
+      resolveResync({ data: [row("m1", "beto", "Hola", 1), row("m2", "ana", "se borra", 2)], error: null });
+    });
+
+    expect(screen.queryByText("se borra")).not.toBeInTheDocument();
+    expect(screen.getByText("Hola")).toBeInTheDocument();
+  });
+});
