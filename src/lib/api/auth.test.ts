@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { signIn } from './auth';
+import { signIn, getCurrentUser, PROFILE_COLUMNS } from './auth';
 import { supabase } from '@/lib/supabase';
 import { ApiError } from './client';
 
 vi.mock('@/lib/supabase', () => ({
   supabase: {
-    auth: { signInWithPassword: vi.fn(), signOut: vi.fn() },
+    auth: { signInWithPassword: vi.fn(), signOut: vi.fn(), getSession: vi.fn() },
     from: vi.fn(),
   },
 }));
@@ -26,8 +26,25 @@ function chain(result: unknown) {
     order: () => thenable,
     limit: () => thenable,
     single: () => (result instanceof Error ? Promise.reject(result) : Promise.resolve(result)),
+    maybeSingle: () => Promise.resolve(result),
   };
   return thenable;
+}
+
+/** Como chain(), pero registra las columnas pedidas a profiles. */
+function profilesSelectSpy(profileRow: unknown) {
+  const selected: string[] = [];
+  (supabase.from as any).mockImplementation((table: string) => {
+    const base = chain(table === 'profiles' ? { data: profileRow, error: null } : { data: null, error: null });
+    return {
+      ...base,
+      select: (columns: string) => {
+        if (table === 'profiles') selected.push(columns);
+        return base;
+      },
+    };
+  });
+  return selected;
 }
 
 describe('signIn resilience', () => {
@@ -79,11 +96,35 @@ describe('signIn resilience', () => {
     expect(result.user.plan).toBe('free');
   });
 
+  it('pide columnas explícitas de profiles (sin email ni *) y toma el email de Auth', async () => {
+    const selected = profilesSelectSpy({ id: 'user-1', role: 'student', full_name: 'Alumno', plan: 'free' });
+
+    const result = await signIn({ email: 'alumno@escuela.com', password: 'x' } as any);
+
+    expect(selected).toEqual([PROFILE_COLUMNS]);
+    expect(PROFILE_COLUMNS).not.toMatch(/\*|email/);
+    expect(result.user.email).toBe('alumno@escuela.com');
+  });
+
   it('sigue rechazando credenciales inválidas con un ApiError', async () => {
     (supabase.auth.signInWithPassword as any).mockResolvedValue({
       data: {}, error: { message: 'Invalid login credentials' },
     });
 
     await expect(signIn({ email: 'a@b.com', password: 'x' } as any)).rejects.toBeInstanceOf(ApiError);
+  });
+});
+
+describe('getCurrentUser', () => {
+  it('pide columnas explícitas de profiles y toma el email de la sesión', async () => {
+    (supabase.auth.getSession as any).mockResolvedValue({
+      data: { session: { user: authSuccess.data.user } },
+    });
+    const selected = profilesSelectSpy({ id: 'user-1', role: 'student', full_name: 'Alumno', plan: 'free' });
+
+    const user = await getCurrentUser();
+
+    expect(selected).toEqual([PROFILE_COLUMNS]);
+    expect(user?.email).toBe('alumno@escuela.com');
   });
 });

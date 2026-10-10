@@ -22,15 +22,22 @@ export interface SubscriptionInfo {
   updated_at: string;
 }
 
-export async function fetchAdminUsers(): Promise<AdminUser[]> {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("*")
-    .order("created_at", { ascending: false });
+// Fila que devuelven los RPC admin_list_users / admin_get_user. El email solo
+// llega por estos RPC (SECURITY DEFINER, exigen rol admin): la tabla profiles
+// ya no permite leerlo desde el cliente.
+interface AdminProfileRow {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  role: UserRole | null;
+  plan: Plan | null;
+  is_suspended: boolean | null;
+  created_at: string;
+  updated_at: string | null;
+}
 
-  if (error) throw error;
-
-  return (data || []).map(p => ({
+function mapAdminProfile(p: AdminProfileRow): AdminUser {
+  return {
     id: p.id,
     full_name: p.full_name || "Usuario sin nombre",
     email: p.email || undefined,
@@ -39,7 +46,15 @@ export async function fetchAdminUsers(): Promise<AdminUser[]> {
     status: p.is_suspended ? "suspended" : "active",
     created_at: p.created_at,
     updated_at: p.updated_at || p.created_at,
-  }));
+  };
+}
+
+export async function fetchAdminUsers(): Promise<AdminUser[]> {
+  const { data, error } = await supabase.rpc("admin_list_users");
+
+  if (error) throw error;
+
+  return ((data as AdminProfileRow[] | null) || []).map(mapAdminProfile);
 }
 
 export async function fetchUserSubscription(userId: string): Promise<SubscriptionInfo | null> {
@@ -68,24 +83,16 @@ export async function updateUserStatus(userId: string, isSuspended: boolean): Pr
   }
 
   // Refetch del usuario para devolver los datos actualizados
-  const { data, error: fetchError } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", userId)
-    .single();
+  const { data, error: fetchError } = await supabase.rpc("admin_get_user", {
+    target_user_id: userId,
+  });
 
   if (fetchError) throw fetchError;
 
-  return {
-    id: data.id,
-    full_name: data.full_name || "Usuario sin nombre",
-    email: data.email || undefined,
-    role: data.role || "student",
-    plan: data.plan || "free",
-    status: isSuspended ? "suspended" : "active",
-    created_at: data.created_at,
-    updated_at: data.updated_at,
-  };
+  const row = ((data as AdminProfileRow[] | null) || [])[0];
+  if (!row) throw new Error("Usuario no encontrado");
+
+  return { ...mapAdminProfile(row), status: isSuspended ? "suspended" : "active" };
 }
 
 export async function updateUserPlan(userId: string, plan: Plan): Promise<void> {

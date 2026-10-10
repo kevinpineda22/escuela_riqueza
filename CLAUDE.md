@@ -287,6 +287,10 @@ for select using (
 
 > **Si una tabla nueva no tiene RLS habilitada, NO se mergea.**
 
+**`profiles` — reglas especiales:**
+- **Permisos SELECT por columna** (`sql/migrate-profiles-hide-email.sql`): `email` NO es legible por `anon`/`authenticated`. Nunca usar `select("*")` sobre `profiles` desde el cliente; usar columnas explícitas (`PROFILE_COLUMNS` en `src/lib/api/auth.ts`). El email propio sale de la sesión de Supabase Auth; el admin lo obtiene con las RPC `admin_list_users` / `admin_get_user`. **Toda columna nueva de `profiles` es invisible para la app hasta agregarla al GRANT** de ese archivo (o de una migración posterior).
+- **Columnas privilegiadas protegidas** (`sql/migrate-profiles-protect-privileged-columns.sql`): un trigger rechaza cambios de `role`, `plan`, `is_suspended` y `email` hechos directo desde el cliente. Cambiarlos requiere una RPC `SECURITY DEFINER` con chequeo de admin (patrón `sql/sync_admin_plan.sql`).
+
 ---
 
 ## 8. Reglas de seguridad
