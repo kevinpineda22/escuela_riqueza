@@ -9,6 +9,11 @@ export interface AuthResult {
   token: string;
 }
 
+// Columnas de profiles legibles desde el cliente. `email` queda fuera a propósito
+// (sin permiso de columna, ver sql/migrate-profiles-hide-email.sql): el email del
+// usuario sale de la sesión de Supabase Auth. Nunca usar select("*") sobre profiles.
+export const PROFILE_COLUMNS = "id, full_name, avatar_url, role, created_at, is_suspended, plan";
+
 // Convertidor de base de datos a tipo User del frontend
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mapProfileToUser = (profileData: any, authUser: any, plan: string): User => ({
@@ -51,7 +56,7 @@ export async function signIn(input: LoginInput): Promise<AuthResult> {
   try {
     const { data, error } = await supabase
       .from("profiles")
-      .select("*")
+      .select(PROFILE_COLUMNS)
       .eq("id", authData.user.id)
       .single();
     if (error) console.error("Error fetching profile:", error);
@@ -176,7 +181,7 @@ export async function getCurrentUser(): Promise<User | null> {
 
   const { data: profileData, error: profileError } = await supabase
     .from("profiles")
-    .select("*")
+    .select(PROFILE_COLUMNS)
     .eq("id", session.user.id)
     .maybeSingle(); // Changed from .single() to maybeSingle() to avoid throw if not found
 

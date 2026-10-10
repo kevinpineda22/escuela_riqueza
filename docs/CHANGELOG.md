@@ -10,7 +10,15 @@
 ### Seguridad — cualquier usuario podía hacerse admin
 - **Hallazgo (verificado en Supabase)**: la policy «Users can update own profile» de `profiles` es `USING (auth.uid() = id)` sin restricción de columnas, y la tabla no tenía triggers. Cualquier usuario logueado podía hacer desde la consola `update({ role: "admin" })` sobre su propio perfil y quedar como admin (todas las policies de admin confían en `profiles.role`), regalarse `plan = 'vip'` o quitarse una suspensión.
 - **Fix**: `sql/migrate-profiles-protect-privileged-columns.sql`. Trigger `BEFORE INSERT OR UPDATE` que, cuando la escritura viene directo del cliente (`current_user` = `authenticated`/`anon`), rechaza cambios en `role`, `plan`, `is_suspended` y `email`, y fuerza valores por defecto en un INSERT. Las RPC del admin y los triggers de registro y de email son `SECURITY DEFINER` (verificado: `admin_toggle_suspend`, `admin_delete_user`, `admin_update_user_plan`, `handle_new_user`, `handle_user_update`), así que siguen funcionando. El alumno sigue pudiendo editar `full_name` y `avatar_url`.
-- **Pendiente**: la policy SELECT «Profiles are viewable by everyone» (`true`, aplicada a `public`) deja leer email, plan y rol de todos los usuarios sin iniciar sesión.
+- **Verificado en Supabase**: simulando un alumno, `update profiles set role = 'admin'` falla con `42501`. Suspender, cambiar plan y editar nombre/foto siguen funcionando.
+
+### Seguridad — el email de todos los usuarios era legible sin iniciar sesión
+- **Hallazgo**: la policy SELECT «Profiles are viewable by everyone» (`true`, aplicada a `public`) dejaba a cualquiera con la anon key leer el email de todos los usuarios.
+- **Fix por columna, no por fila**: restringir filas rompía los nombres del chat, los autores de la comunidad (que muestran `role`/`plan` como badge a propósito) y la policy de admin sobre `profiles` (recursión). Solo `email` deja de ser legible para `anon`/`authenticated`.
+  - `sql/migrate-profiles-admin-user-rpcs.sql`: `admin_list_users()` y `admin_get_user(uuid)`, `SECURITY DEFINER`, solo admin, devuelven el email.
+  - `sql/migrate-profiles-hide-email.sql`: revoca el SELECT de la tabla y lo concede solo en las columnas sin email.
+  - Frontend: `auth.ts` usa `PROFILE_COLUMNS` explícitas (el email propio sale de la sesión de Supabase Auth) y `admin/users.ts` lee por las RPC.
+- **⚠️ Orden de despliegue obligatorio**: SQL fase 1 → deploy del frontend → SQL fase 2. La fase 2 antes del deploy rompe el login con el frontend viejo (`select("*")` → «permission denied for column email»).
 
 ### Lives — vista previa y moderación del chat para el admin
 - **⚠️ Correr `sql/migrate-live-messages-admin-delete.sql` en Supabase ANTES (o junto con) el deploy del frontend.** Es re-ejecutable. Agrega la policy `DELETE` de `live_messages` solo para admins (antes no existía: nadie podía borrar mensajes) y verifica que la tabla esté en la publicación `supabase_realtime`. Las reacciones caen por `ON DELETE CASCADE` y las respuestas quedan como «Mensaje eliminado» por el `ON DELETE SET NULL` + trigger existente.
