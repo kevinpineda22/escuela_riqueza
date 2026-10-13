@@ -5,6 +5,7 @@ import { AlertTriangle, Flame, Loader2, Lock, MessageSquare, Pin, Plus, RotateCw
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
+import { scrollToElement, scrollToY } from "@/lib/smoothScroll";
 import {
   deletePost,
   fetchPosts,
@@ -39,6 +40,10 @@ export function CommunityFeed({ currentUserId, isAdmin, canWrite }: CommunityFee
   const [category, setCategory] = useState<CommunityCategory | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+  // Dónde arranca el detalle: arriba de la publicación o en sus comentarios.
+  const [openSection, setOpenSection] = useState<"top" | "comments">("top");
+  // Contenedor común de feed y detalle: destino del scroll al abrir.
+  const rootRef = useRef<HTMLDivElement>(null);
   const [pendingDelete, setPendingDelete] = useState<CommunityPost | null>(null);
   // Solo la respuesta del pedido más reciente se aplica: con filtros rápidos,
   // una respuesta vieja llegaba tarde y pisaba la vista nueva.
@@ -70,16 +75,27 @@ export function CommunityFeed({ currentUserId, isAdmin, canWrite }: CommunityFee
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sort, category]);
 
-  // Volver del detalle restaura la posición de lectura (la lista se desmonta
-  // mientras se ve una publicación).
+  // Al abrir, el detalle reemplaza al feed pero el scroll quedaba donde
+  // estaba la tarjeta: con una publicación corta se caía al footer. Abrir
+  // desliza al inicio de la publicación (los comentarios los ubica el detalle
+  // cuando terminan de cargar). Volver restaura la posición de lectura de golpe:
+  // es el mismo lugar donde se estaba, no un viaje.
   useLayoutEffect(() => {
-    if (selectedPostId !== null || savedScrollRef.current === null) return;
-    window.scrollTo({ top: savedScrollRef.current });
+    if (selectedPostId !== null) {
+      // Con "comments" el corte al inicio es instantáneo (como cambiar de
+      // pantalla) y el único deslizamiento es hasta los comentarios cuando
+      // cargan; deslizar arriba y después abajo se veía como un yo-yo.
+      if (rootRef.current) scrollToElement(rootRef.current, { immediate: openSection === "comments" });
+      return;
+    }
+    if (savedScrollRef.current === null) return;
+    scrollToY(savedScrollRef.current, { immediate: true });
     savedScrollRef.current = null;
-  }, [selectedPostId]);
+  }, [selectedPostId, openSection]);
 
-  const openPost = (id: string) => {
+  const openPost = (id: string, section: "top" | "comments" = "top") => {
     savedScrollRef.current = window.scrollY;
+    setOpenSection(section);
     setSelectedPostId(id);
   };
 
@@ -155,8 +171,10 @@ export function CommunityFeed({ currentUserId, isAdmin, canWrite }: CommunityFee
 
   if (selectedPostId) {
     return (
+      <div ref={rootRef}>
       <PostDetail
         postId={selectedPostId}
+        initialSection={openSection}
         currentUserId={currentUserId}
         isAdmin={isAdmin}
         canWrite={canWrite}
@@ -169,11 +187,12 @@ export function CommunityFeed({ currentUserId, isAdmin, canWrite }: CommunityFee
           load({ silent: true });
         }}
       />
+      </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div ref={rootRef} className="space-y-6">
       {!canWrite && (
         <motion.div
           initial={{ opacity: 0, y: -8 }}
@@ -403,6 +422,7 @@ export function CommunityFeed({ currentUserId, isAdmin, canWrite }: CommunityFee
                       isAdmin={isAdmin}
                       canWrite={canWrite}
                       onOpen={() => openPost(post.id)}
+                      onOpenComments={() => openPost(post.id, "comments")}
                       onDelete={() => setPendingDelete(post)}
                       onPinChanged={(updated) =>
                         setPosts((prev) => prev.map((p) => (p.id === updated.id ? { ...p, is_pinned: updated.is_pinned } : p)))
@@ -430,6 +450,7 @@ export function CommunityFeed({ currentUserId, isAdmin, canWrite }: CommunityFee
                       isAdmin={isAdmin}
                       canWrite={canWrite}
                       onOpen={() => openPost(post.id)}
+                      onOpenComments={() => openPost(post.id, "comments")}
                       onDelete={() => setPendingDelete(post)}
                       onPinChanged={(updated) =>
                         setPosts((prev) => prev.map((p) => (p.id === updated.id ? { ...p, is_pinned: updated.is_pinned } : p)))

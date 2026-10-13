@@ -5,6 +5,7 @@ import { AlertTriangle, ArrowLeft, Loader2, Lock, MessageSquare, Pin, PinOff, Ro
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
+import { scrollToElement } from "@/lib/smoothScroll";
 import {
   createComment,
   deleteComment,
@@ -27,9 +28,11 @@ interface PostDetailProps {
   canWrite: boolean;
   onBack: () => void;
   onDeleted: () => void;
+  /** "comments": al terminar de cargar, desliza hasta los comentarios. */
+  initialSection?: "top" | "comments";
 }
 
-export function PostDetail({ postId, currentUserId, isAdmin, canWrite, onBack, onDeleted }: PostDetailProps) {
+export function PostDetail({ postId, currentUserId, isAdmin, canWrite, onBack, onDeleted, initialSection = "top" }: PostDetailProps) {
   const navigate = useNavigate();
   const [post, setPost] = useState<CommunityPost | null>(null);
   const [comments, setComments] = useState<CommunityComment[]>([]);
@@ -43,6 +46,9 @@ export function PostDetail({ postId, currentUserId, isAdmin, canWrite, onBack, o
   const [confirmingPostDelete, setConfirmingPostDelete] = useState(false);
   const [pendingCommentDelete, setPendingCommentDelete] = useState<string | null>(null);
   const replyInputRef = useRef<HTMLTextAreaElement>(null);
+  const commentsRef = useRef<HTMLElement>(null);
+  // Una sola vez por publicación: un refresco posterior no vuelve a mover la página.
+  const scrolledForPostRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -127,6 +133,15 @@ export function PostDetail({ postId, currentUserId, isAdmin, canWrite, onBack, o
       supabase.removeChannel(channel);
     };
   }, [postId]);
+
+  // Abierta desde "comentarios": recién con el contenido cargado existe el
+  // destino; antes la página quedaba donde estaba la tarjeta (a veces el footer).
+  useEffect(() => {
+    if (status !== "ready" || initialSection !== "comments") return;
+    if (scrolledForPostRef.current === postId || !commentsRef.current) return;
+    scrolledForPostRef.current = postId;
+    scrollToElement(commentsRef.current);
+  }, [status, initialSection, postId]);
 
   const tree = useMemo(() => {
     const roots: CommunityComment[] = [];
@@ -390,7 +405,7 @@ export function PostDetail({ postId, currentUserId, isAdmin, canWrite, onBack, o
       </motion.article>
 
       {/* Comments */}
-      <section>
+      <section ref={commentsRef} aria-label="Comentarios">
         <h3 className="mb-4 flex items-center gap-2 text-lg font-bold text-foreground-strong">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand/15 text-accent ring-1 ring-focus/30">
             <MessageSquare size={14} />
