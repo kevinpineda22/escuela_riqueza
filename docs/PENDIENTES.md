@@ -73,7 +73,7 @@ _Última actualización: 2026-10-13 (propuesta documental de Clase completa, com
 - ✅ Worker deployado + env `ARCHIVE_WORKER_URL`/`ARCHIVE_SHARED_SECRET` en Vercel. Archivado manual verificado end-to-end (copia a R2 + borrado de Stream + replay firmado).
 - ✅ **Archivado automático**: Cron Trigger cada 10 min (`worker/src/index.ts` → `scheduled()`). Ya no hace falta el botón manual.
 - ✅ **Robustez**: descarta grabaciones muertas (Stream `error` o 0% > 12h) para no reintentar ni tapar el cron (`limit=3`).
-- ✅ **Anti-fragmentación**: `timeoutSeconds=60` en el Live Input (`scripts/configure-live-input.mjs`) + guía OBS con keyframe 2.
+- ✅ **Anti-fragmentación**: `timeoutSeconds` en el Live Input (`scripts/configure-live-input.mjs`, por defecto 60; el valor desplegado es 300, verificado por API el 2026-10-10 y cambiado el 2026-09-19) + guía OBS con keyframe 2.
 
 **Falta (opcional):**
 - Player de replay del alumno (VIPLiveRoom) preferir R2 — revisar si muestra replays.
@@ -175,6 +175,6 @@ _Última actualización: 2026-10-13 (propuesta documental de Clase completa, com
 | P1 | Integridad del reproductor | 🟢 Código: sin autoplay bajo el overlay de pausa de sala al recargar; seek dentro de intervalos reales; listeners reenganchados tras «Reintentar»; menú visible en pantalla completa; resume por emisión (`id:starts_at`). **Falta:** Safari nativo sigue sin restore ni backoff (rama sin hls.js) |
 | P1 | Paridad móvil/Safari | 🔴 Sin probar en dispositivos: matriz física de `LIVE_UX_REDESIGN_AUDIT.md` |
 | P1 | Comunidad coherente en claro/oscuro | 🟢 Código: error ≠ vacío ≠ vacío por filtro, refresco sin skeleton, respuestas viejas descartadas, scroll al volver, métricas honestas, publicar bloqueado con imagen subiendo, errores en línea, menú y confirmaciones accesibles, avatar/escudo sin residuos oscuros. **Falta:** revisión visual en ambos temas con sesión real |
-| P1 | Ensayo de calidad 6000 → 8000 → 10.000 kbps | 🔴 Solo documentado, a pedido: perfil OBS y manifiesto real sin comprobar |
+| P1 | Ensayo de calidad 6000 → 8000 → 10.000 kbps | 🔴 Solo documentado, a pedido. **Verificado el 2026-10-10:** entrada de OBS en 1280×720 (nivel más alto entregado: 720p) y perfil enviando segmentos de 8,33 s (keyframe en automático, no 2 s). **Sin comprobar:** una salida de OBS en 1080p y sus resoluciones en el manifiesto; subir el bitrate sin subir la salida a 1080p rinde poco |
 
-**Plan y criterios:** [actualización de UX](./LIVE_UX_REDESIGN_AUDIT.md#actualización-2026-10-13--clase-completa-predeterminada-y-comunidad) y [guía de OBS, sección 5](./OBS_CONFIGURACION.md#5-mejor-calidad-podemos-transmitir-a-10000-kbps). 6000 es la base documentada, no una medición del OBS actual. 10.000 es un ensayo viable, no una configuración aprobada ni una garantía de mayor resolución.
+**Plan y criterios:** [actualización de UX](./LIVE_UX_REDESIGN_AUDIT.md#actualización-2026-10-13--clase-completa-predeterminada-y-comunidad) y [guía de OBS, sección 5](./OBS_CONFIGURACION.md#5-mejor-calidad-podemos-transmitir-a-10000-kbps). 6000 es la base documentada; el perfil de OBS del 2026-10-10 no la cumplía en el keyframe. 10.000 es un ensayo viable, no una configuración aprobada ni una garantía de mayor resolución.
