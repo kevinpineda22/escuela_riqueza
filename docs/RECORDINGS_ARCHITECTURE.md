@@ -233,7 +233,7 @@ Variables de entorno nuevas (Vercel):
 La calidad de la grabación depende de cómo se emite el vivo. Aprendizajes clave (2026-07):
 
 - **Keyframe Interval = 2 en OBS (obligatorio).** En `Auto` (default), Cloudflare no puede codificar la grabación a VOD y falla con *"The video failed to be encoded due to an unknown cause"*. Solo se setea en el modo de salida **Avanzado**. La guía embebida en `AdminLiveManager` ya lo indica.
-- **`timeoutSeconds = 60` en el Live Input** (via `scripts/configure-live-input.mjs`). Sin esto, cada micro-corte de OBS crea un **video nuevo** en Stream → grabación fragmentada en decenas de clips. Con 60s los cortes breves continúan la misma grabación. Tradeoff: la grabación se finaliza ~60s después de cortar el stream.
+- **`timeoutSeconds = 300` en el Live Input** (via `scripts/configure-live-input.mjs`, cuyo default es ese mismo valor). Sin esto, cada micro-corte de OBS crea un **video nuevo** en Stream → grabación fragmentada en decenas de clips. Arrancó en 60 (2026-07) y se subió a 300 el 2026-09-19 porque 60 no alcanzaba a cubrir un Stop/Start manual de OBS; verificado por API el 2026-10-10. Tradeoff: la grabación se finaliza ~5 min después de cortar el stream.
 - **Estabilidad del emisor.** La causa raíz de los cortes es el enlace OBS→Cloudflare: transmitir por **ethernet** (no WiFi) y con **bitrate ≤ 50% del upload real**. Un stream que se cae genera grabaciones con *"missing or invalid data"* que nunca codifican (y el give-up las descarta).
 
 ### Síntoma → dónde mirar

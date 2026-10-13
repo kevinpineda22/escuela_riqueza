@@ -7,6 +7,11 @@
 
 ## 2026-10-13
 
+### Grabaciones — `configure-live-input.mjs` ya no baja el timeout desplegado
+- El default de `timeoutSeconds` del script pasa de 60 a **300**, el valor de producción desde el 2026-09-19 (verificado por API el 2026-10-10). Con 60, correrlo sin argumentos bajaba el input y un Stop/Start de OBS volvía a partir la clase en varias grabaciones.
+- `RECORDINGS_ARCHITECTURE.md` todavía documentaba 60 como el valor vigente: corregido a 300, con la historia del cambio y el tradeoff real (~5 min hasta finalizar la grabación). `PENDIENTES.md` y `OBS_CONFIGURACION.md` alineados.
+- No se corrió el script ni se tocó Cloudflare.
+
 ### Lives — reproductor: saltos de ±10 s y correcciones de documentación de la transmisión
 Revisión del commit 090a46a (saltos de 10 s en Clase completa) y de las guías de transmisión frente a las mediciones del 2026-10-10.
 - **Retomar posición con saltos de 10 s**: el botón y la flecha izquierda retroceden exactamente 10 s, y el umbral de "retroceso deliberado" exigía más de 10 s por salto, así que ninguna serie de saltos lo activaba y la posición nunca se guardaba. `LiveHLSPlayer` ahora acumula los retrocesos seguidos contra la posición de la que partió la serie (la serie termina tras 5 s reproducidos o con un avance); un solo salto de 10 s sigue sin contar y volver al vivo apaga la marca.

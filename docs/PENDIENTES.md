@@ -73,7 +73,7 @@ _Última actualización: 2026-10-13 (propuesta documental de Clase completa, com
 - ✅ Worker deployado + env `ARCHIVE_WORKER_URL`/`ARCHIVE_SHARED_SECRET` en Vercel. Archivado manual verificado end-to-end (copia a R2 + borrado de Stream + replay firmado).
 - ✅ **Archivado automático**: Cron Trigger cada 10 min (`worker/src/index.ts` → `scheduled()`). Ya no hace falta el botón manual.
 - ✅ **Robustez**: descarta grabaciones muertas (Stream `error` o 0% > 12h) para no reintentar ni tapar el cron (`limit=3`).
-- ✅ **Anti-fragmentación**: `timeoutSeconds` en el Live Input (`scripts/configure-live-input.mjs`, por defecto 60; el valor desplegado es 300, verificado por API el 2026-10-10 y cambiado el 2026-09-19) + guía OBS con keyframe 2.
+- ✅ **Anti-fragmentación**: `timeoutSeconds` en el Live Input (`scripts/configure-live-input.mjs`, por defecto 300 = el valor desplegado, verificado por API el 2026-10-10 y cambiado el 2026-09-19) + guía OBS con keyframe 2.
 
 **Falta (opcional):**
 - Player de replay del alumno (VIPLiveRoom) preferir R2 — revisar si muestra replays.
