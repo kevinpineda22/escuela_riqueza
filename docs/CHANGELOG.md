@@ -5,6 +5,15 @@
 
 ---
 
+## 2026-10-13
+
+### Lives — reproductor: retroceso en Clase completa, Fluidez con segmentos largos y retomar posición
+Tres fallos medidos en producción el 2026-10-10 durante un vivo real (OBS enviaba segmentos de ~8,33 s por keyframe automático; con la configuración documentada son de 2 s).
+- **Pantalla negra al retroceder**: tras retroceder en "Clase completa" (p. ej. 10 min), el watchdog de estancamiento solo contaba avance si `currentTime` subía. Recargaba el manifest cada 12 s y a los ~2 min mostraba "Error de reproducción" encima de un video que se reproducía. El avance ahora se mide en ambos sentidos y se reinicia en `seeking`/`seeked`; un estancamiento real sigue recargando a los 12 s.
+- **Fluidez**: pasa de `liveSyncDuration: 8` / `liveMaxLatencyDuration: 20` (segundos) a `liveSyncDurationCount: 3` / `liveMaxLatencyDurationCount: 7` (segmentos). Con segmentos de 8 s el player quedaba a menos de un segmento del filo y tenía 1-4 `waiting` por minuto ("Clase completa", a 3 segmentos, tuvo 0 en 50 min). Los umbrales de "Volver al vivo" (`LivePlayerControls`) se calculan con la distancia real que informa hls.js.
+- **Clase completa — retomar**: la posición solo se guarda tras un retroceso deliberado (>10 s) y se borra al volver al vivo. Antes se guardaba también con la latencia natural (25-39 s con segmentos largos) y al reingresar retomaba hasta 44 min atrás.
+- Tests: 5 de los nuevos fallan con el código anterior y pasan con el arreglo.
+
 ## 2026-10-09
 
 ### Seguridad — cualquier usuario podía hacerse admin

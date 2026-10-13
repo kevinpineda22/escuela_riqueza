@@ -37,8 +37,9 @@ interface LiveHLSPlayerProps {
   customerCode: string;
   muted: boolean;
   autoPlay?: boolean;
-  // "smooth" (default): perfil tipo Twitch/YouTube clásico — ~8s atrás del
-  // edge con buffer 20s, fluidez asegurada. "low": ~3s del edge con buffer 10s,
+  // "smooth" (default): perfil tipo Twitch/YouTube clásico — 3 segmentos atrás
+  // del edge (~6s con segmentos de 2s, ~25s con los de 8s) con buffer 20s,
+  // fluidez asegurada. "low": ~3s del edge con buffer 10s,
   // baja latencia pero requiere red estable. "dvr": ventana DVR completa de
   // Cloudflare (`?dvrEnabled=true`) — misma config hls.js que "smooth", sin
   // catch-up de latencia, pero con timeline scrubbable y resume de posición.
@@ -185,8 +186,9 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       if (!video || !liveInputId || !customerCode) return;
 
       // Dos perfiles:
-      // - "smooth" (default): HLS estándar (sin LL-HLS), ~8s del edge, buffer
-      //   20s. Tipo Twitch/YouTube clásico. Es el fallback si LL-HLS da
+      // - "smooth" (default): HLS estándar (sin LL-HLS), 3 segmentos del edge
+      //   (~6s con segmentos de 2s, ~25s con los de 8s), buffer 20s. Tipo
+      //   Twitch/YouTube clásico. Es el fallback si LL-HLS da
       //   problemas — se mantiene intacto.
       // - "low": LL-HLS real vía el flag `?protocol=llhls` de Cloudflare
       //   Stream (beta). El manifest expone PART-TARGET/PART-HOLD-BACK y
@@ -226,16 +228,46 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       // "Retomamos donde lo dejaste" a alguien que nunca pidió retomar nada y
       // dejándolo atrasado sin quererlo.
       const LIVE_EDGE_THRESHOLD_S = 30;
+      // Retroceso mínimo (en segundos, medido contra la posición previa al
+      // seek) para considerarlo deliberado.
+      const DELIBERATE_REWIND_MIN_S = 10;
+      // Con segmentos largos (8 s) la latencia natural de "dvr" es 25-39 s, o
+      // sea que "estar a más de LIVE_EDGE_THRESHOLD_S del filo" NO implica que
+      // el alumno haya retrocedido (medido 2026-10-10: se retomó 44 min atrás
+      // en un tramo viejo). Solo se guarda si hubo un retroceso deliberado:
+      // un seek hacia atrás de más de DELIBERATE_REWIND_MIN_S detectado en el
+      // evento nativo `seeking` (cubre la barra de tiempo, `seekTo` y teclado,
+      // y compara contra la posición previa porque en `seeking`
+      // `currentTime` ya es el destino). Se apaga al volver al filo.
+      let deliberateRewind = false;
+      let lastPlaybackTime = video.currentTime;
+      const getBehind = () => {
+        const seekable = video.seekable;
+        const edge = seekable.length ? seekable.end(seekable.length - 1) : NaN;
+        return Number.isFinite(edge) ? edge - video.currentTime : 0;
+      };
+      const handlePositionTimeUpdate = () => {
+        // Durante un seek `currentTime` ya es el destino: no es la posición previa.
+        if (!video.seeking) lastPlaybackTime = video.currentTime;
+      };
+      const handlePositionSeeking = () => {
+        if (lastPlaybackTime - video.currentTime > DELIBERATE_REWIND_MIN_S) {
+          deliberateRewind = true;
+        } else if (getBehind() < LIVE_EDGE_THRESHOLD_S) {
+          // Volvió al filo (botón "Volver al vivo" o barra): ya no hay retroceso.
+          deliberateRewind = false;
+        }
+        lastPlaybackTime = video.currentTime;
+      };
       const savePosition = () => {
         if (!isDvr) return;
         const key = getPositionStorageKey();
         if (!key) return;
         try {
-          const seekable = video.seekable;
-          const edge = seekable.length ? seekable.end(seekable.length - 1) : NaN;
-          const behind = Number.isFinite(edge) ? edge - video.currentTime : 0;
-          if (behind < LIVE_EDGE_THRESHOLD_S) {
-            // Estaba viendo en vivo: no hay nada que retomar la próxima vez.
+          if (getBehind() < LIVE_EDGE_THRESHOLD_S) deliberateRewind = false;
+          if (!deliberateRewind) {
+            // Viendo en vivo (cerca del filo, o atrasado solo por la latencia
+            // natural): no hay nada que retomar la próxima vez.
             localStorage.removeItem(key);
             return;
           }
@@ -248,6 +280,8 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           if (!video.paused) savePosition();
         }, 5000);
         video.addEventListener("pause", savePosition);
+        video.addEventListener("timeupdate", handlePositionTimeUpdate);
+        video.addEventListener("seeking", handlePositionSeeking);
       }
 
       let hls: Hls | null = null;
@@ -262,6 +296,7 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       let clearStableTimer: (() => void) | null = null;
       let llCatchUpInterval: number | null = null;
       let handleLLCatchUpOnPlay: (() => void) | null = null;
+      let handleWatchdogSeek: (() => void) | null = null;
 
       if (Hls.isSupported()) {
         hls = new Hls({
@@ -273,16 +308,29 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           // Solo para "smooth".
           // - En "low" NO se fijan: hls.js los deriva de PART-HOLD-BACK del
           //   manifest LL-HLS; fijarlos acá pisa ese cálculo y anula LL-HLS.
-          // - En "dvr" NO se fijan porque `liveMaxLatencyDuration` hace que
-          //   hls.js considere un error estar a más de N segundos del filo y
-          //   devuelva al usuario al vivo de un salto. En Clase completa el
-          //   espectador tiene que poder quedarse donde quiera de la ventana.
+          // - En "dvr" NO se fijan porque `liveMaxLatencyDuration*` hace que
+          //   hls.js considere un error estar a más de N segundos (o N
+          //   segmentos) del filo y devuelva al usuario al vivo de un salto.
+          //   En Clase completa el espectador tiene que poder quedarse donde
+          //   quiera de la ventana.
+          // - En "smooth" se usan las variantes por CANTIDAD de segmentos, no
+          //   segundos fijos. Medido en producción (2026-10-10) con segmentos de
+          //   8,33 s (keyframe automático de OBS): `liveSyncDuration: 8` dejaba
+          //   al player a menos de un segmento del filo, el buffer oscilaba
+          //   8 s -> 0,1 s en cada segmento y había 1-4 `waiting` por minuto.
+          //   Con 3 segmentos (el default de hls.js, que en "dvr" dio 0 stalls
+          //   en 50 min) la latencia es ~6 s con segmentos de 2 s (config de OBS
+          //   documentada) y ~25 s con segmentos de 8 s, pero sin cortes.
+          //   `liveMaxLatencyDurationCount: 7` conserva el catch-up original
+          //   (seek al filo si se acumula atraso, ~2,3x la distancia de sync
+          //   como antes): 14 s con segmentos de 2 s, ~58 s con los de 8 s.
+          //   hls.js prohíbe mezclar las variantes en segundos con las de
+          //   cantidad: aquí van SOLO las de cantidad.
           ...(lowLatency || isDvr
             ? {}
             : {
-                liveSyncDuration: 8,
-                // 2.5x el liveSyncDuration. Permite catchup suave; si excede, seek al edge.
-                liveMaxLatencyDuration: 20,
+                liveSyncDurationCount: 3,
+                liveMaxLatencyDurationCount: 7,
               }),
           liveDurationInfinity: true,
           startLevel: -1,
@@ -393,6 +441,8 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
             const position = saved.position as number;
             if (position < start || position > end - 2) return false;
             video.currentTime = position;
+            // Es un retroceso deliberado que se está retomando: sigue guardándose.
+            deliberateRewind = true;
             didSeekToLiveEdge = true;
             onResumedRef.current?.(position);
             return true;
@@ -457,7 +507,7 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
         // Arranca SIEMPRE en el borde en vivo, no desde el inicio del DVR. Sin esto,
         // tras una pausa (que remonta este player) la reproducción volvía al principio
         // de la grabación en vez de retomar el vivo. `liveSyncPosition` respeta el
-        // perfil de latencia elegido (smooth ~8s / low ~2-3s del edge).
+        // perfil de latencia elegido (smooth 3 segmentos / low ~2-3s del edge).
         hls.on(Hls.Events.LEVEL_UPDATED, () => {
           if (didSeekToLiveEdge || !hls) return;
           // En "dvr" la posición guardada gana sobre el filo del vivo. Acá
@@ -586,9 +636,23 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
         let lastTime = video.currentTime;
         let stalledFor = 0;
         let advancingFor = 0;
+        // Un seek (en "dvr", retroceder con la barra o `seekTo`) mueve
+        // `currentTime` de golpe: se re-ancla la referencia del watchdog.
+        handleWatchdogSeek = () => {
+          lastTime = video.currentTime;
+          stalledFor = 0;
+          advancingFor = 0;
+        };
+        video.addEventListener("seeking", handleWatchdogSeek);
+        video.addEventListener("seeked", handleWatchdogSeek);
         stallTimer = window.setInterval(() => {
           if (!hls || video.paused || video.ended) { stalledFor = 0; advancingFor = 0; lastTime = video.currentTime; return; }
-          if (video.currentTime > lastTime + 0.2) {
+          // Avance = `currentTime` cambió, hacia adelante O hacia atrás. Con
+          // `>` solo se contaba hacia adelante: tras retroceder 10 min quedaba
+          // por debajo de `lastTime`, cada tick contaba como "sin avance" y a
+          // los ~2 min aparecía "Error de reproducción" sobre un video que
+          // estaba reproduciendo (medido 2026-10-10).
+          if (Math.abs(video.currentTime - lastTime) > 0.2) {
             stalledFor = 0;
             lastTime = video.currentTime;
             advancingFor += 1;
@@ -627,10 +691,18 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
 
       return () => {
         if (positionSaveInterval !== null) window.clearInterval(positionSaveInterval);
-        if (isDvr) video.removeEventListener("pause", savePosition);
+        if (isDvr) {
+          video.removeEventListener("pause", savePosition);
+          video.removeEventListener("timeupdate", handlePositionTimeUpdate);
+          video.removeEventListener("seeking", handlePositionSeeking);
+        }
         if (llCatchUpInterval !== null) window.clearInterval(llCatchUpInterval);
         if (handleLLCatchUpOnPlay) video.removeEventListener("playing", handleLLCatchUpOnPlay);
         if (stallTimer !== null) window.clearInterval(stallTimer);
+        if (handleWatchdogSeek) {
+          video.removeEventListener("seeking", handleWatchdogSeek);
+          video.removeEventListener("seeked", handleWatchdogSeek);
+        }
         if (pendingReloadTimeout !== null) window.clearTimeout(pendingReloadTimeout);
         if (reloadCooldownTimeout !== null) window.clearTimeout(reloadCooldownTimeout);
         clearStableTimer?.();
