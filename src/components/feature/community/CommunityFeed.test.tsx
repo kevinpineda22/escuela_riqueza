@@ -72,6 +72,8 @@ function deferred<T>() {
 describe("CommunityFeed", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // jsdom no implementa scrollTo; abrir y volver del detalle lo usan.
+    window.scrollTo = vi.fn() as unknown as typeof window.scrollTo;
     for (const k of Object.keys(realtime)) delete realtime[k];
   });
 
@@ -137,6 +139,20 @@ describe("CommunityFeed", () => {
     await screen.findByText("Publicación 1");
     expect(screen.getByText("Autores en esta vista")).toBeInTheDocument();
     expect(screen.queryByText("Miembros activos")).not.toBeInTheDocument();
+  });
+
+  it("abrir una publicación lleva la vista a su inicio (no queda en el footer)", async () => {
+    fetchPosts.mockResolvedValueOnce([post("1")]);
+    renderFeed();
+    fireEvent.click(await screen.findByRole("button", { name: "Publicación 1" }));
+    await waitFor(() => expect(window.scrollTo).toHaveBeenCalled());
+  });
+
+  it("el botón de comentarios abre la publicación", async () => {
+    fetchPosts.mockResolvedValueOnce([post("1", { comment_count: 2 })]);
+    renderFeed();
+    fireEvent.click(await screen.findByRole("button", { name: "2 comentarios: ver los comentarios" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Volver al foro/ })).toBeInTheDocument());
   });
 
   it("la tarjeta se abre con el teclado desde el título", async () => {

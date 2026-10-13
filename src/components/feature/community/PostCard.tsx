@@ -22,13 +22,15 @@ interface PostCardProps {
   isAdmin?: boolean;
   canWrite: boolean;
   onOpen: () => void;
+  /** Abre la publicación directo en sus comentarios. */
+  onOpenComments?: () => void;
   onDelete: () => void;
   onPinChanged?: (post: CommunityPost) => void;
 }
 
 const PREVIEW_LIMIT = 280;
 
-export function PostCard({ post, canDelete, isAdmin, canWrite, onOpen, onDelete, onPinChanged }: PostCardProps) {
+export function PostCard({ post, canDelete, isAdmin, canWrite, onOpen, onOpenComments, onDelete, onPinChanged }: PostCardProps) {
   const cat = categoryMeta(post.category);
   const CatIcon = cat.icon;
   const isAuthorAdmin = post.author?.role === "admin";
@@ -200,8 +202,8 @@ export function PostCard({ post, canDelete, isAdmin, canWrite, onOpen, onDelete,
             />
             <button
               type="button"
-              onClick={onOpen}
-              aria-label={`${post.comment_count} ${post.comment_count === 1 ? "comentario" : "comentarios"}: abrir la publicación`}
+              onClick={onOpenComments ?? onOpen}
+              aria-label={`${post.comment_count} ${post.comment_count === 1 ? "comentario" : "comentarios"}: ver los comentarios`}
               className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-foreground-muted transition-colors hover:bg-ink/5 hover:text-foreground-strong"
             >
               <MessageSquare size={14} aria-hidden />
