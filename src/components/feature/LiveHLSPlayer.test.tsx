@@ -91,6 +91,7 @@ function mockLocalStorage() {
   const store = new Map<string, string>();
   vi.spyOn(Storage.prototype, 'getItem').mockImplementation((k) => store.get(k) ?? null);
   vi.spyOn(Storage.prototype, 'setItem').mockImplementation((k, v) => { store.set(k, v); });
+  vi.spyOn(Storage.prototype, 'removeItem').mockImplementation((k) => { store.delete(k); });
   return store;
 }
 
@@ -115,6 +116,7 @@ describe('LiveHLSPlayer recovery', () => {
     // `vi.fn()` con implementación propia (restoreAllMocks la limpiaría).
     vi.mocked(Storage.prototype.getItem).mockRestore?.();
     vi.mocked(Storage.prototype.setItem).mockRestore?.();
+    vi.mocked(Storage.prototype.removeItem).mockRestore?.();
   });
 
   it('carga el manifest una vez al montar', () => {
@@ -129,8 +131,13 @@ describe('LiveHLSPlayer recovery', () => {
     renderPlayer({ latencyMode: 'smooth' });
     expect(hlsInstance.loadSource).toHaveBeenCalledWith('https://customer-abc.cloudflarestream.com/input-1/manifest/video.m3u8');
     expect(lastHlsConfig?.lowLatencyMode).toBe(false);
-    expect(lastHlsConfig?.liveSyncDuration).toBe(8);
-    expect(lastHlsConfig?.liveMaxLatencyDuration).toBe(20);
+    // Por cantidad de segmentos (no segundos fijos): con segmentos de 8 s los
+    // 8 s fijos dejaban al player a menos de un segmento del filo (stalls).
+    expect(lastHlsConfig?.liveSyncDurationCount).toBe(3);
+    expect(lastHlsConfig?.liveMaxLatencyDurationCount).toBe(7);
+    // hls.js prohíbe mezclar las variantes en segundos con las de cantidad.
+    expect(lastHlsConfig).not.toHaveProperty('liveSyncDuration');
+    expect(lastHlsConfig).not.toHaveProperty('liveMaxLatencyDuration');
   });
 
   // Modo "low": manifest con `?protocol=llhls` (Cloudflare LL-HLS, beta) y
@@ -142,6 +149,8 @@ describe('LiveHLSPlayer recovery', () => {
     expect(lastHlsConfig?.lowLatencyMode).toBe(true);
     expect(lastHlsConfig).not.toHaveProperty('liveSyncDuration');
     expect(lastHlsConfig).not.toHaveProperty('liveMaxLatencyDuration');
+    expect(lastHlsConfig).not.toHaveProperty('liveSyncDurationCount');
+    expect(lastHlsConfig).not.toHaveProperty('liveMaxLatencyDurationCount');
     expect(lastHlsConfig?.maxLiveSyncPlaybackRate).toBe(1.1);
   });
 
@@ -165,7 +174,8 @@ describe('LiveHLSPlayer recovery', () => {
   });
 
   // Modo "dvr": DVR de Cloudflare Stream vía `?dvrEnabled=true`, misma config
-  // hls.js que "smooth" (lowLatencyMode: false, liveSyncDuration: 8).
+  // hls.js que "smooth" salvo por el sync/max-latency, que quedan en los
+  // defaults de hls.js (3 segmentos, sin límite).
   it('modo dvr: carga el manifest con ?dvrEnabled=true y sin límite de latencia', () => {
     renderPlayer({ latencyMode: 'dvr' });
     expect(hlsInstance.loadSource).toHaveBeenCalledWith('https://customer-abc.cloudflarestream.com/input-1/manifest/video.m3u8?dvrEnabled=true');
@@ -176,6 +186,8 @@ describe('LiveHLSPlayer recovery', () => {
     // puesto, el seek hacia atrás se revertía solo.
     expect(lastHlsConfig).not.toHaveProperty('liveSyncDuration');
     expect(lastHlsConfig).not.toHaveProperty('liveMaxLatencyDuration');
+    expect(lastHlsConfig).not.toHaveProperty('liveSyncDurationCount');
+    expect(lastHlsConfig).not.toHaveProperty('liveMaxLatencyDurationCount');
   });
 
   it('modo dvr: NO hace catch-up de latencia LL-HLS aunque la latencia sea alta', () => {
@@ -476,5 +488,138 @@ describe('LiveHLSPlayer recovery', () => {
     // Un nuevo parseo (recarga de recuperación) SÍ debe poder reanudar.
     act(() => { handlers.manifestParsed('manifestParsed', {}); });
     expect(playSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // 2026-10-10: tras retroceder 10 min en "dvr", currentTime quedaba por debajo
+  // de la referencia del watchdog, cada tick contaba como "sin avance" y a los
+  // ~2 min aparecía "Error de reproducción" sobre un video que se reproducía.
+  describe('watchdog tras un seek hacia atrás', () => {
+    it('no recarga ni reporta error si tras retroceder el video avanza con normalidad', () => {
+      const onFatalError = vi.fn();
+      const { container } = renderPlayer({ latencyMode: 'dvr', onFatalError });
+      const video = driveVideo(container, { paused: false, currentTime: 1000 });
+      act(() => { vi.advanceTimersByTime(1_000); });
+      hlsInstance.loadSource.mockClear();
+      hlsInstance.stopLoad.mockClear();
+
+      // Retrocede 10 min y sigue reproduciendo muy por encima de STALL_SECONDS.
+      act(() => { video.currentTime = 400; video.dispatchEvent(new Event('seeking')); });
+      act(() => { video.dispatchEvent(new Event('seeked')); });
+      for (let i = 1; i <= 40; i++) {
+        act(() => { video.currentTime = 400 + i; vi.advanceTimersByTime(1_000); });
+      }
+      act(() => { vi.advanceTimersByTime(10_000); });
+
+      expect(hlsInstance.loadSource).not.toHaveBeenCalled();
+      expect(hlsInstance.stopLoad).not.toHaveBeenCalled();
+      expect(onFatalError).not.toHaveBeenCalled();
+    });
+
+    it('avisa onRecovered si tras onFatalError el video avanza 5 s seguidos desde una posición anterior', () => {
+      const onFatalError = vi.fn();
+      const onRecovered = vi.fn();
+      const { container } = renderPlayer({ latencyMode: 'dvr', onFatalError, onRecovered });
+      const video = driveVideo(container, { paused: false, currentTime: 1000 });
+      exhaustReloads();
+      expect(onFatalError).toHaveBeenCalled();
+
+      act(() => { video.currentTime = 400; video.dispatchEvent(new Event('seeking')); });
+      for (let i = 1; i <= 4; i++) {
+        act(() => { video.currentTime = 400 + i; vi.advanceTimersByTime(1_000); });
+      }
+      expect(onRecovered).not.toHaveBeenCalled();
+      act(() => { video.currentTime = 405; vi.advanceTimersByTime(1_000); });
+      expect(onRecovered).toHaveBeenCalledTimes(1);
+    });
+
+    it('un estancamiento real (currentTime congelado) sigue recargando a los 12 s, también tras un seek', () => {
+      const { container } = renderPlayer({ latencyMode: 'dvr' });
+      const video = driveVideo(container, { paused: false, currentTime: 1000 });
+      act(() => { vi.advanceTimersByTime(1_000); });
+      act(() => { video.currentTime = 400; video.dispatchEvent(new Event('seeking')); });
+      hlsInstance.loadSource.mockClear();
+
+      act(() => { vi.advanceTimersByTime(12_000); });
+      expect(hlsInstance.loadSource).not.toHaveBeenCalled();
+      // El watchdog agendó la recarga con backoff de 1 s.
+      act(() => { vi.advanceTimersByTime(1_000); });
+      expect(hlsInstance.loadSource).toHaveBeenCalledTimes(1);
+    });
+
+    it('seeks internos pequeños (< 1 s) no enmascaran un estancamiento real', () => {
+      const { container } = renderPlayer({ latencyMode: 'dvr' });
+      const video = driveVideo(container, { paused: false, currentTime: 1000 });
+      act(() => { vi.advanceTimersByTime(1_000); });
+      hlsInstance.loadSource.mockClear();
+
+      // currentTime congelado; hls.js dispara seeks internos (sin salto real) cada 3 s.
+      for (let i = 0; i < 4; i++) {
+        act(() => { vi.advanceTimersByTime(3_000); });
+        act(() => { video.dispatchEvent(new Event('seeking')); video.dispatchEvent(new Event('seeked')); });
+      }
+      // 12 s de congelamiento + 1 s de backoff de la recarga.
+      act(() => { vi.advanceTimersByTime(1_500); });
+      expect(hlsInstance.loadSource).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // 2026-10-10: con segmentos largos la latencia natural de "dvr" es 25-39 s;
+  // guardar por "estar a más de 30 s del filo" retomaba 44 min atrás a quien
+  // solo miraba el vivo. Solo se retoma tras un retroceso deliberado.
+  describe('modo dvr: guardado de posición para retomar', () => {
+    const KEY = 'live-position:live-1';
+
+    function setupDvr(currentTime: number) {
+      const store = mockLocalStorage();
+      const { container } = renderPlayer({ latencyMode: 'dvr', resumeKey: 'live-1' });
+      const video = driveVideo(container, { paused: false, currentTime });
+      mockSeekable(video, [[0, 1000]]);
+      return { store, video };
+    }
+
+    it('no guarda (y limpia la clave) si solo está viendo el vivo con latencia natural de 35 s', () => {
+      const { store, video } = setupDvr(965);
+      store.set(KEY, JSON.stringify({ position: 100, savedAt: Date.now() }));
+      act(() => { video.dispatchEvent(new Event('timeupdate')); });
+
+      act(() => { vi.advanceTimersByTime(5_000); });
+
+      expect(Storage.prototype.setItem).not.toHaveBeenCalled();
+      expect(store.has(KEY)).toBe(false);
+    });
+
+    it('guarda la posición tras un retroceso deliberado de 10 min', () => {
+      const { store, video } = setupDvr(965);
+      act(() => { video.dispatchEvent(new Event('timeupdate')); });
+      act(() => { video.currentTime = 365; video.dispatchEvent(new Event('seeking')); });
+
+      act(() => { vi.advanceTimersByTime(5_000); });
+
+      expect(JSON.parse(store.get(KEY) as string).position).toBe(365);
+    });
+
+    it('limpia la clave al volver al vivo tras haber retrocedido', () => {
+      const { store, video } = setupDvr(965);
+      act(() => { video.dispatchEvent(new Event('timeupdate')); });
+      act(() => { video.currentTime = 365; video.dispatchEvent(new Event('seeking')); });
+      act(() => { vi.advanceTimersByTime(5_000); });
+      expect(store.has(KEY)).toBe(true);
+
+      // "Volver al vivo": seek hacia adelante a pocos segundos del filo.
+      act(() => { video.currentTime = 990; video.dispatchEvent(new Event('seeking')); });
+      act(() => { vi.advanceTimersByTime(5_000); });
+
+      expect(store.has(KEY)).toBe(false);
+    });
+
+    it('un retroceso corto (<= 10 s) no cuenta como deliberado', () => {
+      const { store, video } = setupDvr(965);
+      act(() => { video.dispatchEvent(new Event('timeupdate')); });
+      act(() => { video.currentTime = 957; video.dispatchEvent(new Event('seeking')); });
+
+      act(() => { vi.advanceTimersByTime(5_000); });
+
+      expect(store.has(KEY)).toBe(false);
+    });
   });
 });

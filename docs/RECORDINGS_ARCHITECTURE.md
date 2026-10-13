@@ -95,7 +95,9 @@ Mover la grabación de **Cloudflare Stream** (caro, acumulativo) a **Cloudflare 
 
 El paso 3 ya **no requiere el botón manual**. El Worker tiene un **Cron Trigger** (`crons = ["*/10 * * * *"]` en `wrangler.toml` → handler `scheduled()` en `worker/src/index.ts`). Cada 10 min:
 
-1. Consulta `lives` donde `recording_stream_uid` está cargado y `archived_at` es null (grabado pero sin archivar).
+1. Consulta `lives` donde `status = 'ended'`, `recording_stream_uid` está cargado y `archived_at` es null (grabado, terminado y sin archivar). Una sala en curso nunca se archiva: así no se borra de Stream una parte mientras la clase sigue transmitiendo (incidente 2026-10-10).
+   - La clave en R2 es `recordings/<liveId>/<streamVideoUid>.mp4` (única por video; Worker y Action deben coincidir, ver `worker/src/archive-helpers.ts`). Antes de subir se hace HEAD y nunca se sobrescribe un objeto existente (ni se borra de Stream en ese caso). Las filas anteriores al 2026-10-13 usan `recordings/<liveId>.mp4`; `recording-url.ts` lee la clave desde la base.
+   - **Clase partida en varias grabaciones** (OBS detenido/iniciado): solo se archiva la parte vinculada. Para la repetición completa hay que unir las partes a mano: bajarlas, recodificar a un formato único (los perfiles H.264 pueden diferir entre partes) y reconstruir el audio por parte con `aresample=async=1,apad,atrim` a la duración de su video. Verificar que la duración del audio sea igual a la del video: decodificar sin errores NO detecta audio perdido. Procedimiento usado el 2026-10-10.
 2. Corre `archiveOne()` sobre cada una — la misma lógica que el botón manual.
 3. Si el MP4 todavía se está generando, queda en `processing` y se reintenta en el próximo tick. Al archivar con éxito, `recording_stream_uid` pasa a null y la grabación deja de aparecer sola.
 

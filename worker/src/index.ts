@@ -4,6 +4,9 @@
  * Copia el MP4 de una grabación de Cloudflare Stream a R2 y borra el video de
  * Stream (corta el cobro recurrente de storage). Ver docs/RECORDINGS_ARCHITECTURE.md.
  *
+ * Solo archiva salas finalizadas (`status = 'ended'`) y nunca sobrescribe un objeto
+ * existente en R2 (clave única por video de Stream).
+ *
  * Dos disparadores, misma lógica (`archiveOne`):
  *   - `fetch`     → POST manual desde api/stream/archive-recording.ts (botón admin),
  *                   autenticado con secreto compartido.
@@ -17,6 +20,15 @@
  *
  * Body (fetch): { live_id: string, stream_video_uid: string }
  */
+
+import {
+  buildLiveStatusUrl,
+  buildPendingLivesUrl,
+  buildRecordingKey,
+  buildRegisterUrl,
+  decideExistingObject,
+  parseContentLength,
+} from './archive-helpers';
 
 export interface Env {
   RECORDINGS: R2Bucket;
@@ -45,6 +57,8 @@ type ArchiveResult =
   // El video está sano y se reproduce, pero Stream no puede generar su MP4 (p. ej.
   // supera la duración máxima). Se queda en Stream: NO se desvincula.
   | { status: 'unarchivable'; message: string }
+  // La clave destino ya existe en R2: se rechaza sin pisarla y SIN borrar de Stream.
+  | { status: 'conflict'; key: string; message: string }
   | { status: 'failed'; message: string; httpStatus: number }
   | { status: 'error'; message: string; detail?: string; httpStatus: number };
 
@@ -232,39 +246,76 @@ async function archiveOne(
     return { status: 'processing', percent };
   }
 
-  // 2. Descargar el MP4 de Stream y subirlo a R2 (streaming, sin bufferear en memoria).
-  const mp4Res = await fetch(def.url, { headers: cfHeaders });
-  if (!mp4Res.ok || !mp4Res.body) {
-    return { status: 'error', message: 'No se pudo descargar el MP4', httpStatus: 502 };
+  // 2. Subir el MP4 a R2 (streaming, sin bufferear en memoria). Nunca se pisa un
+  //    objeto existente: en R2 puede estar la única copia de otra grabación.
+  const key = buildRecordingKey(liveId, streamVideoUid);
+  let bytes: number;
+
+  const conflict = (message: string): ArchiveResult => {
+    console.error(`[archive] ${key}: ${message}`);
+    return { status: 'conflict', key, message };
+  };
+
+  const existing = await env.RECORDINGS.head(key);
+  if (existing) {
+    // Puede ser una pasada anterior que subió el MP4 pero no llegó a registrar la
+    // base. Si el tamaño coincide con el MP4 de Stream se retoma; si no, se rechaza.
+    const headRes = await fetch(def.url, { method: 'HEAD', headers: cfHeaders });
+    const expected = headRes.ok ? parseContentLength(headRes.headers.get('content-length')) : null;
+    if (decideExistingObject(existing.size, expected) === 'refuse') {
+      return conflict(
+        'Ya existe un objeto con esa clave en R2 con tamaño distinto o desconocido; no se sobrescribe ni se borra de Stream',
+      );
+    }
+    console.warn(`[archive] ${key} ya estaba completo en R2: se retoma el registro`);
+    bytes = existing.size;
+  } else {
+    const mp4Res = await fetch(def.url, { headers: cfHeaders });
+    if (!mp4Res.ok || !mp4Res.body) {
+      await mp4Res.body?.cancel().catch(() => undefined);
+      return { status: 'error', message: 'No se pudo descargar el MP4', httpStatus: 502 };
+    }
+    const expected = parseContentLength(mp4Res.headers.get('content-length'));
+    // `onlyIf` cierra la carrera entre el head() y el put(): si otro proceso creó el
+    // objeto en medio, R2 devuelve null en vez de pisarlo.
+    const putObject = await env.RECORDINGS.put(key, mp4Res.body, {
+      httpMetadata: { contentType: 'video/mp4' },
+      onlyIf: { etagDoesNotMatch: '*' },
+    });
+    if (putObject === null) {
+      await mp4Res.body.cancel().catch(() => undefined);
+      const now = await env.RECORDINGS.head(key);
+      if (!now || decideExistingObject(now.size, expected) === 'refuse') {
+        return conflict(
+          'Otro proceso creó el objeto en R2 durante la subida y su tamaño no coincide; no se sobrescribe ni se borra de Stream',
+        );
+      }
+      console.warn(`[archive] ${key} lo creó otro proceso con el tamaño esperado: se retoma el registro`);
+      bytes = now.size;
+    } else {
+      bytes = putObject.size;
+    }
   }
 
-  const key = `recordings/${liveId}.mp4`;
-  const putObject = await env.RECORDINGS.put(key, mp4Res.body, {
-    httpMetadata: { contentType: 'video/mp4' },
-  });
-  const bytes = putObject?.size ?? Number(mp4Res.headers.get('content-length')) ?? null;
-
-  // 3. Actualizar Supabase (service role, bypass RLS) vía REST.
-  const patchRes = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/lives?id=eq.${encodeURIComponent(liveId)}`,
-    {
-      method: 'PATCH',
-      headers: {
-        apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-        Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
-        'Content-Type': 'application/json',
-        Prefer: 'return=minimal',
-      },
-      body: JSON.stringify({
-        recording_r2_key: key,
-        recording_storage: 'r2',
-        recording_bytes: bytes,
-        recording_duration_seconds: durationSeconds,
-        recording_stream_uid: null,
-        archived_at: new Date().toISOString(),
-      }),
+  // 3. Actualizar Supabase (service role, bypass RLS) vía REST. El PATCH es
+  //    condicional al uid de ESTE video y debe afectar exactamente una fila.
+  const patchRes = await fetch(buildRegisterUrl(env.SUPABASE_URL, liveId, streamVideoUid), {
+    method: 'PATCH',
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
     },
-  );
+    body: JSON.stringify({
+      recording_r2_key: key,
+      recording_storage: 'r2',
+      recording_bytes: bytes,
+      recording_duration_seconds: durationSeconds,
+      recording_stream_uid: null,
+      archived_at: new Date().toISOString(),
+    }),
+  });
   if (!patchRes.ok) {
     // La copia a R2 ya está hecha; NO borramos de Stream si no pudimos
     // registrar el cambio, para no perder la referencia.
@@ -274,6 +325,17 @@ async function archiveOne(
       message: 'Copiado a R2 pero falló actualizar la base',
       detail,
       httpStatus: 500,
+    };
+  }
+  const affected = (await patchRes.json().catch(() => null)) as unknown[] | null;
+  if (!Array.isArray(affected) || affected.length !== 1) {
+    console.error(
+      `[archive] ${liveId}: el registro afectó ${Array.isArray(affected) ? affected.length : '?'} filas (se esperaba 1); no se borra ${streamVideoUid} de Stream`,
+    );
+    return {
+      status: 'error',
+      message: 'Copiado a R2 pero la sala ya no apunta a este video; no se borra de Stream',
+      httpStatus: 409,
     };
   }
 
@@ -323,22 +385,34 @@ async function markFailed(liveId: string, env: Env): Promise<void> {
 }
 
 /**
- * Grabaciones listas para archivar: tienen recording_stream_uid (la grabación
- * quedó en Stream) y todavía no se archivaron (archived_at null). El archivado
+ * Estado actual de la sala, o null si no existe. LANZA si Supabase no responde o
+ * devuelve error, para no confundir "no se pudo consultar" con "no finalizada".
+ */
+async function fetchLiveStatus(liveId: string, env: Env): Promise<string | null> {
+  const res = await fetch(buildLiveStatusUrl(env.SUPABASE_URL, liveId), {
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+    },
+  });
+  if (!res.ok) throw new Error(`Supabase respondió ${res.status}`);
+  const rows = (await res.json()) as { status?: string }[];
+  return rows[0]?.status ?? null;
+}
+
+/**
+ * Grabaciones listas para archivar: la sala está finalizada (status 'ended'), tiene
+ * recording_stream_uid (la grabación quedó en Stream) y todavía no se archivó
+ * (archived_at null). El archivado
  * exitoso pone recording_stream_uid en null, así que dejan de aparecer solas.
  */
 async function fetchPendingLives(
   env: Env,
 ): Promise<{ id: string; recording_stream_uid: string }[]> {
-  const url =
-    `${env.SUPABASE_URL}/rest/v1/lives` +
-    `?select=id,recording_stream_uid` +
-    `&recording_stream_uid=not.is.null` +
-    `&archived_at=is.null` +
-    // Límite bajo a propósito: cada grabación de ~3 h pesa varios GB. Procesar de a
-    // pocas por tick evita reventar los límites de duración del Worker; el backlog
-    // se limpia en ticks sucesivos.
-    `&limit=3`;
+  // Límite bajo a propósito: cada grabación de ~3 h pesa varios GB. Procesar de a
+  // pocas por tick evita reventar los límites de duración del Worker; el backlog
+  // se limpia en ticks sucesivos.
+  const url = buildPendingLivesUrl(env.SUPABASE_URL, 3);
 
   const res = await fetch(url, {
     headers: {
@@ -376,8 +450,24 @@ export default {
       return json({ error: 'Falta live_id o stream_video_uid' }, 400);
     }
 
+    // Mismo criterio que el cron: no archivar (ni borrar de Stream) una sala que no
+    // terminó. Cubre también el botón manual si se pulsa durante el vivo.
+    let liveStatus: string | null;
+    try {
+      liveStatus = await fetchLiveStatus(live_id, env);
+    } catch (err) {
+      console.error('[archive] no se pudo consultar el estado de la sala:', err);
+      return json({ error: 'No se pudo consultar el estado de la sala; vuelva a intentarlo en un momento' }, 502);
+    }
+    if (liveStatus !== 'ended') {
+      return json({ error: 'La sala no está finalizada; se archiva cuando termine el vivo' }, 409);
+    }
+
     const result = await archiveOne(live_id, stream_video_uid, env);
 
+    if (result.status === 'conflict') {
+      return json({ error: result.message, key: result.key }, 409);
+    }
     if (result.status === 'error') {
       return json({ error: result.message, detail: result.detail }, result.httpStatus);
     }
@@ -409,7 +499,9 @@ export default {
               result.status === 'processing' ? `processing ${result.percent}%` : result.status;
             console.log(`[cron] ${live.id}: ${label}`);
 
-            if (result.status === 'failed') {
+            if (result.status === 'conflict') {
+              console.error(`[cron] ${live.id}: ${result.message} (${result.key})`);
+            } else if (result.status === 'failed') {
               console.warn(`[cron] ${live.id}: descartada (${result.message})`);
               await markFailed(live.id, env);
             } else if (result.status === 'unarchivable') {

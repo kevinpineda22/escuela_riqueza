@@ -66,6 +66,9 @@ const LivePlayerControls = ({
   const [isPip, setIsPip] = useState(false);
   const [pipSupported, setPipSupported] = useState(false);
   const [liveDelta, setLiveDelta] = useState(0);
+  // Distancia natural al filo según hls.js (filo - liveSyncPosition). Depende
+  // de la duración de los segmentos: ~6 s con 2 s, ~25 s con 8 s.
+  const [naturalOffset, setNaturalOffset] = useState(0);
   // Spinner solo si el buffering supera 1.5s — micropausas del HLS no
   // dispararan más el loader visible y aparente que el stream "se traba"
   // cada pocos segundos.
@@ -165,21 +168,31 @@ const LivePlayerControls = ({
     if (!isPlaying) return;
     const interval = setInterval(() => {
       const video = playerRef.current?.video;
-      if (!video || !video.seekable.length) return;
+      // Sin muestra válida el offset natural vuelve a 0 en vez de conservar un
+      // valor viejo que inflaría los umbrales del pill "Volver al vivo".
+      if (!video || !video.seekable.length) { setNaturalOffset(0); return; }
       const liveEdge = video.seekable.end(video.seekable.length - 1);
       const c = video.currentTime;
-      if (!isFinite(liveEdge) || !isFinite(c)) return;
+      if (!isFinite(liveEdge) || !isFinite(c)) { setNaturalOffset(0); return; }
       const delta = liveEdge - c;
       setLiveDelta(delta > 0 ? delta : 0);
+      const syncPosition = playerRef.current?.getLiveSyncPosition?.() ?? null;
+      setNaturalOffset(
+        syncPosition != null && isFinite(syncPosition) && liveEdge > syncPosition
+          ? Math.round(liveEdge - syncPosition)
+          : 0,
+      );
     }, 1000);
     return () => clearInterval(interval);
   }, [isPlaying, playerRef]);
 
-  // Debe coincidir con `liveSyncDuration` del perfil activo en LiveHLSPlayer
-  // (3 para "low", 8 para "normal"/"smooth"/"dvr" — "dvr" usa la misma config
-  // hls.js que "smooth"). Un valor fijo hacía que el botón "EN VIVO" empeorara
+  // Respaldo para cuando hls.js no expone `liveSyncPosition` (path nativo
+  // Safari): aproxima la distancia de sync del perfil activo en LiveHLSPlayer
+  // (3 para "low"; 6 para "smooth"/"dvr" = 3 segmentos de 2 s). Con
+  // segmentos más largos la distancia real es mayor y se toma de hls.js
+  // (`naturalOffset`). Un valor fijo hacía que el botón "EN VIVO" empeorara
   // el retraso en modo `low`.
-  const liveSyncOffset = latencyMode === "low" ? 3 : 8;
+  const liveSyncOffset = latencyMode === "low" ? 3 : 6;
 
   // Timeline del modo "dvr": actualiza posición + ventana seekable en cada
   // 'timeupdate' del <video>, throttleado a ~500ms.
@@ -376,15 +389,19 @@ const LivePlayerControls = ({
       ? activeLabel ? `Auto · ${activeLabel}` : "Auto"
       : levels.find((l) => l.index === currentLevel)?.label || "Auto";
 
-  // Histéresis dura, relativa al `liveSyncOffset` del modo activo: con
-  // liveSyncDuration:8 el delta natural oscila 6-12s, así que el pill solo
-  // aparece si pasa los 20s (atraso real visible) y desaparece bajo 12s (zona
-  // normal) — sin cambios respecto al comportamiento previo. En modo `low`
-  // (offset 3) escalar proporcionalmente daría 7.5s / 4.5s, DENTRO de la
-  // banda de jitter normal de 2-7s documentada arriba — el pill flapearía.
-  // Por eso hay un piso absoluto: 10s / 5s.
-  const behindShowThreshold = Math.max(liveSyncOffset * 2.5, 10);
-  const behindHideThreshold = Math.max(liveSyncOffset * 1.5, 5);
+  // Histéresis dura, relativa a la distancia natural al filo del modo activo
+  // (la mayor entre el respaldo `liveSyncOffset` y la real de hls.js): el
+  // delta natural oscila alrededor de ese valor (6 s con segmentos de 2 s,
+  // ~25 s con los de 8 s), así que el pill solo aparece con 2.5x (atraso real
+  // visible) y desaparece bajo 1.5x (zona normal). Sin esto, con segmentos
+  // largos el pill "Volver al vivo" quedaba fijo y sin efecto, porque volver
+  // al vivo lleva a la misma distancia. En modo `low` (offset 3) escalar
+  // proporcionalmente daría 7.5s / 4.5s, DENTRO de la banda de jitter normal
+  // de 2-7s documentada arriba — el pill flapearía. Por eso hay un piso
+  // absoluto: 10s / 5s.
+  const effectiveSyncOffset = Math.max(liveSyncOffset, naturalOffset);
+  const behindShowThreshold = Math.max(effectiveSyncOffset * 2.5, 10);
+  const behindHideThreshold = Math.max(effectiveSyncOffset * 1.5, 5);
   useEffect(() => {
     if (isBehind && liveDelta < behindHideThreshold) setIsBehind(false);
     else if (!isBehind && liveDelta > behindShowThreshold) setIsBehind(true);

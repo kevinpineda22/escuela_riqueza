@@ -55,7 +55,22 @@ jobs:
           if [[ -z "$LIVE_ID" || -z "$VIDEO_UID" ]]; then
             echo "::error::Faltan live_id o video_uid"; exit 1
           fi
+          # Estos valores llegan a rutas de archivo, URLs y comandos: se aceptan solo con formato exacto.
+          if ! [[ "$LIVE_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+            echo "::error::live_id no es un UUID válido"; exit 1
+          fi
+          if ! [[ "$VIDEO_UID" =~ ^[a-f0-9]{32}$ ]]; then
+            echo "::error::video_uid no tiene el formato de Stream (32 caracteres hexadecimales)"; exit 1
+          fi
           echo "Sala: $LIVE_ID — Video: $VIDEO_UID"
+
+      - name: Verify the live has ended
+        # Misma regla que el Worker: nunca archivar (ni borrar de Stream) una sala en curso.
+        run: |
+          STATUS=$(curl -sS "$SUPABASE_URL/rest/v1/lives?select=status&id=eq.$LIVE_ID&limit=1" \
+            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" | jq -r '.[0].status // empty')
+          [[ "$STATUS" == "ended" ]] || { echo "::error::La sala no está finalizada (estado: ${STATUS:-desconocido})"; exit 1; }
 
       - name: Fetch video metadata from Stream
         id: meta
@@ -79,6 +94,8 @@ jobs:
 
       - name: Pick the highest-resolution video stream
         id: pick
+        env:
+          HLS_URL: ${{ steps.meta.outputs.hls }}
         run: |
           # El manifest trae varias calidades y ffmpeg, sin -map, toma la primera (360p).
           # Elegimos el stream de video con mayor altura y el primer stream de audio.
@@ -86,7 +103,7 @@ jobs:
           # Según la versión de ffprobe, un HLS con varias calidades sale como `.streams[]`
           # plano, agrupado en `.programs[].streams[]`, o ambos. Se leen las dos fuentes y
           # se deduplica por índice para no depender de la versión del runner.
-          PROBE=$(ffprobe -v error -show_streams -show_programs -show_entries stream=index,codec_type,height -of json "${{ steps.meta.outputs.hls }}")
+          PROBE=$(ffprobe -v error -show_streams -show_programs -show_entries stream=index,codec_type,height -of json "$HLS_URL")
           ALL='[.streams[]?, (.programs[]?.streams[]?)] | unique_by(.index)'
           VIDEO_IDX=$(echo "$PROBE" | jq -r "$ALL"' | map(select(.codec_type=="video" and .height != null)) | max_by(.height) | .index // empty')
           HEIGHT=$(echo "$PROBE"    | jq -r "$ALL"' | map(select(.codec_type=="video" and .height != null)) | max_by(.height) | .height // empty')
@@ -101,20 +118,26 @@ jobs:
           echo "Video stream #$VIDEO_IDX (${HEIGHT}p), audio stream #$AUDIO_IDX"
 
       - name: Remux HLS to MP4 (no re-encoding)
+        env:
+          HLS_URL: ${{ steps.meta.outputs.hls }}
+          VIDEO_IDX: ${{ steps.pick.outputs.video }}
+          AUDIO_IDX: ${{ steps.pick.outputs.audio }}
         run: |
           ffmpeg -hide_banner -loglevel warning -stats \
-            -i "${{ steps.meta.outputs.hls }}" \
-            -map 0:${{ steps.pick.outputs.video }} -map 0:${{ steps.pick.outputs.audio }} \
+            -i "$HLS_URL" \
+            -map "0:$VIDEO_IDX" -map "0:$AUDIO_IDX" \
             -c copy -movflags +faststart \
             "$LIVE_ID.mp4"
           ls -lh "$LIVE_ID.mp4"
 
       - name: Verify the MP4
         id: verify
+        env:
+          META_DURATION: ${{ steps.meta.outputs.duration }}
         run: |
           OUT=$(ffprobe -v error -show_entries format=duration,size -of json "$LIVE_ID.mp4")
           GOT=$(echo "$OUT" | jq -r '.format.duration | tonumber | floor')
-          WANT=$(echo "${{ steps.meta.outputs.duration }}" | jq -r 'tonumber | floor')
+          WANT=$(echo "$META_DURATION" | jq -r 'tonumber | floor')
           SIZE=$(echo "$OUT" | jq -r '.format.size')
           echo "Duración esperada: ${WANT}s — obtenida: ${GOT}s — tamaño: $SIZE bytes"
           # Toleramos ±5 s por los bordes de los segmentos HLS.
@@ -124,31 +147,65 @@ jobs:
           echo "seconds=$GOT" >> "$GITHUB_OUTPUT"
 
       - name: Upload to R2
+        id: upload
         run: |
+          # Clave única por video de Stream. DEBE coincidir con buildRecordingKey() en
+          # worker/src/archive-helpers.ts: si se cambia una, cambiar la otra.
+          KEY="recordings/$LIVE_ID/$VIDEO_UID.mp4"
+          ENDPOINT="https://$CF_ACCOUNT_ID.r2.cloudflarestorage.com"
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
+          LOCAL_SIZE=$(stat -c %s "$LIVE_ID.mp4")
+          # Nunca pisar un objeto existente: puede ser la única copia de otra grabación.
+          # Solo un 404 / Not Found significa "ausente"; cualquier otro error (red,
+          # credenciales, 5xx) aborta en vez de asumir que la clave está libre.
+          set +e
+          HEAD_OUT=$(aws s3api head-object --bucket "$R2_BUCKET" --key "$KEY" --endpoint-url "$ENDPOINT" 2>&1)
+          HEAD_RC=$?
+          set -e
+          if [[ $HEAD_RC -eq 0 ]]; then
+            REMOTE_SIZE=$(echo "$HEAD_OUT" | jq -r '.ContentLength')
+            if [[ "$REMOTE_SIZE" == "$LOCAL_SIZE" ]]; then
+              # Una pasada anterior subió el MP4 completo y no llegó a registrar: se retoma.
+              echo "::warning::$KEY ya está en R2 con el mismo tamaño ($LOCAL_SIZE bytes): se omite la subida"
+              exit 0
+            fi
+            echo "::error::$KEY ya existe en R2 con otro tamaño (R2: $REMOTE_SIZE, local: $LOCAL_SIZE): no se sobrescribe ni se borra de Stream"; exit 1
+          fi
+          if ! echo "$HEAD_OUT" | grep -qE '404|Not Found|NoSuchKey'; then
+            echo "::error::No se pudo comprobar si $KEY existe en R2: $HEAD_OUT"; exit 1
+          fi
           # aws-cli hace multipart solo para archivos grandes; R2 es S3-compatible.
-          aws s3 cp "$LIVE_ID.mp4" "s3://$R2_BUCKET/recordings/$LIVE_ID.mp4" \
-            --endpoint-url "https://$CF_ACCOUNT_ID.r2.cloudflarestorage.com" \
+          aws s3 cp "$LIVE_ID.mp4" "s3://$R2_BUCKET/$KEY" \
+            --endpoint-url "$ENDPOINT" \
             --content-type video/mp4 \
             --only-show-errors
-          echo "Subido a recordings/$LIVE_ID.mp4"
+          echo "Subido a $KEY"
 
       - name: Register in Supabase
+        env:
+          R2_KEY: ${{ steps.upload.outputs.key }}
+          MP4_BYTES: ${{ steps.verify.outputs.bytes }}
+          MP4_SECONDS: ${{ steps.verify.outputs.seconds }}
         run: |
           # Mismos campos que escribe el Worker al archivar por el camino normal.
           BODY=$(jq -n \
-            --arg key "recordings/$LIVE_ID.mp4" \
-            --argjson bytes "${{ steps.verify.outputs.bytes }}" \
-            --argjson secs "${{ steps.verify.outputs.seconds }}" \
+            --arg key "$R2_KEY" \
+            --argjson bytes "$MP4_BYTES" \
+            --argjson secs "$MP4_SECONDS" \
             --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             '{recording_r2_key:$key, recording_storage:"r2", recording_bytes:$bytes,
               recording_duration_seconds:$secs, recording_stream_uid:null, archived_at:$now}')
           CODE=$(curl -sS -o /tmp/patch.txt -w "%{http_code}" -X PATCH \
-            "$SUPABASE_URL/rest/v1/lives?id=eq.$LIVE_ID" \
+            "$SUPABASE_URL/rest/v1/lives?id=eq.$LIVE_ID&recording_stream_uid=eq.$VIDEO_UID" \
             -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
             -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
-            -H "Content-Type: application/json" -H "Prefer: return=minimal" \
+            -H "Content-Type: application/json" -H "Prefer: return=representation" \
             -d "$BODY")
           [[ "$CODE" =~ ^2 ]] || { echo "::error::Supabase respondió $CODE"; cat /tmp/patch.txt; exit 1; }
+          # El PATCH es condicional al uid de este video: debe afectar exactamente una
+          # fila, o la sala ya no apunta a él y NO se debe borrar de Stream.
+          ROWS=$(jq 'length' /tmp/patch.txt 2>/dev/null || echo "?")
+          [[ "$ROWS" == "1" ]] || { echo "::error::El registro afectó $ROWS filas (se esperaba 1); no se borra de Stream"; exit 1; }
           echo "Sala $LIVE_ID registrada como archivada en R2"
 
       - name: Delete from Stream
@@ -157,5 +214,5 @@ jobs:
           CODE=$(curl -sS -o /dev/null -w "%{http_code}" -X DELETE \
             "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/stream/$VIDEO_UID" \
             -H "Authorization: Bearer $CF_STREAM_API_TOKEN")
-          [[ "$CODE" =~ ^2 ]] || echo "::warning::No se pudo borrar de Stream (HTTP $CODE). La copia en R2 está bien; borralo a mano."
+          [[ "$CODE" =~ ^2 ]] || echo "::warning::No se pudo borrar de Stream (HTTP $CODE). La copia en R2 está bien; bórrelo a mano."
           echo "Listo."

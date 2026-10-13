@@ -1,6 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
+import {
+  EARLY_START_TOLERANCE_MS,
+  parseRecordingCreatedMs,
+  pickRecordingTarget,
+} from '../_lib/recordingTarget.js';
 
 export const config = { api: { bodyParser: false } };
 
@@ -61,7 +66,9 @@ interface CloudflarePayload {
   liveInput?: string;
   meta?: { name?: string; liveInputUid?: string };
   status?: string | { state?: string };
-  video?: { uid?: string; liveInput?: string };
+  // Fecha de creación de la grabación (el payload de video.ready es el objeto video).
+  created?: string;
+  video?: { uid?: string; liveInput?: string; created?: string };
 }
 
 function parseEvent(payload: CloudflarePayload): ParsedEvent {
@@ -169,30 +176,65 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (parsed.kind === 'recording_ready' && parsed.videoUid) {
       // Como todos los eventos comparten el mismo Live Input, matchear solo por
       // stream_live_input_id vincularía la grabación a CUALQUIER sala sin grabación
-      // de ese input — incluida una futura 'scheduled'. Apuntamos a la sala que
-      // realmente transmitió: la más reciente que ya arrancó ('ended' o 'live',
-      // este último cubre el caso 'live' + pausado), nunca una programada futura.
+      // de ese input. Reglas (incidente 2026-10-10):
+      //  - solo salas SIN archivar: una sala archivada ya tiene su copia en R2 y una
+      //    grabación de prueba posterior no debe volver a vincularse a ella;
+      //  - solo salas 'ended' o 'live' (este último cubre 'live' + pausado), nunca una
+      //    programada futura;
+      //  - por tiempo: la grabación debe haberse creado desde el inicio de la sala
+      //    (menos una tolerancia por arranques tempranos); gana la más reciente.
+      let createdMs = parseRecordingCreatedMs(payload.created ?? payload.video?.created);
+      if (createdMs === null) {
+        // Sin fecha en el payload: el evento llega al quedar lista la grabación, así
+        // que "ahora" es una cota válida (solo excluye salas que aún no empezaron).
+        console.warn('[cloudflare-webhook] video.ready sin fecha de creación; se usa la hora actual');
+        createdMs = Date.now();
+      }
+
       const { data: candidates, error: findErr } = await supabase
         .from('lives')
-        .select('id')
+        .select('id, status, starts_at, archived_at, recording_stream_uid')
         .eq('stream_live_input_id', parsed.liveInputId)
         .in('status', ['ended', 'live'])
         .is('recording_stream_uid', null)
+        .is('archived_at', null)
+        .lte('starts_at', new Date(createdMs + EARLY_START_TOLERANCE_MS).toISOString())
         .order('starts_at', { ascending: false })
-        .limit(1);
+        .limit(10);
       if (findErr) throw findErr;
 
-      const target = candidates?.[0];
+      const target = pickRecordingTarget(candidates ?? [], createdMs);
       if (!target) {
+        // Visible en los logs de Vercel: una parte extra de una clase partida queda
+        // sin vincular y hay que poder rastrearla.
+        console.warn(
+          `[cloudflare-webhook] video.ready sin sala destino: videoUid=${parsed.videoUid} liveInputId=${parsed.liveInputId} created=${new Date(createdMs).toISOString()} motivo=${
+            (candidates ?? []).length === 0
+              ? 'sin sala candidata (ya vinculada, archivada o fuera de horario)'
+              : 'ninguna sala candidata coincide con el horario de la grabación'
+          }`,
+        );
         return res.status(200).json({ ok: true, action: 'set_recording', affected: 0 });
       }
 
-      const { error } = await supabase
+      // Las condiciones se repiten en el UPDATE para no pisar una vinculación o un
+      // archivado que ocurrieron entre el SELECT y el UPDATE.
+      const { data: updated, error } = await supabase
         .from('lives')
         .update({ recording_stream_uid: parsed.videoUid })
-        .eq('id', target.id);
+        .eq('id', target.id)
+        .is('recording_stream_uid', null)
+        .is('archived_at', null)
+        .select('id');
       if (error) throw error;
-      return res.status(200).json({ ok: true, action: 'set_recording', affected: 1 });
+      if (!updated || updated.length === 0) {
+        console.warn(
+          `[cloudflare-webhook] video.ready no se vinculó: videoUid=${parsed.videoUid} liveInputId=${parsed.liveInputId} created=${new Date(createdMs).toISOString()} liveId=${target.id} motivo=carrera (la sala se vinculó o archivó entre la búsqueda y la actualización)`,
+        );
+      }
+      return res
+        .status(200)
+        .json({ ok: true, action: 'set_recording', affected: updated?.length || 0 });
     }
 
     return res.status(200).json({ ok: true, action: 'noop' });
