@@ -77,6 +77,10 @@ export function LikeButton({ targetType, targetId, liked, count, size = "md", re
           : "bg-ink/[0.04] light:bg-surface-subtle text-foreground-muted hover:bg-ink/10 hover:text-foreground-strong ring-1 ring-ink/5 hover:ring-ink/10"
       )}
       aria-pressed={optimisticLiked}
+      // El nombre es la acción y el contador, no el ícono: "Me gusta, 4".
+      aria-label={`${optimisticLiked ? "Quitar me gusta" : "Me gusta"}, ${optimisticCount}`}
+      // Free ve el contador; el botón explica (toast) en vez de desaparecer.
+      aria-disabled={readOnly || undefined}
     >
       <motion.span
         key={`${optimisticLiked}-${burst}`}
@@ -85,7 +89,7 @@ export function LikeButton({ targetType, targetId, liked, count, size = "md", re
         transition={{ type: "spring", stiffness: 500, damping: 14 }}
         className="relative inline-flex"
       >
-        <Heart size={iconSize} className={optimisticLiked ? "fill-accent" : ""} />
+        <Heart size={iconSize} className={optimisticLiked ? "fill-accent" : ""} aria-hidden />
         <AnimatePresence>
           {optimisticLiked && (
             <motion.span

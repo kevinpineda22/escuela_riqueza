@@ -18,16 +18,29 @@ vi.mock("motion/react", async () => {
 });
 
 // Video mínimo: el filo del vivo sale de `seekable.end`, el atraso de `currentTime`.
-function fakePlayer(currentTime = 92, liveEdge = 100, syncPosition: number | null = null) {
+function fakePlayer(currentTime = 92, liveEdge = 100, syncPosition: number | null = null, paused = false) {
+  // Contenedor real: los atajos de teclado se escuchan en el padre del video.
+  const container = document.createElement("div");
+  container.tabIndex = 0;
+  document.body.appendChild(container);
   const video = {
     currentTime,
-    paused: false,
+    paused,
     seekable: { length: 1, start: () => 0, end: () => liveEdge },
+    parentElement: container,
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
     play: vi.fn(() => Promise.resolve()),
   } as unknown as HTMLVideoElement;
-  return { current: { video, getLiveSyncPosition: () => syncPosition } as unknown as LiveHLSPlayerHandle };
+  const handle = {
+    video,
+    getLiveSyncPosition: () => syncPosition,
+    getSeekableRange: () => ({ start: 0, end: liveEdge }),
+    goLive: vi.fn(),
+    seekBy: vi.fn(),
+    seekTo: vi.fn(),
+  };
+  return { current: handle as unknown as LiveHLSPlayerHandle, handle, container };
 }
 
 const levels: QualityLevel[] = [
@@ -82,6 +95,95 @@ describe("LivePlayerControls", () => {
     expect(screen.getByRole("button", { name: "Activar sonido" })).toBeInTheDocument();
   });
 
+  it("el atraso se sigue actualizando con el video en pausa", () => {
+    const player = fakePlayer(50, 100, null, true);
+    renderControls({ playerRef: player, isPlaying: false });
+    act(() => { vi.advanceTimersByTime(1100); });
+    expect(screen.getByRole("button", { name: /Volver al vivo/ })).toHaveTextContent("−0:50");
+    // El filo avanza mientras el video sigue quieto: el atraso crece.
+    (player.handle.video as unknown as { seekable: unknown }).seekable = { length: 1, start: () => 0, end: () => 160 };
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(screen.getByRole("button", { name: /Volver al vivo/ })).toHaveTextContent("−1:50");
+  });
+
+  it("Volver al vivo usa la operación única del player (goLive)", () => {
+    const player = fakePlayer(50, 100);
+    renderControls({ playerRef: player });
+    act(() => { vi.advanceTimersByTime(1100); });
+    fireEvent.click(screen.getByRole("button", { name: /Volver al vivo/ }));
+    expect(player.handle.goLive).toHaveBeenCalledTimes(1);
+  });
+
+  it("Clase completa: retroceder y adelantar 10 s", () => {
+    const player = fakePlayer(50, 100);
+    renderControls({ playerRef: player, latencyMode: "dvr" });
+    fireEvent.click(screen.getByRole("button", { name: "Retroceder 10 segundos" }));
+    fireEvent.click(screen.getByRole("button", { name: "Adelantar 10 segundos" }));
+    expect(player.handle.seekBy).toHaveBeenNthCalledWith(1, -10);
+    expect(player.handle.seekBy).toHaveBeenNthCalledWith(2, 10);
+  });
+
+  it("Clase normal no muestra los saltos de 10 s", () => {
+    renderControls({ latencyMode: "smooth" });
+    expect(screen.queryByRole("button", { name: "Retroceder 10 segundos" })).not.toBeInTheDocument();
+  });
+
+  it("Clase completa: la barra de tiempo se lee con el atraso", () => {
+    const player = fakePlayer(25, 100);
+    renderControls({ playerRef: player, latencyMode: "dvr" });
+    act(() => { vi.advanceTimersByTime(1100); });
+    expect(screen.getByRole("slider", { name: "Posición en la clase" })).toHaveAttribute(
+      "aria-valuetext",
+      "25 segundos de 1 minuto 40 segundos, 1 minuto 15 segundos detrás del directo",
+    );
+  });
+
+  it("Escape cancela el arrastre sin buscar", () => {
+    const player = fakePlayer(25, 100);
+    renderControls({ playerRef: player, latencyMode: "dvr" });
+    act(() => { vi.advanceTimersByTime(1100); });
+    const slider = screen.getByRole("slider", { name: "Posición en la clase" });
+    fireEvent.change(slider, { target: { value: "5" } });
+    fireEvent.keyDown(slider, { key: "Escape" });
+    fireEvent.keyUp(slider, { key: "Escape" });
+    fireEvent.blur(slider);
+    expect(player.handle.seekTo).not.toHaveBeenCalled();
+  });
+
+  it("atajos con el foco en el reproductor: K pausa, M silencia, flechas ±10 s en Clase completa", () => {
+    const player = fakePlayer(50, 100);
+    const handlers = renderControls({ playerRef: player, latencyMode: "dvr" });
+    fireEvent.keyDown(player.container, { key: "k" });
+    fireEvent.keyDown(player.container, { key: "m" });
+    fireEvent.keyDown(player.container, { key: "ArrowLeft" });
+    expect(handlers.onTogglePlay).toHaveBeenCalledTimes(1);
+    expect(handlers.onToggleMute).toHaveBeenCalledTimes(1);
+    expect(player.handle.seekBy).toHaveBeenCalledWith(-10);
+  });
+
+  it("los atajos no tocan lo que se escribe en un campo", () => {
+    const player = fakePlayer(50, 100);
+    const input = document.createElement("input");
+    player.container.appendChild(input);
+    const handlers = renderControls({ playerRef: player, latencyMode: "dvr" });
+    fireEvent.keyDown(input, { key: "k" });
+    fireEvent.keyDown(input, { key: " " });
+    expect(handlers.onTogglePlay).not.toHaveBeenCalled();
+  });
+
+  it("tras Reintentar (otro video) los listeners se enganchan al nodo nuevo", () => {
+    const first = fakePlayer(50, 100);
+    const handlers = { onTogglePlay: vi.fn(), onToggleMute: vi.fn(), onSelectLevel: vi.fn(), onSelectLatencyMode: vi.fn() };
+    const props = { isPlaying: true, isBuffering: false, isMuted: false, levels, currentLevel: -1, latencyMode: "dvr" as const, ...handlers };
+    const { rerender } = render(<LivePlayerControls playerRef={first} mediaKey={0} {...props} />);
+    const second = fakePlayer(50, 100);
+    // El ref es el mismo objeto; cambia el video que apunta (remontaje por `key`).
+    (first as { current: LiveHLSPlayerHandle }).current = second.current;
+    rerender(<LivePlayerControls playerRef={first} mediaKey={1} {...props} />);
+    const events = vi.mocked(second.handle.video.addEventListener).mock.calls.map(([evt]) => evt);
+    expect(events).toEqual(expect.arrayContaining(["seeking", "timeupdate", "enterpictureinpicture"]));
+  });
+
   it("al filo del vivo dice EN VIVO (F43)", () => {
     renderControls({ playerRef: fakePlayer(92, 100) });
     act(() => { vi.advanceTimersByTime(1100); });
@@ -91,9 +193,10 @@ describe("LivePlayerControls", () => {
   it("atrasado ofrece Volver al vivo, con el atraso a la vista (F43)", () => {
     renderControls({ playerRef: fakePlayer(50, 100) });
     act(() => { vi.advanceTimersByTime(1100); });
-    const goLive = screen.getByRole("button", { name: /Volver al vivo \(vas 50 s atrasado\)/ });
+    const goLive = screen.getByRole("button", { name: "Volver al vivo (estás 50 segundos detrás del directo)" });
     expect(goLive).toHaveTextContent("VOLVER AL VIVO");
-    expect(goLive).toHaveTextContent("-50 s");
+    // Exacto, no redondeado a minutos.
+    expect(goLive).toHaveTextContent("−0:50");
   });
 
   it("reproduciendo y sin uso, la barra se oculta a los 3 s", () => {
@@ -197,7 +300,7 @@ describe("LivePlayerControls — botón Segundo plano", () => {
   it("atrasado: 'AL VIVO' corto en celular y la frase completa en pantallas grandes", () => {
     renderControls({ playerRef: fakePlayer(50, 100) });
     act(() => { vi.advanceTimersByTime(1100); });
-    const goLive = screen.getByRole("button", { name: /Volver al vivo \(vas 50 s atrasado\)/, hidden: true });
+    const goLive = screen.getByRole("button", { name: /Volver al vivo \(estás 50 segundos/, hidden: true });
     // En celular "VOLVER AL VIVO -50 s" se partía en dos renglones: la versión corta
     // solo se muestra bajo el breakpoint sm y la completa desde sm en adelante.
     const corta = within(goLive).getByText("AL VIVO");

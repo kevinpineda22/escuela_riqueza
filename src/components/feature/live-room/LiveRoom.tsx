@@ -3,8 +3,10 @@ import { cn } from "@/lib/utils";
 import { useIsDesktop, useIsShortLandscape } from "@/hooks/useMediaQuery";
 import LiveViewersDialog from "@/components/feature/LiveViewersDialog";
 import { getLiveRoomLayout } from "./liveRoomLayout";
-import { getLiveRoomStatus } from "./liveRoomStatus";
+import { getLiveRoomStatus, withEndedContinuation } from "./liveRoomStatus";
 import { useLivePlayback } from "./useLivePlayback";
+import { usePendingClass } from "./usePendingClass";
+import { usePreferencesStore } from "@/stores/preferences.store";
 import { useLivePresence } from "./useLivePresence";
 import { LiveChatPanel } from "./LiveChatPanel";
 import { LiveChatToggle } from "./LiveChatToggle";
@@ -53,8 +55,20 @@ export function LiveRoom({
 }: LiveRoomProps) {
   const layout = getLiveRoomLayout(useIsDesktop(), useIsShortLandscape());
   const sideBySide = layout !== "stacked";
-  const status = getLiveRoomStatus(live, signalConnected);
   const [playerRef, playback] = useLivePlayback();
+  const latencyMode = usePreferencesStore((s) => s.liveLatencyMode);
+  const hasPendingClass = usePendingClass(playerRef, latencyMode, playback.playerKey);
+  const baseStatus = getLiveRoomStatus(live, signalConnected);
+  // P0: finalizar la sala ya no le quita la clase a quien iba atrasado. La
+  // decisión se toma en la transición a "ended" con el último muestreo del
+  // player (`usePendingClass`); entrar a una sala ya finalizada no continúa.
+  const [continuingAfterEnd, setContinuingAfterEnd] = useState(false);
+  const [prevEnded, setPrevEnded] = useState(baseStatus.isEnded);
+  if (baseStatus.isEnded !== prevEnded) {
+    setPrevEnded(baseStatus.isEnded);
+    setContinuingAfterEnd(baseStatus.isEnded && hasPendingClass);
+  }
+  const status = withEndedContinuation(baseStatus, continuingAfterEnd);
   // Sin presencia en una sala finalizada: no hay "conectados" a algo que terminó.
   const presence = useLivePresence({ liveId: live.id, user: currentUser, anonId: anonPresenceId, enabled: !status.isEnded });
   const [showViewersList, setShowViewersList] = useState(false);
@@ -120,6 +134,8 @@ export function LiveRoom({
           status={status}
           playerRef={playerRef}
           playback={playback}
+          continuingAfterEnd={continuingAfterEnd}
+          onLeaveEndedContinuation={() => setContinuingAfterEnd(false)}
           replay={replay}
           endedNotice={endedNotice}
           waitingLabel={branding.waitingLabel}

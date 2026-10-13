@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import { HelpCircle, MessageCircle, BookOpen, Sparkles } from "lucide-react";
-import type { CommunityAuthor, CommunityCategory } from "@/lib/api/community";
+import type { CommunityAuthor, CommunityCategory, CommunityComment } from "@/lib/api/community";
 
 export interface CategoryMeta {
   id: CommunityCategory;
@@ -77,4 +77,17 @@ export function formatRelative(iso: string): string {
   const d = Math.floor(h / 24);
   if (d < 7) return `hace ${d} d`;
   return date.toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+/**
+ * Une la lista recién traída con la que ya estaba a la vista. Un comentario
+ * propio agregado localmente después de que salió el pedido no viene en la
+ * respuesta: se conserva si es más nuevo que lo último que trajo el servidor.
+ * Sin duplicados por id.
+ */
+export function mergeComments(fetched: CommunityComment[], current: CommunityComment[]): CommunityComment[] {
+  const ids = new Set(fetched.map((c) => c.id));
+  const newest = fetched.reduce((max, c) => (c.created_at > max ? c.created_at : max), "");
+  const localOnly = current.filter((c) => !ids.has(c.id) && c.created_at > newest);
+  return [...fetched, ...localOnly];
 }

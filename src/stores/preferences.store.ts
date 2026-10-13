@@ -13,12 +13,14 @@ interface PreferencesState {
   animationsEnabled: boolean;
   toggleAnimations: () => void;
   setAnimationsEnabled: (enabled: boolean) => void;
-  // Modo de latencia del player de lives. "smooth" (default): ~6-10s atrás del
-  // edge, buffer 20s, ideal para conexiones residenciales/mobile. "low": ~3-5s
-  // atrás del edge, buffer 10s, requiere red estable o aparecen latigazos.
-  // "dvr": ventana DVR completa de Cloudflare (~14.6s de latencia, ventana
-  // seekable que crece con la transmisión) con timeline scrubbable y resume
-  // de posición.
+  // Modo de clase del player de lives. "dvr" (default, "Clase completa"):
+  // ventana DVR de Cloudflare con timeline, retroceso y retomar posición; en
+  // producción dio 0 stalls en 50 min (2026-10-10). "smooth" ("Clase normal ·
+  // Fluidez"): 3 segmentos del filo, siempre en el directo. "low": LL-HLS,
+  // ~3 s del filo, requiere red estable.
+  // El default solo alcanza a quien no tiene un valor guardado: `merge`
+  // conserva cualquier modo persistido. Un "smooth" guardado no se distingue
+  // de uno heredado del default anterior, así que no se migra a escondidas.
   liveLatencyMode: LiveLatencyMode;
   setLiveLatencyMode: (mode: LiveLatencyMode) => void;
   // Apariencia local del navegador. "system" es una preferencia, no un tercer
@@ -27,6 +29,10 @@ interface PreferencesState {
   setThemePreference: (preference: ThemePreference) => void;
 }
 
+export const DEFAULT_LIVE_LATENCY_MODE: LiveLatencyMode = "dvr";
+
+const LIVE_LATENCY_MODES: readonly LiveLatencyMode[] = ["smooth", "low", "dvr"];
+
 export const usePreferencesStore = create<PreferencesState>()(
   persist(
     (set) => ({
@@ -34,7 +40,7 @@ export const usePreferencesStore = create<PreferencesState>()(
       toggleAnimations: () =>
         set((state) => ({ animationsEnabled: !state.animationsEnabled })),
       setAnimationsEnabled: (enabled) => set({ animationsEnabled: enabled }),
-      liveLatencyMode: "smooth",
+      liveLatencyMode: DEFAULT_LIVE_LATENCY_MODE,
       setLiveLatencyMode: (mode) => set({ liveLatencyMode: mode }),
       themePreference: DEFAULT_THEME_PREFERENCE,
       setThemePreference: (preference) =>
@@ -55,6 +61,10 @@ export const usePreferencesStore = create<PreferencesState>()(
           ...current,
           ...stored,
           themePreference: parseThemePreference(stored.themePreference),
+          // Un valor dañado o desconocido cae al default en vez de llegar al player.
+          liveLatencyMode: LIVE_LATENCY_MODES.includes(stored.liveLatencyMode as LiveLatencyMode)
+            ? (stored.liveLatencyMode as LiveLatencyMode)
+            : current.liveLatencyMode,
         };
       },
     }

@@ -3,7 +3,7 @@
 > Lista viva de mejoras/verificaciones en curso. Actualizar estado a medida que se cierran.
 > Estados: 🔴 pendiente · 🟡 en progreso · 🟢 hecho · ⚪ bloqueado (falta info)
 
-_Última actualización: 2026-09-21_
+_Última actualización: 2026-10-13 (propuesta documental de Clase completa, comunidad y calidad; estados anteriores conservados)_
 
 ---
 
@@ -161,3 +161,20 @@ _Última actualización: 2026-09-21_
 **Reversión:** `APPEARANCE_SELECTOR_ENABLED` de vuelta a `import.meta.env.DEV` solo oculta el selector. Para devolver a todos al oscuro sin borrar preferencias, sumar `data-theme-lock="dark"` al `<html>` de `index.html`.
 
 **Archivos:** `src/lib/theme.ts`, `src/components/feature/AppearanceToggle.tsx`, `index.html`, `docs/MODO_CLARO_ESPECIFICACION.md`
+
+---
+
+## 8. Clase completa predeterminada, comunidad y calidad de emisión 🟡
+
+**Pedido del 2026-10-13:** primero documentar; en la misma fecha, implementar todo lo que no es de kbps. El código está hecho y con tests; falta la prueba con transmisión real y en dispositivos.
+
+| Prioridad | Resultado | Estado |
+|---|---|---|
+| P0 | Continuidad DVR al finalizar | 🟡 Código: el alumno de Clase completa con >45 s de atraso conserva el player al finalizar, sin recargas (con Input ID recargar trae otra emisión o un 204), con aviso y «Salir»; si el medio se traba o termina, pasa al cierre. **Falta:** probar en un vivo real y el paso automático a la grabación (necesita Video ID por emisión, no Input ID) |
+| P1 | Clase completa predeterminada, reversible | 🟢 Código: default `dvr` solo para quien no tiene modo guardado; un valor guardado se respeta. Menú «Modo de clase», ±10 s, atajos, atraso exacto (−1:35) que se actualiza en pausa, «Volver al vivo» único que respeta la pausa de sala, salida «Ver en Clase normal» si DVR falla |
+| P1 | Integridad del reproductor | 🟢 Código: sin autoplay bajo el overlay de pausa de sala al recargar; seek dentro de intervalos reales; listeners reenganchados tras «Reintentar»; menú visible en pantalla completa; resume por emisión (`id:starts_at`). **Falta:** Safari nativo sigue sin restore ni backoff (rama sin hls.js) |
+| P1 | Paridad móvil/Safari | 🔴 Sin probar en dispositivos: matriz física de `LIVE_UX_REDESIGN_AUDIT.md` |
+| P1 | Comunidad coherente en claro/oscuro | 🟢 Código: error ≠ vacío ≠ vacío por filtro, refresco sin skeleton, respuestas viejas descartadas, scroll al volver, métricas honestas, publicar bloqueado con imagen subiendo, errores en línea, menú y confirmaciones accesibles, avatar/escudo sin residuos oscuros. **Falta:** revisión visual en ambos temas con sesión real |
+| P1 | Ensayo de calidad 6000 → 8000 → 10.000 kbps | 🔴 Solo documentado, a pedido: perfil OBS y manifiesto real sin comprobar |
+
+**Plan y criterios:** [actualización de UX](./LIVE_UX_REDESIGN_AUDIT.md#actualización-2026-10-13--clase-completa-predeterminada-y-comunidad) y [guía de OBS, sección 5](./OBS_CONFIGURACION.md#5-mejor-calidad-podemos-transmitir-a-10000-kbps). 6000 es la base documentada, no una medición del OBS actual. 10.000 es un ensayo viable, no una configuración aprobada ni una garantía de mayor resolución.

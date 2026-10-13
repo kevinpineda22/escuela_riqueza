@@ -20,6 +20,16 @@ export function isSameLive(a: LiveEvent | null, b: LiveEvent | null): boolean {
 }
 
 /**
+ * La sala finalizó pero el alumno sigue viendo lo que le faltaba en "Clase
+ * completa": el player queda montado hasta que el medio termina, se traba o
+ * el alumno sale.
+ */
+export function withEndedContinuation(status: LiveRoomStatus, continuing: boolean): LiveRoomStatus {
+  if (!continuing || !status.isEnded) return status;
+  return { ...status, showPlayer: true };
+}
+
+/**
  * Estado visible de la sala, común a la sala VIP y a la pública.
  * `signalConnected` es la señal de OBS que consulta la sala VIP (Cloudflare);
  * la pública no la tiene y pasa `false`.

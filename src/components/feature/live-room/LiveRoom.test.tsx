@@ -24,6 +24,10 @@ vi.mock("@/components/feature/LiveHLSPlayer", () => ({
 }));
 vi.mock("@/components/feature/LivePlayerControls", () => ({ default: () => null }));
 
+// Muestreo del atraso real: se controla desde cada test.
+const pendingClass = { value: false };
+vi.mock("./usePendingClass", () => ({ usePendingClass: () => pendingClass.value }));
+
 const student = { id: "user-1", fullName: "Alumno", avatarUrl: null, plan: "vip" } as User;
 
 const baseLive = {
@@ -57,11 +61,48 @@ describe("LiveRoom", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     onIncoming = null;
+    pendingClass.value = false;
     channel.on.mockReturnValue(channel);
     channel.subscribe.mockReturnValue(channel);
     channel.untrack.mockResolvedValue(undefined);
     (useIsDesktop as ReturnType<typeof vi.fn>).mockReturnValue(true);
     (useIsShortLandscape as ReturnType<typeof vi.fn>).mockReturnValue(false);
+  });
+
+  it("finalizar con clase pendiente: el alumno sigue viendo y puede salir", () => {
+    pendingClass.value = true;
+    const live = { ...baseLive, status: "live" } as LiveEvent;
+    const { rerender } = renderRoom({ live });
+    expect(screen.getByTestId("hls-player")).toBeInTheDocument();
+
+    rerender(
+      <MemoryRouter>
+        <LiveRoom live={{ ...live, status: "ended" }} currentUser={student} backTo={{ path: "/", label: "Volver" }} renderChat={renderChat} />
+      </MemoryRouter>
+    );
+    expect(screen.getByTestId("hls-player")).toBeInTheDocument();
+    expect(screen.getByText(/La clase terminó/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Salir" }));
+    expect(screen.queryByTestId("hls-player")).not.toBeInTheDocument();
+    expect(screen.getByText("Transmisión finalizada")).toBeInTheDocument();
+  });
+
+  it("finalizar sin atraso: muestra el cierre como siempre", () => {
+    const live = { ...baseLive, status: "live" } as LiveEvent;
+    const { rerender } = renderRoom({ live });
+    rerender(
+      <MemoryRouter>
+        <LiveRoom live={{ ...live, status: "ended" }} currentUser={student} backTo={{ path: "/", label: "Volver" }} renderChat={renderChat} />
+      </MemoryRouter>
+    );
+    expect(screen.queryByTestId("hls-player")).not.toBeInTheDocument();
+  });
+
+  it("entrar a una sala ya finalizada no continúa nada", () => {
+    pendingClass.value = true;
+    renderRoom({ live: { ...baseLive, status: "ended" } as LiveEvent });
+    expect(screen.queryByTestId("hls-player")).not.toBeInTheDocument();
   });
 
   it("programada: muestra la espera con el título y el chat", () => {
