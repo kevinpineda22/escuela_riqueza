@@ -17,7 +17,7 @@ interface ConfirmDialogProps {
  * navegador, que no respeta claro/oscuro, no muestra progreso y en celular
  * se veía como un error del sistema.
  * Se abre controlado, sin `DialogTrigger`: Radix devuelve el foco al trigger y,
- * sin uno, lo dejaba en el body. Acá se recuerda quién tenía el foco al abrir.
+ * sin uno, lo dejaba en el body. Aquí se recuerda quién tenía el foco al abrir.
  */
 export function ConfirmDialog({ open, onOpenChange, title, description, confirmLabel, onConfirm }: ConfirmDialogProps) {
   const [working, setWorking] = useState(false);

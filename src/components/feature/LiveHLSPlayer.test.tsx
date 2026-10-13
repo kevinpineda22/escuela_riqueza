@@ -496,6 +496,59 @@ describe('LiveHLSPlayer recovery', () => {
     expect(playSpy).not.toHaveBeenCalled();
   });
 
+  describe('seekBy hacia adelante', () => {
+    function setup(currentTime: number) {
+      const { container, ref } = renderPlayerWithRef();
+      const video = driveVideo(container, { paused: false, currentTime });
+      mockSeekable(video, [[0, 100]]);
+      hlsInstance.liveSyncPosition = 94;
+      return { video, ref };
+    }
+
+    it('+10 s que rebasaría la posición de sync cae en ella, no en el filo', () => {
+      const { video, ref } = setup(88);
+      act(() => { ref.current?.seekBy(10); });
+      expect(video.currentTime).toBe(94);
+    });
+
+    it('pausado, +10 s que rebasaría la sync se detiene en ella sin reanudar', () => {
+      const { container, ref } = renderPlayerWithRef();
+      const video = driveVideo(container, { paused: true, currentTime: 88 });
+      mockSeekable(video, [[0, 100]]);
+      hlsInstance.liveSyncPosition = 94;
+      const playSpy = vi.fn().mockReturnValue(Promise.resolve());
+      video.play = playSpy;
+      act(() => { ref.current?.seekBy(10); });
+      expect(video.currentTime).toBe(94);
+      expect(playSpy).not.toHaveBeenCalled();
+    });
+
+    it('+10 s lejos del filo avanza 10 s', () => {
+      const { video, ref } = setup(20);
+      act(() => { ref.current?.seekBy(10); });
+      expect(video.currentTime).toBe(30);
+    });
+
+    it('si ya está en la posición de sync o más allá, +10 s no se mueve', () => {
+      const { video, ref } = setup(96);
+      act(() => { ref.current?.seekBy(10); });
+      expect(video.currentTime).toBe(96);
+    });
+
+    it('sin liveSyncPosition (Safari nativo) usa el respaldo de 6 s sobre el filo', () => {
+      const { video, ref } = setup(90);
+      hlsInstance.liveSyncPosition = null;
+      act(() => { ref.current?.seekBy(10); });
+      expect(video.currentTime).toBe(94);
+    });
+
+    it('retroceder -10 s sigue moviendo 10 s hacia atrás', () => {
+      const { video, ref } = setup(50);
+      act(() => { ref.current?.seekBy(-10); });
+      expect(video.currentTime).toBe(40);
+    });
+  });
+
   it('seekTo dentro de un hueco de la ventana va al borde real más cercano', () => {
     const { container, ref } = renderPlayerWithRef();
     const video = driveVideo(container, { paused: false, currentTime: 0 });
@@ -657,6 +710,57 @@ describe('LiveHLSPlayer recovery', () => {
       act(() => { video.currentTime = 990; video.dispatchEvent(new Event('seeking')); });
       act(() => { vi.advanceTimersByTime(5_000); });
 
+      expect(store.has(KEY)).toBe(false);
+    });
+
+    // Los botones y las flechas retroceden de 10 en 10: ningún salto aislado
+    // supera el umbral, pero la serie sí es un retroceso deliberado.
+    it('seis saltos seguidos de -10 s guardan la posición', () => {
+      const { store, video } = setupDvr(965);
+      act(() => { video.dispatchEvent(new Event('timeupdate')); });
+      for (let i = 1; i <= 6; i++) {
+        act(() => { video.currentTime = 965 - 10 * i; video.dispatchEvent(new Event('seeking')); });
+      }
+
+      act(() => { vi.advanceTimersByTime(5_000); });
+
+      expect(JSON.parse(store.get(KEY) as string).position).toBe(905);
+    });
+
+    it('un solo salto de -10 s no guarda', () => {
+      const { store, video } = setupDvr(965);
+      act(() => { video.dispatchEvent(new Event('timeupdate')); });
+      act(() => { video.currentTime = 955; video.dispatchEvent(new Event('seeking')); });
+
+      act(() => { vi.advanceTimersByTime(5_000); });
+
+      expect(store.has(KEY)).toBe(false);
+    });
+
+    it('saltos de -10 s separados por reproducción no se acumulan', () => {
+      const { store, video } = setupDvr(965);
+      act(() => { video.dispatchEvent(new Event('timeupdate')); });
+      act(() => { video.currentTime = 955; video.dispatchEvent(new Event('seeking')); });
+      // Reproduce 8 s desde ahí: la serie termina y el ancla se renueva.
+      act(() => { video.currentTime = 963; video.dispatchEvent(new Event('timeupdate')); });
+      act(() => { video.currentTime = 953; video.dispatchEvent(new Event('seeking')); });
+
+      act(() => { vi.advanceTimersByTime(5_000); });
+
+      expect(store.has(KEY)).toBe(false);
+    });
+
+    it('la serie de -10 s se apaga al volver al vivo', () => {
+      const { store, video } = setupDvr(965);
+      act(() => { video.dispatchEvent(new Event('timeupdate')); });
+      for (let i = 1; i <= 3; i++) {
+        act(() => { video.currentTime = 965 - 10 * i; video.dispatchEvent(new Event('seeking')); });
+      }
+      act(() => { vi.advanceTimersByTime(5_000); });
+      expect(store.has(KEY)).toBe(true);
+
+      act(() => { video.currentTime = 990; video.dispatchEvent(new Event('seeking')); });
+      act(() => { vi.advanceTimersByTime(5_000); });
       expect(store.has(KEY)).toBe(false);
     });
 

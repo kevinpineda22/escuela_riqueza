@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { usePreferencesStore } from "@/stores/preferences.store";
+import { DEFAULT_LIVE_LATENCY_MODE, usePreferencesStore } from "@/stores/preferences.store";
 import { PREFERENCES_STORAGE_KEY } from "@/lib/theme";
 
 const store = () => usePreferencesStore.getState();
@@ -14,7 +14,7 @@ describe("preferencias: tema", () => {
     localStorage.clear();
     usePreferencesStore.setState({
       animationsEnabled: true,
-      liveLatencyMode: "smooth",
+      liveLatencyMode: DEFAULT_LIVE_LATENCY_MODE,
       themePreference: "dark",
     });
   });
@@ -44,7 +44,7 @@ describe("preferencias: tema", () => {
     const saved = JSON.parse(localStorage.getItem(PREFERENCES_STORAGE_KEY) ?? "{}");
     expect(saved.state).toEqual({
       animationsEnabled: true,
-      liveLatencyMode: "smooth",
+      liveLatencyMode: DEFAULT_LIVE_LATENCY_MODE,
       themePreference: "system",
     });
   });
@@ -54,5 +54,42 @@ describe("preferencias: tema", () => {
     store().setThemePreference("light");
 
     expect(store().animationsEnabled).toBe(false);
+  });
+});
+
+describe("preferencias: modo de clase del player", () => {
+  afterEach(() => {
+    localStorage.clear();
+    usePreferencesStore.setState({ liveLatencyMode: DEFAULT_LIVE_LATENCY_MODE });
+  });
+
+  it("un store nuevo, sin nada guardado, arranca en Clase completa (dvr)", async () => {
+    expect(usePreferencesStore.getInitialState().liveLatencyMode).toBe("dvr");
+
+    localStorage.clear();
+    usePreferencesStore.setState(usePreferencesStore.getInitialState());
+    await usePreferencesStore.persist.rehydrate();
+
+    expect(store().liveLatencyMode).toBe("dvr");
+  });
+
+  it("un modo guardado inválido cae al default", async () => {
+    for (const invalid of ["foo", null]) {
+      await rehydrateFrom({ liveLatencyMode: invalid });
+      expect(store().liveLatencyMode).toBe("dvr");
+    }
+  });
+
+  it("un registro sin modo guardado usa el default", async () => {
+    await rehydrateFrom({ animationsEnabled: false });
+    expect(store().liveLatencyMode).toBe("dvr");
+  });
+
+  it("un modo guardado válido se respeta, incluido smooth", async () => {
+    await rehydrateFrom({ liveLatencyMode: "smooth" });
+    expect(store().liveLatencyMode).toBe("smooth");
+
+    await rehydrateFrom({ liveLatencyMode: "low" });
+    expect(store().liveLatencyMode).toBe("low");
   });
 });

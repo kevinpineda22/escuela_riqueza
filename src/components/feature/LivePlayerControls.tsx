@@ -429,6 +429,9 @@ const LivePlayerControls = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
       if (isTypingTarget(e.target)) return;
+      // Con el menú de ajustes abierto el teclado es del menú (flechas, letras
+      // de búsqueda): los atajos del reproductor no lo tocan.
+      if (e.target instanceof Element && e.target.closest('[role="menu"]')) return;
       const actions = shortcutsRef.current;
       const target = e.target instanceof HTMLElement ? e.target : null;
       const isRange = target instanceof HTMLInputElement && target.type === "range";
