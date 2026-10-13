@@ -57,6 +57,14 @@ jobs:
           fi
           echo "Sala: $LIVE_ID — Video: $VIDEO_UID"
 
+      - name: Verify the live has ended
+        # Misma regla que el Worker: nunca archivar (ni borrar de Stream) una sala en curso.
+        run: |
+          STATUS=$(curl -sS "$SUPABASE_URL/rest/v1/lives?select=status&id=eq.$LIVE_ID&limit=1" \
+            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" | jq -r '.[0].status // empty')
+          [[ "$STATUS" == "ended" ]] || { echo "::error::La sala no está finalizada (estado: ${STATUS:-desconocido})"; exit 1; }
+
       - name: Fetch video metadata from Stream
         id: meta
         run: |
@@ -124,19 +132,29 @@ jobs:
           echo "seconds=$GOT" >> "$GITHUB_OUTPUT"
 
       - name: Upload to R2
+        id: upload
         run: |
+          # Clave única por video de Stream. DEBE coincidir con buildRecordingKey() en
+          # worker/src/archive-helpers.ts: si se cambia una, cambiar la otra.
+          KEY="recordings/$LIVE_ID/$VIDEO_UID.mp4"
+          ENDPOINT="https://$CF_ACCOUNT_ID.r2.cloudflarestorage.com"
+          # Nunca pisar un objeto existente: puede ser la única copia de otra grabación.
+          if aws s3api head-object --bucket "$R2_BUCKET" --key "$KEY" --endpoint-url "$ENDPOINT" > /dev/null 2>&1; then
+            echo "::error::$KEY ya existe en R2: no se sobrescribe ni se borra de Stream"; exit 1
+          fi
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
           # aws-cli hace multipart solo para archivos grandes; R2 es S3-compatible.
-          aws s3 cp "$LIVE_ID.mp4" "s3://$R2_BUCKET/recordings/$LIVE_ID.mp4" \
-            --endpoint-url "https://$CF_ACCOUNT_ID.r2.cloudflarestorage.com" \
+          aws s3 cp "$LIVE_ID.mp4" "s3://$R2_BUCKET/$KEY" \
+            --endpoint-url "$ENDPOINT" \
             --content-type video/mp4 \
             --only-show-errors
-          echo "Subido a recordings/$LIVE_ID.mp4"
+          echo "Subido a $KEY"
 
       - name: Register in Supabase
         run: |
           # Mismos campos que escribe el Worker al archivar por el camino normal.
           BODY=$(jq -n \
-            --arg key "recordings/$LIVE_ID.mp4" \
+            --arg key "${{ steps.upload.outputs.key }}" \
             --argjson bytes "${{ steps.verify.outputs.bytes }}" \
             --argjson secs "${{ steps.verify.outputs.seconds }}" \
             --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \

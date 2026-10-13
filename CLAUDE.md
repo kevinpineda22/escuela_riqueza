@@ -250,7 +250,8 @@ Endpoint `/api/stream/cloudflare-webhook.ts` recibe eventos de Cloudflare Stream
 **Comportamiento:**
 - `live_input.connected` → si hay sala `is_active=true` con ese `stream_live_input_id` en `scheduled`, pasa automáticamente a `status='live'`.
 - `live_input.disconnected` → marca `is_paused=true` (NO finaliza; finalizar es decisión manual del admin para evitar perder la sesión por microcortes de OBS).
-- `video.ready` con `liveInput` set → vincula `recording_stream_uid` a la sala correspondiente (solo si está vacío, no sobreescribe).
+- `video.ready` con `liveInput` set → vincula `recording_stream_uid` a la sala del mismo Live Input que esté sin archivar (`archived_at` null), en estado `ended`/`live`, sin grabación vinculada y cuyo `starts_at` (menos 60 min de tolerancia) sea anterior a la creación de la grabación; si hay varias gana la más reciente. Nunca sobrescribe un uid existente ni toca salas archivadas (`api/_lib/recordingTarget.ts`).
+- **Archivado a R2** (`worker/`): solo salas `status = 'ended'`. Clave única por video `recordings/<liveId>/<streamVideoUid>.mp4`; nunca sobrescribe un objeto existente. Una clase partida en varias grabaciones (OBS detenido/iniciado) solo archiva la parte vinculada: el resto hay que unirlo a mano.
 
 **Seguridad:**
 - Valida firma HMAC-SHA256 con `CLOUDFLARE_WEBHOOK_SECRET`. Header `Webhook-Signature: time=<ts>,sig1=<hex>`. Rechaza eventos con `time` fuera de ±5 min (anti-replay).

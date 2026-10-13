@@ -14,6 +14,14 @@ Tres fallos medidos en producción el 2026-10-10 durante un vivo real (OBS envia
 - **Clase completa — retomar**: la posición solo se guarda tras un retroceso deliberado (>10 s) y se borra al volver al vivo. Antes se guardaba también con la latencia natural (25-39 s con segmentos largos) y al reingresar retomaba hasta 44 min atrás.
 - Tests: 5 de los nuevos fallan con el código anterior y pasan con el arreglo.
 
+### Grabaciones — una clase partida ya no puede perder ni pisar grabaciones
+Incidente 2026-10-10: el vivo se partió en 4 grabaciones (OBS detenido e iniciado dos veces). El Worker archivó en R2 y borró de Stream la parte 1 **mientras la clase seguía en vivo**, y como la clave de R2 era una sola por sala, archivar otra parte habría sobrescrito la única copia. Ese mismo día una grabación de prueba quedó vinculada a una sala ya archivada del 2026-10-03. La clase se recuperó a mano (unión de partes en R2; ver `docs/RECORDINGS_ARCHITECTURE.md`).
+- **Worker**: solo archiva salas con `status = 'ended'`; el botón manual "Archivar en R2" responde 409 si la sala no terminó, y el workflow de grabaciones largas verifica lo mismo.
+- **Clave de R2 única por video**: `recordings/<liveId>/<streamVideoUid>.mp4` (Worker y Action idénticos, `worker/src/archive-helpers.ts`). Antes de subir se hace HEAD: si la clave existe no se sobrescribe ni se borra de Stream. Las filas viejas conservan `recordings/<liveId>.mp4`; `recording-url.ts` lee la clave de la base.
+- **Webhook `video.ready`**: ya no vincula grabaciones a salas archivadas y elige la sala por tiempo (creación de la grabación ≥ `starts_at` − 60 min; gana la más reciente). Lógica pura en `api/_lib/recordingTarget.ts`, con tests.
+- **Deploy**: merge a master (webhook y Action) y luego `wrangler deploy` desde `worker/`.
+- **Pendiente conocido**: las partes 2+ de una clase partida siguen sin vincularse ni archivarse solas; hay que unirlas a mano.
+
 ## 2026-10-09
 
 ### Seguridad — cualquier usuario podía hacerse admin

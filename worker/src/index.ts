@@ -4,6 +4,9 @@
  * Copia el MP4 de una grabación de Cloudflare Stream a R2 y borra el video de
  * Stream (corta el cobro recurrente de storage). Ver docs/RECORDINGS_ARCHITECTURE.md.
  *
+ * Solo archiva salas finalizadas (`status = 'ended'`) y nunca sobrescribe un objeto
+ * existente en R2 (clave única por video de Stream).
+ *
  * Dos disparadores, misma lógica (`archiveOne`):
  *   - `fetch`     → POST manual desde api/stream/archive-recording.ts (botón admin),
  *                   autenticado con secreto compartido.
@@ -17,6 +20,8 @@
  *
  * Body (fetch): { live_id: string, stream_video_uid: string }
  */
+
+import { buildLiveStatusUrl, buildPendingLivesUrl, buildRecordingKey } from './archive-helpers';
 
 export interface Env {
   RECORDINGS: R2Bucket;
@@ -45,6 +50,8 @@ type ArchiveResult =
   // El video está sano y se reproduce, pero Stream no puede generar su MP4 (p. ej.
   // supera la duración máxima). Se queda en Stream: NO se desvincula.
   | { status: 'unarchivable'; message: string }
+  // La clave destino ya existe en R2: se rechaza sin pisarla y SIN borrar de Stream.
+  | { status: 'conflict'; key: string; message: string }
   | { status: 'failed'; message: string; httpStatus: number }
   | { status: 'error'; message: string; detail?: string; httpStatus: number };
 
@@ -238,7 +245,16 @@ async function archiveOne(
     return { status: 'error', message: 'No se pudo descargar el MP4', httpStatus: 502 };
   }
 
-  const key = `recordings/${liveId}.mp4`;
+  // Nunca pisar un objeto existente: en R2 puede estar la única copia de otra grabación.
+  const key = buildRecordingKey(liveId, streamVideoUid);
+  if (await env.RECORDINGS.head(key)) {
+    console.error(`[archive] ${key} ya existe en R2: no se sobrescribe ni se borra de Stream`);
+    return {
+      status: 'conflict',
+      key,
+      message: 'Ya existe un objeto con esa clave en R2; no se sobrescribe ni se borra de Stream',
+    };
+  }
   const putObject = await env.RECORDINGS.put(key, mp4Res.body, {
     httpMetadata: { contentType: 'video/mp4' },
   });
@@ -322,23 +338,32 @@ async function markFailed(liveId: string, env: Env): Promise<void> {
   });
 }
 
+/** Estado actual de la sala, o null si no existe / no se pudo consultar. */
+async function fetchLiveStatus(liveId: string, env: Env): Promise<string | null> {
+  const res = await fetch(buildLiveStatusUrl(env.SUPABASE_URL, liveId), {
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+    },
+  });
+  if (!res.ok) return null;
+  const rows = (await res.json()) as { status?: string }[];
+  return rows[0]?.status ?? null;
+}
+
 /**
- * Grabaciones listas para archivar: tienen recording_stream_uid (la grabación
- * quedó en Stream) y todavía no se archivaron (archived_at null). El archivado
+ * Grabaciones listas para archivar: la sala está finalizada (status 'ended'), tiene
+ * recording_stream_uid (la grabación quedó en Stream) y todavía no se archivó
+ * (archived_at null). El archivado
  * exitoso pone recording_stream_uid en null, así que dejan de aparecer solas.
  */
 async function fetchPendingLives(
   env: Env,
 ): Promise<{ id: string; recording_stream_uid: string }[]> {
-  const url =
-    `${env.SUPABASE_URL}/rest/v1/lives` +
-    `?select=id,recording_stream_uid` +
-    `&recording_stream_uid=not.is.null` +
-    `&archived_at=is.null` +
-    // Límite bajo a propósito: cada grabación de ~3 h pesa varios GB. Procesar de a
-    // pocas por tick evita reventar los límites de duración del Worker; el backlog
-    // se limpia en ticks sucesivos.
-    `&limit=3`;
+  // Límite bajo a propósito: cada grabación de ~3 h pesa varios GB. Procesar de a
+  // pocas por tick evita reventar los límites de duración del Worker; el backlog
+  // se limpia en ticks sucesivos.
+  const url = buildPendingLivesUrl(env.SUPABASE_URL, 3);
 
   const res = await fetch(url, {
     headers: {
@@ -376,8 +401,18 @@ export default {
       return json({ error: 'Falta live_id o stream_video_uid' }, 400);
     }
 
+    // Mismo criterio que el cron: no archivar (ni borrar de Stream) una sala que no
+    // terminó. Cubre también el botón manual si se pulsa durante el vivo.
+    const liveStatus = await fetchLiveStatus(live_id, env);
+    if (liveStatus !== 'ended') {
+      return json({ error: 'La sala no está finalizada; se archiva cuando termine el vivo' }, 409);
+    }
+
     const result = await archiveOne(live_id, stream_video_uid, env);
 
+    if (result.status === 'conflict') {
+      return json({ error: result.message, key: result.key }, 409);
+    }
     if (result.status === 'error') {
       return json({ error: result.message, detail: result.detail }, result.httpStatus);
     }
@@ -409,7 +444,9 @@ export default {
               result.status === 'processing' ? `processing ${result.percent}%` : result.status;
             console.log(`[cron] ${live.id}: ${label}`);
 
-            if (result.status === 'failed') {
+            if (result.status === 'conflict') {
+              console.error(`[cron] ${live.id}: ${result.message} (${result.key})`);
+            } else if (result.status === 'failed') {
               console.warn(`[cron] ${live.id}: descartada (${result.message})`);
               await markFailed(live.id, env);
             } else if (result.status === 'unarchivable') {
