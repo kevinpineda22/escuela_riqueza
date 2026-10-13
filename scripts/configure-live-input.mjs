@@ -18,7 +18,13 @@
  *
  * Defaults:
  *   liveInputId    = 950f6b77844e5a369bbeea208b2c428e  (el "Principal" del admin)
- *   timeoutSeconds = 60
+ *   timeoutSeconds = 300  (el valor desplegado desde 2026-09-19, verificado por
+ *                          API el 2026-10-10)
+ *
+ * El default ES el valor de producción: correr el script sin argumentos no
+ * debe cambiar nada. Era 60, y correrlo "para chequear" bajaba el input de
+ * 300 a 60: con 60 s, un Stop/Start de OBS vuelve a partir la clase en varias
+ * grabaciones (ver CHANGELOG 2026-09-19).
  *
  * El token necesita permiso Stream:Edit.
  */
@@ -30,7 +36,7 @@ const API_TOKEN =
   process.env.CLOUDFLARE_STREAM_TOKEN;
 
 const LIVE_INPUT_ID = process.argv[2] || '950f6b77844e5a369bbeea208b2c428e';
-const TIMEOUT_SECONDS = Number(process.argv[3] ?? 60);
+const TIMEOUT_SECONDS = Number(process.argv[3] ?? 300);
 
 if (!ACCOUNT_ID || !API_TOKEN) {
   console.error(
