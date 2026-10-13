@@ -296,7 +296,8 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       let clearStableTimer: (() => void) | null = null;
       let llCatchUpInterval: number | null = null;
       let handleLLCatchUpOnPlay: (() => void) | null = null;
-      let handleWatchdogSeek: (() => void) | null = null;
+      let handleWatchdogSeek: ((e?: Event) => void) | null = null;
+      let handleWatchdogTimeUpdate: (() => void) | null = null;
 
       if (Hls.isSupported()) {
         hls = new Hls({
@@ -636,9 +637,26 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
         let lastTime = video.currentTime;
         let stalledFor = 0;
         let advancingFor = 0;
-        // Un seek (en "dvr", retroceder con la barra o `seekTo`) mueve
-        // `currentTime` de golpe: se re-ancla la referencia del watchdog.
-        handleWatchdogSeek = () => {
+        // Un seek del usuario (en "dvr", retroceder con la barra o `seekTo`) mueve
+        // `currentTime` de golpe: se re-ancla la referencia del watchdog. Solo
+        // cuenta si el salto supera WATCHDOG_SEEK_MIN_S respecto de la posición
+        // previa: hls.js también hace seeks internos pequeños (saltar huecos,
+        // empujones, sincronización al vivo) y reiniciar el contador con ellos
+        // podría enmascarar un estancamiento real para siempre.
+        const WATCHDOG_SEEK_MIN_S = 1;
+        let preSeekTime = video.currentTime;
+        let bigSeekPending = false;
+        handleWatchdogTimeUpdate = () => {
+          if (!video.seeking) preSeekTime = video.currentTime;
+        };
+        video.addEventListener("timeupdate", handleWatchdogTimeUpdate);
+        handleWatchdogSeek = (e?: Event) => {
+          if (e?.type === "seeking") {
+            bigSeekPending = Math.abs(video.currentTime - preSeekTime) > WATCHDOG_SEEK_MIN_S;
+            preSeekTime = video.currentTime;
+          }
+          if (!bigSeekPending) return;
+          if (e?.type === "seeked") bigSeekPending = false;
           lastTime = video.currentTime;
           stalledFor = 0;
           advancingFor = 0;
@@ -646,6 +664,7 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
         video.addEventListener("seeking", handleWatchdogSeek);
         video.addEventListener("seeked", handleWatchdogSeek);
         stallTimer = window.setInterval(() => {
+          if (!video.seeking) preSeekTime = video.currentTime;
           if (!hls || video.paused || video.ended) { stalledFor = 0; advancingFor = 0; lastTime = video.currentTime; return; }
           // Avance = `currentTime` cambió, hacia adelante O hacia atrás. Con
           // `>` solo se contaba hacia adelante: tras retroceder 10 min quedaba
@@ -703,6 +722,7 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           video.removeEventListener("seeking", handleWatchdogSeek);
           video.removeEventListener("seeked", handleWatchdogSeek);
         }
+        if (handleWatchdogTimeUpdate) video.removeEventListener("timeupdate", handleWatchdogTimeUpdate);
         if (pendingReloadTimeout !== null) window.clearTimeout(pendingReloadTimeout);
         if (reloadCooldownTimeout !== null) window.clearTimeout(reloadCooldownTimeout);
         clearStableTimer?.();

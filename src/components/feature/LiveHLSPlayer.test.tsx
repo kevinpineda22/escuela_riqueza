@@ -545,6 +545,22 @@ describe('LiveHLSPlayer recovery', () => {
       act(() => { vi.advanceTimersByTime(1_000); });
       expect(hlsInstance.loadSource).toHaveBeenCalledTimes(1);
     });
+
+    it('seeks internos pequeños (< 1 s) no enmascaran un estancamiento real', () => {
+      const { container } = renderPlayer({ latencyMode: 'dvr' });
+      const video = driveVideo(container, { paused: false, currentTime: 1000 });
+      act(() => { vi.advanceTimersByTime(1_000); });
+      hlsInstance.loadSource.mockClear();
+
+      // currentTime congelado; hls.js dispara seeks internos (sin salto real) cada 3 s.
+      for (let i = 0; i < 4; i++) {
+        act(() => { vi.advanceTimersByTime(3_000); });
+        act(() => { video.dispatchEvent(new Event('seeking')); video.dispatchEvent(new Event('seeked')); });
+      }
+      // 12 s de congelamiento + 1 s de backoff de la recarga.
+      act(() => { vi.advanceTimersByTime(1_500); });
+      expect(hlsInstance.loadSource).toHaveBeenCalledTimes(1);
+    });
   });
 
   // 2026-10-10: con segmentos largos la latencia natural de "dvr" es 25-39 s;

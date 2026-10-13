@@ -168,10 +168,12 @@ const LivePlayerControls = ({
     if (!isPlaying) return;
     const interval = setInterval(() => {
       const video = playerRef.current?.video;
-      if (!video || !video.seekable.length) return;
+      // Sin muestra válida el offset natural vuelve a 0 en vez de conservar un
+      // valor viejo que inflaría los umbrales del pill "Volver al vivo".
+      if (!video || !video.seekable.length) { setNaturalOffset(0); return; }
       const liveEdge = video.seekable.end(video.seekable.length - 1);
       const c = video.currentTime;
-      if (!isFinite(liveEdge) || !isFinite(c)) return;
+      if (!isFinite(liveEdge) || !isFinite(c)) { setNaturalOffset(0); return; }
       const delta = liveEdge - c;
       setLiveDelta(delta > 0 ? delta : 0);
       const syncPosition = playerRef.current?.getLiveSyncPosition?.() ?? null;

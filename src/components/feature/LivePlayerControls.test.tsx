@@ -18,7 +18,7 @@ vi.mock("motion/react", async () => {
 });
 
 // Video mínimo: el filo del vivo sale de `seekable.end`, el atraso de `currentTime`.
-function fakePlayer(currentTime = 92, liveEdge = 100) {
+function fakePlayer(currentTime = 92, liveEdge = 100, syncPosition: number | null = null) {
   const video = {
     currentTime,
     paused: false,
@@ -27,7 +27,7 @@ function fakePlayer(currentTime = 92, liveEdge = 100) {
     removeEventListener: vi.fn(),
     play: vi.fn(() => Promise.resolve()),
   } as unknown as HTMLVideoElement;
-  return { current: { video, getLiveSyncPosition: () => null } as unknown as LiveHLSPlayerHandle };
+  return { current: { video, getLiveSyncPosition: () => syncPosition } as unknown as LiveHLSPlayerHandle };
 }
 
 const levels: QualityLevel[] = [
@@ -131,6 +131,45 @@ describe("LivePlayerControls", () => {
     fireEvent.click(surface, { detail: 1 });
 
     expect(onTogglePlay).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Umbrales del pill "Volver al vivo" con distancia natural real de hls.js.
+describe("LivePlayerControls — pill Volver al vivo según la distancia natural", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const goLive = () => screen.queryByRole("button", { name: /Volver al vivo/, hidden: true });
+
+  it("Fluidez con distancia natural de 25 s: a 30 s de atraso no aparece", () => {
+    // filo 100, liveSyncPosition 75 => offset natural 25; currentTime 70 => atraso 30.
+    renderControls({ playerRef: fakePlayer(70, 100, 75) });
+    act(() => { vi.advanceTimersByTime(1100); });
+    expect(goLive()).not.toBeInTheDocument();
+  });
+
+  it("Fluidez con distancia natural de 25 s: a 70 s de atraso aparece", () => {
+    renderControls({ playerRef: fakePlayer(30, 100, 75) });
+    act(() => { vi.advanceTimersByTime(1100); });
+    expect(goLive()).toBeInTheDocument();
+  });
+
+  it("modo low con ~3 s de distancia natural conserva los pisos de 10 s / 5 s", () => {
+    // 3 * 2.5 = 7.5 s dentro del jitter normal: sin el piso de 10 s el pill flapearía.
+    renderControls({ latencyMode: "low", playerRef: fakePlayer(92, 100, 97) });
+    act(() => { vi.advanceTimersByTime(1100); });
+    expect(goLive()).not.toBeInTheDocument();
+  });
+
+  it("modo low con ~3 s de distancia natural muestra el pill pasando los 10 s", () => {
+    renderControls({ latencyMode: "low", playerRef: fakePlayer(88, 100, 97) });
+    act(() => { vi.advanceTimersByTime(1100); });
+    expect(goLive()).toBeInTheDocument();
   });
 });
 

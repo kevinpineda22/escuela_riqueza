@@ -21,7 +21,14 @@
  * Body (fetch): { live_id: string, stream_video_uid: string }
  */
 
-import { buildLiveStatusUrl, buildPendingLivesUrl, buildRecordingKey } from './archive-helpers';
+import {
+  buildLiveStatusUrl,
+  buildPendingLivesUrl,
+  buildRecordingKey,
+  buildRegisterUrl,
+  decideExistingObject,
+  parseContentLength,
+} from './archive-helpers';
 
 export interface Env {
   RECORDINGS: R2Bucket;
@@ -239,48 +246,76 @@ async function archiveOne(
     return { status: 'processing', percent };
   }
 
-  // 2. Descargar el MP4 de Stream y subirlo a R2 (streaming, sin bufferear en memoria).
-  const mp4Res = await fetch(def.url, { headers: cfHeaders });
-  if (!mp4Res.ok || !mp4Res.body) {
-    return { status: 'error', message: 'No se pudo descargar el MP4', httpStatus: 502 };
-  }
-
-  // Nunca pisar un objeto existente: en R2 puede estar la única copia de otra grabación.
+  // 2. Subir el MP4 a R2 (streaming, sin bufferear en memoria). Nunca se pisa un
+  //    objeto existente: en R2 puede estar la única copia de otra grabación.
   const key = buildRecordingKey(liveId, streamVideoUid);
-  if (await env.RECORDINGS.head(key)) {
-    console.error(`[archive] ${key} ya existe en R2: no se sobrescribe ni se borra de Stream`);
-    return {
-      status: 'conflict',
-      key,
-      message: 'Ya existe un objeto con esa clave en R2; no se sobrescribe ni se borra de Stream',
-    };
-  }
-  const putObject = await env.RECORDINGS.put(key, mp4Res.body, {
-    httpMetadata: { contentType: 'video/mp4' },
-  });
-  const bytes = putObject?.size ?? Number(mp4Res.headers.get('content-length')) ?? null;
+  let bytes: number;
 
-  // 3. Actualizar Supabase (service role, bypass RLS) vía REST.
-  const patchRes = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/lives?id=eq.${encodeURIComponent(liveId)}`,
-    {
-      method: 'PATCH',
-      headers: {
-        apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-        Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
-        'Content-Type': 'application/json',
-        Prefer: 'return=minimal',
-      },
-      body: JSON.stringify({
-        recording_r2_key: key,
-        recording_storage: 'r2',
-        recording_bytes: bytes,
-        recording_duration_seconds: durationSeconds,
-        recording_stream_uid: null,
-        archived_at: new Date().toISOString(),
-      }),
+  const conflict = (message: string): ArchiveResult => {
+    console.error(`[archive] ${key}: ${message}`);
+    return { status: 'conflict', key, message };
+  };
+
+  const existing = await env.RECORDINGS.head(key);
+  if (existing) {
+    // Puede ser una pasada anterior que subió el MP4 pero no llegó a registrar la
+    // base. Si el tamaño coincide con el MP4 de Stream se retoma; si no, se rechaza.
+    const headRes = await fetch(def.url, { method: 'HEAD', headers: cfHeaders });
+    const expected = headRes.ok ? parseContentLength(headRes.headers.get('content-length')) : null;
+    if (decideExistingObject(existing.size, expected) === 'refuse') {
+      return conflict(
+        'Ya existe un objeto con esa clave en R2 con tamaño distinto o desconocido; no se sobrescribe ni se borra de Stream',
+      );
+    }
+    console.warn(`[archive] ${key} ya estaba completo en R2: se retoma el registro`);
+    bytes = existing.size;
+  } else {
+    const mp4Res = await fetch(def.url, { headers: cfHeaders });
+    if (!mp4Res.ok || !mp4Res.body) {
+      await mp4Res.body?.cancel().catch(() => undefined);
+      return { status: 'error', message: 'No se pudo descargar el MP4', httpStatus: 502 };
+    }
+    const expected = parseContentLength(mp4Res.headers.get('content-length'));
+    // `onlyIf` cierra la carrera entre el head() y el put(): si otro proceso creó el
+    // objeto en medio, R2 devuelve null en vez de pisarlo.
+    const putObject = await env.RECORDINGS.put(key, mp4Res.body, {
+      httpMetadata: { contentType: 'video/mp4' },
+      onlyIf: { etagDoesNotMatch: '*' },
+    });
+    if (putObject === null) {
+      await mp4Res.body.cancel().catch(() => undefined);
+      const now = await env.RECORDINGS.head(key);
+      if (!now || decideExistingObject(now.size, expected) === 'refuse') {
+        return conflict(
+          'Otro proceso creó el objeto en R2 durante la subida y su tamaño no coincide; no se sobrescribe ni se borra de Stream',
+        );
+      }
+      console.warn(`[archive] ${key} lo creó otro proceso con el tamaño esperado: se retoma el registro`);
+      bytes = now.size;
+    } else {
+      bytes = putObject.size;
+    }
+  }
+
+  // 3. Actualizar Supabase (service role, bypass RLS) vía REST. El PATCH es
+  //    condicional al uid de ESTE video y debe afectar exactamente una fila.
+  const patchRes = await fetch(buildRegisterUrl(env.SUPABASE_URL, liveId, streamVideoUid), {
+    method: 'PATCH',
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
     },
-  );
+    body: JSON.stringify({
+      recording_r2_key: key,
+      recording_storage: 'r2',
+      recording_bytes: bytes,
+      recording_duration_seconds: durationSeconds,
+      recording_stream_uid: null,
+      archived_at: new Date().toISOString(),
+    }),
+  });
   if (!patchRes.ok) {
     // La copia a R2 ya está hecha; NO borramos de Stream si no pudimos
     // registrar el cambio, para no perder la referencia.
@@ -290,6 +325,17 @@ async function archiveOne(
       message: 'Copiado a R2 pero falló actualizar la base',
       detail,
       httpStatus: 500,
+    };
+  }
+  const affected = (await patchRes.json().catch(() => null)) as unknown[] | null;
+  if (!Array.isArray(affected) || affected.length !== 1) {
+    console.error(
+      `[archive] ${liveId}: el registro afectó ${Array.isArray(affected) ? affected.length : '?'} filas (se esperaba 1); no se borra ${streamVideoUid} de Stream`,
+    );
+    return {
+      status: 'error',
+      message: 'Copiado a R2 pero la sala ya no apunta a este video; no se borra de Stream',
+      httpStatus: 409,
     };
   }
 
@@ -338,7 +384,10 @@ async function markFailed(liveId: string, env: Env): Promise<void> {
   });
 }
 
-/** Estado actual de la sala, o null si no existe / no se pudo consultar. */
+/**
+ * Estado actual de la sala, o null si no existe. LANZA si Supabase no responde o
+ * devuelve error, para no confundir "no se pudo consultar" con "no finalizada".
+ */
 async function fetchLiveStatus(liveId: string, env: Env): Promise<string | null> {
   const res = await fetch(buildLiveStatusUrl(env.SUPABASE_URL, liveId), {
     headers: {
@@ -346,7 +395,7 @@ async function fetchLiveStatus(liveId: string, env: Env): Promise<string | null>
       Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
     },
   });
-  if (!res.ok) return null;
+  if (!res.ok) throw new Error(`Supabase respondió ${res.status}`);
   const rows = (await res.json()) as { status?: string }[];
   return rows[0]?.status ?? null;
 }
@@ -403,7 +452,13 @@ export default {
 
     // Mismo criterio que el cron: no archivar (ni borrar de Stream) una sala que no
     // terminó. Cubre también el botón manual si se pulsa durante el vivo.
-    const liveStatus = await fetchLiveStatus(live_id, env);
+    let liveStatus: string | null;
+    try {
+      liveStatus = await fetchLiveStatus(live_id, env);
+    } catch (err) {
+      console.error('[archive] no se pudo consultar el estado de la sala:', err);
+      return json({ error: 'No se pudo consultar el estado de la sala; vuelva a intentarlo en un momento' }, 502);
+    }
     if (liveStatus !== 'ended') {
       return json({ error: 'La sala no está finalizada; se archiva cuando termine el vivo' }, 409);
     }

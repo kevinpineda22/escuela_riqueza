@@ -205,6 +205,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const target = pickRecordingTarget(candidates ?? [], createdMs);
       if (!target) {
+        // Visible en los logs de Vercel: una parte extra de una clase partida queda
+        // sin vincular y hay que poder rastrearla.
+        console.warn(
+          `[cloudflare-webhook] video.ready sin sala destino: videoUid=${parsed.videoUid} liveInputId=${parsed.liveInputId} created=${new Date(createdMs).toISOString()} motivo=${
+            (candidates ?? []).length === 0
+              ? 'sin sala candidata (ya vinculada, archivada o fuera de horario)'
+              : 'ninguna sala candidata coincide con el horario de la grabación'
+          }`,
+        );
         return res.status(200).json({ ok: true, action: 'set_recording', affected: 0 });
       }
 
@@ -218,6 +227,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .is('archived_at', null)
         .select('id');
       if (error) throw error;
+      if (!updated || updated.length === 0) {
+        console.warn(
+          `[cloudflare-webhook] video.ready no se vinculó: videoUid=${parsed.videoUid} liveInputId=${parsed.liveInputId} created=${new Date(createdMs).toISOString()} liveId=${target.id} motivo=carrera (la sala se vinculó o archivó entre la búsqueda y la actualización)`,
+        );
+      }
       return res
         .status(200)
         .json({ ok: true, action: 'set_recording', affected: updated?.length || 0 });

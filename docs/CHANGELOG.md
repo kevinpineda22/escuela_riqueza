@@ -20,7 +20,14 @@ Incidente 2026-10-10: el vivo se partió en 4 grabaciones (OBS detenido e inicia
 - **Clave de R2 única por video**: `recordings/<liveId>/<streamVideoUid>.mp4` (Worker y Action idénticos, `worker/src/archive-helpers.ts`). Antes de subir se hace HEAD: si la clave existe no se sobrescribe ni se borra de Stream. Las filas viejas conservan `recordings/<liveId>.mp4`; `recording-url.ts` lee la clave de la base.
 - **Webhook `video.ready`**: ya no vincula grabaciones a salas archivadas y elige la sala por tiempo (creación de la grabación ≥ `starts_at` − 60 min; gana la más reciente). Lógica pura en `api/_lib/recordingTarget.ts`, con tests.
 - **Deploy**: merge a master (webhook y Action) y luego `wrangler deploy` desde `worker/`.
-- **Pendiente conocido**: las partes 2+ de una clase partida siguen sin vincularse ni archivarse solas; hay que unirlas a mano.
+- **Pendiente conocido**: las partes 2+ de una clase partida siguen sin vincularse ni archivarse solas; hay que unirlas a mano. El webhook ahora deja un `console.warn` (videoUid, liveInputId, fecha, motivo) cuando un `video.ready` no se vincula, para verlo en los logs de Vercel.
+
+### Grabaciones y reproductor — endurecimiento tras la revisión previa al push
+- **Worker, reintento idempotente**: si una pasada ya subió el MP4 a R2 pero no llegó a registrar la base, la siguiente retoma el registro y el borrado en Stream cuando el tamaño coincide; si difiere o es desconocido, rechaza sin sobrescribir ni borrar. Sin esto, la protección "nunca sobrescribir" convertía una falla parcial en una traba permanente. HEAD antes de abrir la descarga, escritura condicional de R2 (`onlyIf`) y orden determinista en la consulta de pendientes.
+- **Antes de borrar de Stream** (Worker y workflow): el registro en la base es condicional al `recording_stream_uid` de ese video y exige exactamente 1 fila afectada.
+- **Workflow `archive-long-recording`**: valida `live_id` (UUID) y `video_uid` (32 hex), pasa los outputs por `env:` y solo trata un 404 como "ausente" en R2 (antes cualquier error de credenciales o red contaba como ausente).
+- **Botón manual de archivado**: si Supabase no responde devuelve 502 en vez de un 409 engañoso.
+- **Reproductor**: el watchdog solo se reinicia con saltos de más de 1 s, así los seeks internos de hls.js no ocultan un estancamiento real. La distancia natural al vivo de `LivePlayerControls` vuelve a 0 sin muestra válida, con tests de los umbrales de "Volver al vivo".
 
 ## 2026-10-09
 
