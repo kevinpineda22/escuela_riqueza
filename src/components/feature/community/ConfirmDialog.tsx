@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -15,10 +15,13 @@ interface ConfirmDialogProps {
 /**
  * Confirmación destructiva con el tema de la app. Reemplaza `confirm()` del
  * navegador, que no respeta claro/oscuro, no muestra progreso y en celular
- * se veía como un error del sistema. Radix devuelve el foco al disparador.
+ * se veía como un error del sistema.
+ * Se abre controlado, sin `DialogTrigger`: Radix devuelve el foco al trigger y,
+ * sin uno, lo dejaba en el body. Acá se recuerda quién tenía el foco al abrir.
  */
 export function ConfirmDialog({ open, onOpenChange, title, description, confirmLabel, onConfirm }: ConfirmDialogProps) {
   const [working, setWorking] = useState(false);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
 
   const handleConfirm = async () => {
     if (working) return;
@@ -35,7 +38,21 @@ export function ConfirmDialog({ open, onOpenChange, title, description, confirmL
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!working) onOpenChange(v); }}>
-      <DialogContent className="max-w-md gap-5 p-6 sm:p-7">
+      <DialogContent
+        className="max-w-md gap-5 p-6 sm:p-7"
+        onOpenAutoFocus={() => {
+          returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        }}
+        onCloseAutoFocus={(e) => {
+          const target = returnFocusRef.current;
+          returnFocusRef.current = null;
+          // Si el disparador ya no existe (se eliminó lo que se confirmaba), Radix decide.
+          if (target?.isConnected) {
+            e.preventDefault();
+            target.focus();
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="text-xl font-bold text-foreground-strong">{title}</DialogTitle>
           {description && <DialogDescription className="text-foreground-muted">{description}</DialogDescription>}

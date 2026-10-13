@@ -678,7 +678,9 @@ const LivePlayerControls = ({
                     type="button"
                     onClick={() => { handleSeekBy(-SEEK_STEP_S); wakeControls(); }}
                     aria-label={`Retroceder ${SEEK_STEP_S} segundos`}
-                    className={CONTROL_BUTTON}
+                    // Bajo 360 px no entra junto a "AL VIVO −13:20": quedan la barra
+                    // de tiempo y las flechas del teclado.
+                    className={cn(CONTROL_BUTTON, "hidden min-[360px]:inline-flex")}
                   >
                     <RotateCcw size={20} />
                   </button>
@@ -722,7 +724,7 @@ const LivePlayerControls = ({
                 onClick={() => { handleGoLive(); wakeControls(); }}
                 aria-label={isBehind ? `Volver al vivo (estás ${spokenClock(liveDelta)} detrás del directo)` : "En vivo"}
                 className={cn(
-                  "flex items-center gap-1.5 sm:gap-2 ml-1 min-h-11 -my-2 px-2 rounded-full text-[10px] sm:text-xs font-black tracking-widest transition-colors cursor-pointer active:scale-95",
+                  "flex shrink-0 items-center gap-1.5 sm:gap-2 ml-1 min-h-11 -my-2 px-2 rounded-full whitespace-nowrap text-[10px] sm:text-xs font-black tracking-widest transition-colors cursor-pointer active:scale-95",
                   isBehind
                     ? "text-foreground-strong bg-ink/15 hover:bg-ink/25"
                     : "text-red-500 hover:text-danger"
@@ -730,7 +732,8 @@ const LivePlayerControls = ({
               >
                 {isBehind ? (
                   <>
-                    <span className="w-2 h-2 rounded-full bg-fg-60" />
+                    {/* Bajo 360 px el punto no entra con un atraso de horas (−1:02:15). */}
+                    <span className="hidden min-[360px]:block w-2 h-2 rounded-full bg-fg-60" />
                     {/* En celular "VOLVER AL VIVO -1:30" se partía en dos renglones
                         (medido: 320/360/375 px). La pill gris ya comunica que es una
                         acción; el aria-label mantiene la frase completa. */}

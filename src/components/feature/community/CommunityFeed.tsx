@@ -149,6 +149,8 @@ export function CommunityFeed({ currentUserId, isAdmin, canWrite }: CommunityFee
   };
 
   const loading = status === "loading";
+  const pinned = posts.filter((p) => p.is_pinned);
+  const regular = posts.filter((p) => !p.is_pinned);
   const categoryLabel = category ? CATEGORIES.find((cat) => cat.id === category)?.label : null;
 
   if (selectedPostId) {
@@ -377,12 +379,9 @@ export function CommunityFeed({ currentUserId, isAdmin, canWrite }: CommunityFee
         </motion.div>
       ) : (
         <motion.div layout className="space-y-3">
+          {/* Hijos directos con key, sin fragmento en medio: AnimatePresence
+              sigue cada hijo por su key para animar entradas y salidas. */}
           <AnimatePresence mode="popLayout" initial={false}>
-            {(() => {
-              const pinned = posts.filter((p) => p.is_pinned);
-              const regular = posts.filter((p) => !p.is_pinned);
-              return (
-                <>
                   {pinned.length > 0 && (
                     <motion.div
                       key="pinned-header"
@@ -437,9 +436,6 @@ export function CommunityFeed({ currentUserId, isAdmin, canWrite }: CommunityFee
                       }
                     />
                   ))}
-                </>
-              );
-            })()}
           </AnimatePresence>
         </motion.div>
       )}

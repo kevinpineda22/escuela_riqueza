@@ -26,7 +26,9 @@ export function AuthorAvatar({ author, size = "md", className }: AuthorAvatarPro
   const isAdmin = author?.role === "admin";
   const s = SIZES[size];
   return (
-    <div className={cn("relative shrink-0", className)}>
+    // `self-start`: en una fila flex el contenedor se estiraba a toda la
+    // altura de la tarjeta y el escudo admin quedaba abajo, junto al Me gusta.
+    <div className={cn("relative shrink-0 self-start", className)}>
       <div
         className={cn(
           "relative flex items-center justify-center overflow-hidden rounded-full font-bold transition-all",
