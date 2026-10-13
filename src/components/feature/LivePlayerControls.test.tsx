@@ -171,6 +171,25 @@ describe("LivePlayerControls", () => {
     expect(handlers.onTogglePlay).not.toHaveBeenCalled();
   });
 
+  it("los atajos no se disparan con el foco dentro del menú de ajustes", () => {
+    const player = fakePlayer(50, 100);
+    const menu = document.createElement("div");
+    menu.setAttribute("role", "menu");
+    const item = document.createElement("div");
+    item.setAttribute("role", "menuitem");
+    menu.appendChild(item);
+    player.container.appendChild(menu);
+    const handlers = renderControls({ playerRef: player, latencyMode: "dvr" });
+    for (const key of ["k", " ", "m", "f", "ArrowLeft", "ArrowRight"]) fireEvent.keyDown(item, { key });
+    fireEvent.keyDown(menu, { key: "ArrowLeft" });
+    expect(handlers.onTogglePlay).not.toHaveBeenCalled();
+    expect(handlers.onToggleMute).not.toHaveBeenCalled();
+    expect(player.handle.seekBy).not.toHaveBeenCalled();
+    // Fuera del menú siguen funcionando.
+    fireEvent.keyDown(player.container, { key: "k" });
+    expect(handlers.onTogglePlay).toHaveBeenCalledTimes(1);
+  });
+
   it("tras Reintentar (otro video) los listeners se enganchan al nodo nuevo", () => {
     const first = fakePlayer(50, 100);
     const handlers = { onTogglePlay: vi.fn(), onToggleMute: vi.fn(), onSelectLevel: vi.fn(), onSelectLatencyMode: vi.fn() };

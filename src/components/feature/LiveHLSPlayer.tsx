@@ -138,6 +138,29 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
     const latencyModeRef = useRef(latencyMode);
     latencyModeRef.current = latencyMode;
 
+    // Posición a la que lleva "Volver al vivo": `liveSyncPosition` respeta el
+    // perfil (PART-HOLD-BACK en "low", 3 segmentos en "smooth"/"dvr"). Sin
+    // hls.js (Safari nativo) se aproxima con la distancia del perfil sobre el
+    // filo.
+    const getLiveSyncTarget = (video: HTMLVideoElement): number => {
+      const syncPosition = hlsRef.current?.liveSyncPosition;
+      if (syncPosition != null && Number.isFinite(syncPosition)) return syncPosition;
+      const edge = video.seekable.end(video.seekable.length - 1);
+      return edge - (latencyModeRef.current === "low" ? 3 : 6);
+    };
+
+    const goLive = () => {
+      const video = videoRef.current;
+      if (!video || !video.seekable.length) return;
+      const target = clampToSeekable(video.seekable, getLiveSyncTarget(video));
+      if (target === null) return;
+      try { video.currentTime = target; } catch { /* seekable todavía no listo */ }
+      // La pausa de sala manda: el overlay sigue tapando y no se reproduce debajo.
+      if (roomPausedRef.current) return;
+      userPausedRef.current = false;
+      if (video.paused) video.play().catch(() => {});
+    };
+
     useImperativeHandle(ref, () => ({
       video: videoRef.current,
       enterFullscreen: async () => {
@@ -206,28 +229,29 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       seekBy: (delta: number) => {
         const video = videoRef.current;
         if (!video) return;
-        const target = clampToSeekable(video.seekable, video.currentTime + delta);
-        if (target === null) return;
-        try { video.currentTime = target; } catch { /* seekable todavía no listo */ }
-      },
-      goLive: () => {
-        const video = videoRef.current;
-        if (!video || !video.seekable.length) return;
-        // `liveSyncPosition` respeta el perfil (PART-HOLD-BACK en "low", 3
-        // segmentos en "smooth"/"dvr"). Sin hls.js (Safari nativo) se
-        // aproxima con la distancia del perfil sobre el filo.
-        const syncPosition = hlsRef.current?.liveSyncPosition;
-        const edge = video.seekable.end(video.seekable.length - 1);
-        const fallbackOffset = latencyModeRef.current === "low" ? 3 : 6;
-        const desired = syncPosition != null && Number.isFinite(syncPosition) ? syncPosition : edge - fallbackOffset;
+        const desired = delta + video.currentTime;
+        // Un salto hacia adelante nunca pasa de la posición de sync del vivo:
+        // caer en el filo exacto deja el buffer en cero y el video se traba.
+        // Si el destino la rebasa, se detiene en ella; si ya está en ella o más
+        // allá, no hay nada que adelantar. Solo mueve la posición: a diferencia
+        // de goLive(), no reanuda un video que el usuario pausó.
+        if (delta > 0 && video.seekable.length) {
+          const syncPosition = getLiveSyncTarget(video);
+          if (desired > syncPosition) {
+            if (video.currentTime < syncPosition) {
+              const target = clampToSeekable(video.seekable, syncPosition);
+              if (target !== null) {
+                try { video.currentTime = target; } catch { /* seekable todavía no listo */ }
+              }
+            }
+            return;
+          }
+        }
         const target = clampToSeekable(video.seekable, desired);
         if (target === null) return;
         try { video.currentTime = target; } catch { /* seekable todavía no listo */ }
-        // La pausa de sala manda: el overlay sigue tapando y no se reproduce debajo.
-        if (roomPausedRef.current) return;
-        userPausedRef.current = false;
-        if (video.paused) video.play().catch(() => {});
       },
+      goLive,
     }));
 
     useEffect(() => {
@@ -277,19 +301,26 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       // "Retomamos donde lo dejaste" a alguien que nunca pidió retomar nada y
       // dejándolo atrasado sin quererlo.
       const LIVE_EDGE_THRESHOLD_S = 30;
-      // Retroceso mínimo (en segundos, medido contra la posición previa al
-      // seek) para considerarlo deliberado.
+      // Retroceso mínimo (en segundos) para considerarlo deliberado.
       const DELIBERATE_REWIND_MIN_S = 10;
+      // Segundos reproducidos tras un retroceso que dan por terminada la serie
+      // de saltos seguidos (el alumno ya está viendo desde ahí).
+      const REWIND_RUN_END_PLAYED_S = 5;
       // Con segmentos largos (8 s) la latencia natural de "dvr" es 25-39 s, o
       // sea que "estar a más de LIVE_EDGE_THRESHOLD_S del filo" NO implica que
       // el alumno haya retrocedido (medido 2026-10-10: se retomó 44 min atrás
       // en un tramo viejo). Solo se guarda si hubo un retroceso deliberado:
-      // un seek hacia atrás de más de DELIBERATE_REWIND_MIN_S detectado en el
-      // evento nativo `seeking` (cubre la barra de tiempo, `seekTo` y teclado,
-      // y compara contra la posición previa porque en `seeking`
-      // `currentTime` ya es el destino). Se apaga al volver al filo.
+      // más de DELIBERATE_REWIND_MIN_S hacia atrás detectado en el evento
+      // nativo `seeking` (cubre la barra de tiempo, `seekTo` y teclado, y
+      // compara contra la posición previa porque en `seeking` `currentTime` ya
+      // es el destino). Los saltos de 10 s del botón y las flechas se
+      // acumulan: se mide contra `rewindAnchor`, la posición de la que partió
+      // la serie de retrocesos seguidos, no contra el último salto. Se apaga
+      // al volver al filo.
       let deliberateRewind = false;
       let lastPlaybackTime = video.currentTime;
+      let rewindAnchor: number | null = null;
+      let lastSeekTarget = video.currentTime;
       const getBehind = () => {
         const seekable = video.seekable;
         const edge = seekable.length ? seekable.end(seekable.length - 1) : NaN;
@@ -297,16 +328,25 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       };
       const handlePositionTimeUpdate = () => {
         // Durante un seek `currentTime` ya es el destino: no es la posición previa.
-        if (!video.seeking) lastPlaybackTime = video.currentTime;
+        if (video.seeking) return;
+        lastPlaybackTime = video.currentTime;
+        // Tras reproducir unos segundos desde el último salto, la serie terminó.
+        if (rewindAnchor !== null && lastPlaybackTime - lastSeekTarget >= REWIND_RUN_END_PLAYED_S) {
+          rewindAnchor = null;
+        }
       };
       const handlePositionSeeking = () => {
-        if (lastPlaybackTime - video.currentTime > DELIBERATE_REWIND_MIN_S) {
+        const target = video.currentTime;
+        if (target < lastPlaybackTime) rewindAnchor ??= lastPlaybackTime;
+        else rewindAnchor = null;
+        if (rewindAnchor !== null && rewindAnchor - target > DELIBERATE_REWIND_MIN_S) {
           deliberateRewind = true;
         } else if (getBehind() < LIVE_EDGE_THRESHOLD_S) {
           // Volvió al filo (botón "Volver al vivo" o barra): ya no hay retroceso.
           deliberateRewind = false;
         }
-        lastPlaybackTime = video.currentTime;
+        lastPlaybackTime = target;
+        lastSeekTarget = target;
       };
       const savePosition = () => {
         if (!isDvr) return;
