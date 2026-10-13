@@ -1,5 +1,6 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle, useState } from "react";
 import Hls from "hls.js";
+import { clampToSeekable } from "@/lib/live/playerTime";
 
 export interface QualityLevel {
   index: number;
@@ -28,8 +29,14 @@ export interface LiveHLSPlayerHandle {
   // Ventana seekable actual (modo "dvr" — crece con la transmisión). `null`
   // si no hay datos seekable todavía.
   getSeekableRange: () => { start: number; end: number } | null;
-  // Busca una posición dentro de la ventana seekable, clampada a sus límites.
+  // Busca una posición dentro de la ventana seekable, en un intervalo real.
   seekTo: (position: number) => void;
+  // Avanza o retrocede `delta` segundos desde la posición actual.
+  seekBy: (delta: number) => void;
+  // "Volver al vivo": la ÚNICA operación para ir al filo (botón de la barra y
+  // aviso de retomar). Va a la distancia segura del perfil activo y reanuda
+  // —es un pedido explícito del alumno— salvo que la sala esté en pausa.
+  goLive: () => void;
 }
 
 interface LiveHLSPlayerProps {
@@ -48,6 +55,11 @@ interface LiveHLSPlayerProps {
   // pero pausa el <video>; al reanudar solo retoma si el usuario no había
   // pausado manualmente antes.
   roomPaused?: boolean;
+  // La sala ya se finalizó y el alumno sigue viendo lo que le faltaba. No se
+  // recarga el manifest: con el Input ID, recargar después del final trae la
+  // transmisión más reciente o un 204, no la clase que estaba viendo. Ante
+  // un estancamiento se avisa `onFatalError` directamente.
+  streamEnded?: boolean;
   className?: string;
   // Clave de resume (modo "dvr" solamente) — típicamente el id de la fila
   // `lives`. Persiste la posición de reproducción en localStorage bajo
@@ -67,6 +79,8 @@ interface LiveHLSPlayerProps {
   // la UI debe quitar el estado de error (se vio el cartel encima de un vivo
   // que seguía sonando, 2026-10-03).
   onRecovered?: () => void;
+  // El medio llegó a su final (playlist cerrada).
+  onEnded?: () => void;
   onLevelsChange?: (levels: QualityLevel[], currentLevel: number) => void;
 }
 
@@ -79,6 +93,7 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       autoPlay = true,
       latencyMode = "smooth",
       roomPaused = false,
+      streamEnded = false,
       className,
       resumeKey,
       onResumed,
@@ -89,6 +104,7 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       onError,
       onFatalError,
       onRecovered,
+      onEnded,
       onLevelsChange,
     },
     ref,
@@ -112,6 +128,15 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
     resumeKeyRef.current = resumeKey;
     const onResumedRef = useRef(onResumed);
     onResumedRef.current = onResumed;
+    // Pausa de sala, fin de la clase y perfil, legibles desde el efecto
+    // principal (que corre también en cada recarga) y desde el handle sin
+    // recrear la instancia de Hls.
+    const roomPausedRef = useRef(roomPaused);
+    roomPausedRef.current = roomPaused;
+    const streamEndedRef = useRef(streamEnded);
+    streamEndedRef.current = streamEnded;
+    const latencyModeRef = useRef(latencyMode);
+    latencyModeRef.current = latencyMode;
 
     useImperativeHandle(ref, () => ({
       video: videoRef.current,
@@ -173,11 +198,35 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       },
       seekTo: (position: number) => {
         const video = videoRef.current;
+        if (!video) return;
+        const target = clampToSeekable(video.seekable, position);
+        if (target === null) return;
+        try { video.currentTime = target; } catch { /* seekable todavía no listo */ }
+      },
+      seekBy: (delta: number) => {
+        const video = videoRef.current;
+        if (!video) return;
+        const target = clampToSeekable(video.seekable, video.currentTime + delta);
+        if (target === null) return;
+        try { video.currentTime = target; } catch { /* seekable todavía no listo */ }
+      },
+      goLive: () => {
+        const video = videoRef.current;
         if (!video || !video.seekable.length) return;
-        const start = video.seekable.start(0);
-        const end = video.seekable.end(video.seekable.length - 1);
-        const clamped = Math.min(Math.max(position, start), end);
-        try { video.currentTime = clamped; } catch { /* seekable todavía no listo */ }
+        // `liveSyncPosition` respeta el perfil (PART-HOLD-BACK en "low", 3
+        // segmentos en "smooth"/"dvr"). Sin hls.js (Safari nativo) se
+        // aproxima con la distancia del perfil sobre el filo.
+        const syncPosition = hlsRef.current?.liveSyncPosition;
+        const edge = video.seekable.end(video.seekable.length - 1);
+        const fallbackOffset = latencyModeRef.current === "low" ? 3 : 6;
+        const desired = syncPosition != null && Number.isFinite(syncPosition) ? syncPosition : edge - fallbackOffset;
+        const target = clampToSeekable(video.seekable, desired);
+        if (target === null) return;
+        try { video.currentTime = target; } catch { /* seekable todavía no listo */ }
+        // La pausa de sala manda: el overlay sigue tapando y no se reproduce debajo.
+        if (roomPausedRef.current) return;
+        userPausedRef.current = false;
+        if (video.paused) video.play().catch(() => {});
       },
     }));
 
@@ -456,7 +505,9 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           // Este handler corre también tras cada recarga por recuperación
           // (H8). Si el usuario pausó a propósito, no lo reactivamos.
-          if (autoPlay && !userPausedRef.current) {
+          // Tampoco con la sala en pausa: una recarga durante la pausa
+          // arrancaba el video debajo del overlay.
+          if (autoPlay && !userPausedRef.current && !roomPausedRef.current) {
             video.play().catch(() => {
               // Autoplay con sonido bloqueado por el browser — el overlay "Activar sonido" lo resuelve
             });
@@ -552,6 +603,15 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
 
         const reloadFromScratch = (reason: string) => {
           if (!hls || reloadingRef.current) return;
+          if (streamEndedRef.current) {
+            // Clase finalizada: recargar no recupera este tramo (ver `streamEnded`).
+            console.warn(`[LiveHLSPlayer] clase finalizada, sin recarga (${reason})`);
+            if (!fatalReported) {
+              fatalReported = true;
+              onFatalError?.();
+            }
+            return;
+          }
           if (reloadAttempts >= MAX_RELOAD_ATTEMPTS) {
             console.error(`[LiveHLSPlayer] se alcanzó el máximo de ${MAX_RELOAD_ATTEMPTS} reintentos, abandonando`);
             fatalReported = true;
@@ -697,7 +757,7 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           video.addEventListener(
             "loadedmetadata",
             () => {
-              if (!userPausedRef.current) {
+              if (!userPausedRef.current && !roomPausedRef.current) {
                 video.play().catch(() => {});
               }
             },
@@ -793,6 +853,7 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
         onPause={onPause}
         onWaiting={onWaiting}
         onPlaying={onPlaying}
+        onEnded={onEnded}
       />
     );
   },

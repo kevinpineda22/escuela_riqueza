@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback, useRef, type RefObject, type ChangeEvent } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Loader2, Settings, Check, PictureInPicture2 } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Loader2, Settings, Check, PictureInPicture2, RotateCcw, RotateCw } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { formatClock, spokenClock } from "@/lib/live/playerTime";
 import type { LiveHLSPlayerHandle, LiveLatencyMode, QualityLevel } from "./LiveHLSPlayer";
 
 // F07: objetivo táctil de 44 px por botón (antes medían lo que el ícono, 20-22
@@ -21,10 +22,18 @@ function isKeyboardFocus(el: EventTarget): boolean {
   }
 }
 
-/** Atraso legible: "12 s" o "3 min". */
-function formatDelay(seconds: number): string {
-  return seconds >= 60 ? `${Math.floor(seconds / 60)} min` : `${Math.floor(seconds)} s`;
+/** El teclado pertenece al campo: los atajos del reproductor no lo tocan. */
+function isTypingTarget(el: EventTarget | null): boolean {
+  if (!(el instanceof HTMLElement)) return false;
+  if (el.isContentEditable) return true;
+  const tag = el.tagName;
+  if (tag === "TEXTAREA" || tag === "SELECT") return true;
+  if (tag === "INPUT") return (el as HTMLInputElement).type !== "range";
+  return false;
 }
+
+/** Salto de los botones y flechas de "Clase completa". */
+const SEEK_STEP_S = 10;
 
 interface LivePlayerControlsProps {
   playerRef: RefObject<LiveHLSPlayerHandle | null>;
@@ -37,6 +46,12 @@ interface LivePlayerControlsProps {
   /** Calidad que el player está reproduciendo ahora (con Auto, la decide el ABR). */
   activeLevel?: number;
   latencyMode: LiveLatencyMode;
+  /**
+   * Cambia cuando "Reintentar" remonta el <video>. Los listeners de la barra
+   * se vuelven a enganchar al nodo nuevo: con `[playerRef]` solo, quedaban
+   * escuchando al video destruido (timeline, seek, fullscreen y PiP mudos).
+   */
+  mediaKey?: number;
   onTogglePlay: () => void;
   onToggleMute: () => void;
   onSelectLevel: (index: number) => void;
@@ -52,6 +67,7 @@ const LivePlayerControls = ({
   currentLevel,
   activeLevel = -1,
   latencyMode,
+  mediaKey = 0,
   onTogglePlay,
   onToggleMute,
   onSelectLevel,
@@ -60,6 +76,9 @@ const LivePlayerControls = ({
   const [controlsVisible, setControlsVisible] = useState(true);
   const [volume, setVolume] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // Elemento en pantalla completa: el menú de ajustes se portalea ahí. En el
+  // body no se ve mientras un contenedor ocupa la pantalla.
+  const [fullscreenElement, setFullscreenElement] = useState<HTMLElement | null>(null);
   // Picture-in-Picture: la única forma de que el video siga sonando en Android
   // cuando el usuario cambia de app o bloquea el teléfono (Chrome pausa
   // cualquier <video> de una pestaña oculta). iOS Safari usa su API propia.
@@ -159,13 +178,15 @@ const LivePlayerControls = ({
       video.removeEventListener("seeking", handleSeeking);
       video.removeEventListener("seeked", handleSeeked);
     };
-  }, [playerRef, latencyMode]);
+  }, [playerRef, latencyMode, mediaKey]);
 
   // Para HLS live, video.duration === Infinity (estándar HTML5). El filo real del
   // vivo se obtiene de video.seekable.end(last) — la ventana DVR que va expandiendo
   // hls.js a medida que llegan segmentos.
+  // Corre también en PAUSA: con el video quieto el filo sigue avanzando (hls.js
+  // refresca la playlist) y el atraso crece. Antes el polling se cortaba con
+  // `!isPlaying` y la barra mostraba un atraso viejo justo al pausar.
   useEffect(() => {
-    if (!isPlaying) return;
     const interval = setInterval(() => {
       const video = playerRef.current?.video;
       // Sin muestra válida el offset natural vuelve a 0 en vez de conservar un
@@ -176,6 +197,11 @@ const LivePlayerControls = ({
       if (!isFinite(liveEdge) || !isFinite(c)) { setNaturalOffset(0); return; }
       const delta = liveEdge - c;
       setLiveDelta(delta > 0 ? delta : 0);
+      // En pausa no hay `timeupdate`: la ventana de la timeline se refresca acá.
+      if (video.paused && latencyMode === "dvr") {
+        setDvrCurrentTime(c);
+        setDvrRange(playerRef.current?.getSeekableRange?.() ?? null);
+      }
       const syncPosition = playerRef.current?.getLiveSyncPosition?.() ?? null;
       setNaturalOffset(
         syncPosition != null && isFinite(syncPosition) && liveEdge > syncPosition
@@ -184,14 +210,14 @@ const LivePlayerControls = ({
       );
     }, 1000);
     return () => clearInterval(interval);
-  }, [isPlaying, playerRef]);
+  }, [playerRef, latencyMode, mediaKey]);
 
   // Respaldo para cuando hls.js no expone `liveSyncPosition` (path nativo
   // Safari): aproxima la distancia de sync del perfil activo en LiveHLSPlayer
   // (3 para "low"; 6 para "smooth"/"dvr" = 3 segmentos de 2 s). Con
   // segmentos más largos la distancia real es mayor y se toma de hls.js
-  // (`naturalOffset`). Un valor fijo hacía que el botón "EN VIVO" empeorara
-  // el retraso en modo `low`.
+  // (`naturalOffset`). Solo define los umbrales del pill: el seek al vivo lo
+  // hace `goLive()` del player, con el mismo cálculo.
   const liveSyncOffset = latencyMode === "low" ? 3 : 6;
 
   // Timeline del modo "dvr": actualiza posición + ventana seekable en cada
@@ -210,17 +236,7 @@ const LivePlayerControls = ({
     video.addEventListener("timeupdate", handleTimeUpdate);
     handleTimeUpdate();
     return () => video.removeEventListener("timeupdate", handleTimeUpdate);
-  }, [latencyMode, playerRef]);
-
-  const formatElapsed = (seconds: number) => {
-    const total = Math.max(0, Math.floor(seconds));
-    const h = Math.floor(total / 3600);
-    const m = Math.floor((total % 3600) / 60);
-    const s = total % 60;
-    const mm = String(m).padStart(2, "0");
-    const ss = String(s).padStart(2, "0");
-    return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
-  };
+  }, [latencyMode, playerRef, mediaKey]);
 
   // `scrubValue` (declarado arriba): antes se llamaba a `seekTo` en cada
   // `change` del range — un arrastre disparaba decenas de seeks y cada uno
@@ -237,32 +253,22 @@ const LivePlayerControls = ({
     wakeControls();
   };
 
+  // Escape o un gesto cancelado por el sistema descartan el arrastre: el
+  // indicador vuelve a la posición real sin hacer ningún seek.
+  const cancelDvrScrub = () => {
+    if (scrubValue === null) return;
+    setScrubValue(null);
+    wakeControls();
+  };
+
+  // Misma operación que el aviso "Retomamos donde lo dejaste" (ver goLive).
   const handleGoLive = useCallback(() => {
-    const video = playerRef.current?.video;
-    if (!video || !video.seekable.length) return;
-    try {
-      // Modo "low": hls.js calcula `liveSyncPosition` a partir de
-      // PART-HOLD-BACK del manifest LL-HLS — más preciso que restar un
-      // offset fijo al edge. Si no está disponible (path nativo Safari, o
-      // modo "smooth" sin instancia relevante) caemos al cálculo anterior.
-      const syncPosition = playerRef.current?.getLiveSyncPosition?.() ?? null;
-      if (syncPosition != null && isFinite(syncPosition)) {
-        video.currentTime = syncPosition;
-      } else {
-        const liveEdge = video.seekable.end(video.seekable.length - 1);
-        if (!isFinite(liveEdge)) return;
-        // Volver al filo del vivo SIN romper el buffer: nos paramos a
-        // `liveSyncOffset` del edge, coincidiendo con liveSyncDuration del modo
-        // activo. Evita el latigazo de seek a una zona sin pre-cargar.
-        video.currentTime = Math.max(0, liveEdge - liveSyncOffset);
-      }
-      if (video.paused) {
-        video.play().catch(() => {});
-      }
-    } catch (e) {
-      console.warn("[LivePlayerControls] go live error:", e);
-    }
-  }, [playerRef, liveSyncOffset]);
+    playerRef.current?.goLive();
+  }, [playerRef]);
+
+  const handleSeekBy = useCallback((delta: number) => {
+    playerRef.current?.seekBy(delta);
+  }, [playerRef]);
 
   useEffect(() => {
     const handle = () => {
@@ -272,6 +278,7 @@ const LivePlayerControls = ({
         (document as unknown as { mozFullScreenElement?: Element }).mozFullScreenElement ||
         (document as unknown as { msFullscreenElement?: Element }).msFullscreenElement;
       setIsFullscreen(Boolean(fs));
+      setFullscreenElement(fs instanceof HTMLElement ? fs : null);
     };
     const videoEl = playerRef.current?.video;
     const handleIosFsBegin = () => setIsFullscreen(true);
@@ -295,7 +302,7 @@ const LivePlayerControls = ({
         videoEl.removeEventListener("webkitendfullscreen", handleIosFsEnd);
       }
     };
-  }, [playerRef]);
+  }, [playerRef, mediaKey]);
 
   useEffect(() => {
     const video = playerRef.current?.video;
@@ -321,7 +328,7 @@ const LivePlayerControls = ({
       video.removeEventListener("leavepictureinpicture", handleLeave);
       video.removeEventListener("webkitpresentationmodechanged", handleIosMode);
     };
-  }, [playerRef]);
+  }, [playerRef, mediaKey]);
 
   const handlePipToggle = useCallback(async () => {
     const video = playerRef.current?.video;
@@ -407,6 +414,54 @@ const LivePlayerControls = ({
     else if (!isBehind && liveDelta > behindShowThreshold) setIsBehind(true);
   }, [liveDelta, isBehind, behindHideThreshold, behindShowThreshold]);
 
+  // Atajos, solo con el foco DENTRO del reproductor (contenedor del video):
+  // Espacio/K pausa, M sonido, F pantalla completa y flechas ±10 s en "Clase
+  // completa". Nunca se interceptan campos de texto ni la barra de tiempo, que
+  // ya responde a las flechas por sí misma; Espacio sobre un botón es la
+  // acción de ese botón.
+  const shortcutsRef = useRef({ onTogglePlay, onToggleMute, handleFullscreenToggle, handleSeekBy, latencyMode, wakeControls });
+  useEffect(() => {
+    shortcutsRef.current = { onTogglePlay, onToggleMute, handleFullscreenToggle, handleSeekBy, latencyMode, wakeControls };
+  });
+  useEffect(() => {
+    const container = playerRef.current?.video?.parentElement;
+    if (!container) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (isTypingTarget(e.target)) return;
+      const actions = shortcutsRef.current;
+      const target = e.target instanceof HTMLElement ? e.target : null;
+      const isRange = target instanceof HTMLInputElement && target.type === "range";
+      const isButton = target?.tagName === "BUTTON" || Boolean(target?.getAttribute("role")?.startsWith("menuitem"));
+      const key = e.key.toLowerCase();
+      if (key === " " || key === "k") {
+        if (key === " " && (isButton || isRange)) return;
+        e.preventDefault();
+        actions.onTogglePlay();
+      } else if (key === "m") {
+        e.preventDefault();
+        actions.onToggleMute();
+      } else if (key === "f") {
+        e.preventDefault();
+        actions.handleFullscreenToggle();
+      } else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && !isRange && actions.latencyMode === "dvr") {
+        e.preventDefault();
+        actions.handleSeekBy(e.key === "ArrowLeft" ? -SEEK_STEP_S : SEEK_STEP_S);
+      } else {
+        return;
+      }
+      actions.wakeControls();
+    };
+    container.addEventListener("keydown", handleKeyDown);
+    return () => container.removeEventListener("keydown", handleKeyDown);
+  }, [playerRef, mediaKey]);
+
+  const dvrSpan = dvrRange ? Math.max(0, dvrRange.end - dvrRange.start) : 0;
+  const dvrPosition = dvrRange
+    ? scrubValue ?? Math.min(Math.max(0, dvrCurrentTime - dvrRange.start), dvrSpan)
+    : 0;
+  const dvrBehind = Math.max(0, dvrSpan - dvrPosition);
+
   return (
     <>
       {/* Superficie del video. Con mouse o teclado, un clic pausa/reanuda.
@@ -446,6 +501,7 @@ const LivePlayerControls = ({
         {/* Se portalea al body, fuera de la isla del escenario: el contexto oscuro
             se declara aquí explícitamente (spec §4.4). */}
         <DropdownMenuContent
+          container={fullscreenElement}
           data-theme="dark"
           align="end"
           side="top"
@@ -482,29 +538,41 @@ const LivePlayerControls = ({
           )}
 
           <DropdownMenuSeparator />
+          {/* Modo de clase: qué se puede hacer con el tiempo. No confundir con
+              "Volver al vivo" (posición dentro del modo) ni con pantalla
+              completa (tamaño): son tres acciones distintas. */}
           <DropdownMenuLabel className="text-xs text-foreground-muted uppercase tracking-wider">
-            Latencia
+            Modo de clase
           </DropdownMenuLabel>
           <DropdownMenuItem
-            onClick={() => { onSelectLatencyMode("smooth"); wakeControls(); }}
-            className={cn("cursor-pointer", latencyMode === "smooth" && "text-accent")}
+            onClick={() => { onSelectLatencyMode("dvr"); wakeControls(); }}
+            className={cn("cursor-pointer items-start", latencyMode === "dvr" && "text-accent")}
           >
-            <span className="flex-1">Fluidez</span>
-            {latencyMode === "smooth" && <Check size={14} className="text-accent" />}
+            <span className="flex-1 flex flex-col">
+              <span>Clase completa</span>
+              <span className="text-[11px] text-foreground-muted">Puedes retroceder y retomar</span>
+            </span>
+            {latencyMode === "dvr" && <Check size={14} className="text-accent mt-0.5" />}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => { onSelectLatencyMode("smooth"); wakeControls(); }}
+            className={cn("cursor-pointer items-start", latencyMode === "smooth" && "text-accent")}
+          >
+            <span className="flex-1 flex flex-col">
+              <span>Clase normal · Fluidez</span>
+              <span className="text-[11px] text-foreground-muted">Siempre en el directo</span>
+            </span>
+            {latencyMode === "smooth" && <Check size={14} className="text-accent mt-0.5" />}
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => { onSelectLatencyMode("low"); wakeControls(); }}
-            className={cn("cursor-pointer", latencyMode === "low" && "text-accent")}
+            className={cn("cursor-pointer items-start", latencyMode === "low" && "text-accent")}
           >
-            <span className="flex-1">Baja latencia</span>
-            {latencyMode === "low" && <Check size={14} className="text-accent" />}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => { onSelectLatencyMode("dvr"); wakeControls(); }}
-            className={cn("cursor-pointer", latencyMode === "dvr" && "text-accent")}
-          >
-            <span className="flex-1">Clase completa</span>
-            {latencyMode === "dvr" && <Check size={14} className="text-accent" />}
+            <span className="flex-1 flex flex-col">
+              <span>Baja latencia</span>
+              <span className="text-[11px] text-foreground-muted">Menos retraso, necesita buena red</span>
+            </span>
+            {latencyMode === "low" && <Check size={14} className="text-accent mt-0.5" />}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -560,28 +628,37 @@ const LivePlayerControls = ({
             {latencyMode === "dvr" && dvrRange && (
               <div className="flex items-center gap-2 sm:gap-3 pointer-events-auto mb-2 sm:mb-3">
                 <span className="text-[10px] sm:text-xs font-black tabular-nums text-foreground-strong/80 shrink-0">
-                  {formatElapsed(scrubValue ?? dvrCurrentTime - dvrRange.start)}
+                  {formatClock(dvrPosition)}
                 </span>
                 <input
                   type="range"
                   min={0}
-                  max={Math.max(0, dvrRange.end - dvrRange.start)}
+                  max={dvrSpan}
                   step={1}
-                  value={
-                    scrubValue ??
-                    Math.min(Math.max(0, dvrCurrentTime - dvrRange.start), dvrRange.end - dvrRange.start)
-                  }
+                  value={dvrPosition}
                   onChange={handleDvrScrub}
                   onPointerUp={commitDvrScrub}
-                  onKeyUp={commitDvrScrub}
+                  onPointerCancel={cancelDvrScrub}
+                  onKeyUp={(e) => { if (e.key !== "Escape") commitDvrScrub(); }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape" && scrubValue !== null) {
+                      e.preventDefault();
+                      cancelDvrScrub();
+                    }
+                  }}
                   onBlur={commitDvrScrub}
                   onMouseDown={wakeControls}
                   onTouchStart={wakeControls}
                   className="flex-1 accent-gold cursor-pointer"
                   aria-label="Posición en la clase"
+                  aria-valuetext={
+                    dvrBehind < 1
+                      ? `${spokenClock(dvrPosition)} de ${spokenClock(dvrSpan)}, en el directo`
+                      : `${spokenClock(dvrPosition)} de ${spokenClock(dvrSpan)}, ${spokenClock(dvrBehind)} detrás del directo`
+                  }
                 />
                 <span className="text-[10px] sm:text-xs font-black tabular-nums text-foreground-strong/80 shrink-0">
-                  {formatElapsed(dvrRange.end - dvrRange.start)}
+                  {formatClock(dvrSpan)}
                 </span>
               </div>
             )}
@@ -594,6 +671,27 @@ const LivePlayerControls = ({
               >
                 {isPlaying ? <Pause size={22} fill="currentColor" strokeWidth={0} /> : <Play size={22} fill="currentColor" strokeWidth={0} />}
               </button>
+
+              {latencyMode === "dvr" && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => { handleSeekBy(-SEEK_STEP_S); wakeControls(); }}
+                    aria-label={`Retroceder ${SEEK_STEP_S} segundos`}
+                    className={CONTROL_BUTTON}
+                  >
+                    <RotateCcw size={20} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { handleSeekBy(SEEK_STEP_S); wakeControls(); }}
+                    aria-label={`Adelantar ${SEEK_STEP_S} segundos`}
+                    className={cn(CONTROL_BUTTON, "hidden min-[400px]:inline-flex")}
+                  >
+                    <RotateCw size={20} />
+                  </button>
+                </>
+              )}
 
               <div className="flex items-center gap-2">
                 <button
@@ -622,7 +720,7 @@ const LivePlayerControls = ({
               <button
                 type="button"
                 onClick={() => { handleGoLive(); wakeControls(); }}
-                aria-label={isBehind ? `Volver al vivo (vas ${formatDelay(liveDelta)} atrasado)` : "En vivo"}
+                aria-label={isBehind ? `Volver al vivo (estás ${spokenClock(liveDelta)} detrás del directo)` : "En vivo"}
                 className={cn(
                   "flex items-center gap-1.5 sm:gap-2 ml-1 min-h-11 -my-2 px-2 rounded-full text-[10px] sm:text-xs font-black tracking-widest transition-colors cursor-pointer active:scale-95",
                   isBehind
@@ -638,7 +736,7 @@ const LivePlayerControls = ({
                         acción; el aria-label mantiene la frase completa. */}
                     <span className="sm:hidden">AL VIVO</span>
                     <span className="hidden sm:inline">VOLVER AL VIVO</span>
-                    <span className="font-bold text-fg-70 tabular-nums">-{formatDelay(liveDelta)}</span>
+                    <span className="font-bold text-fg-70 tabular-nums">−{formatClock(liveDelta)}</span>
                   </>
                 ) : (
                   <>

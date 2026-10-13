@@ -1,8 +1,10 @@
 # Estado del proyecto — Escuela de la Riqueza
 
-> Actualizado 2026-05-19. Inventario vivo de qué está implementado, qué falta, y en qué estado visual está cada panel.
+> Revisión documental parcial: 2026-10-13 (lives, comunidad y propuesta pendiente); inventario original: 2026-05-19. Las demás secciones conservan su historial y no quedan revalidadas por esta revisión.
 > Para el historial de cambios cronológico, ver `docs/CHANGELOG.md`.
 > Para la arquitectura del modo podcast (sensible, no romper), ver `docs/PODCAST_ARCHITECTURE.md`.
+
+**Implementado en código, sin probar en vivo real (2026-10-13):** Clase completa/DVR como default para quien no tiene un modo guardado, con retomo, atraso exacto, regreso al vivo, salida a Fluidez y continuidad al finalizar; comunidad con estados de error/vacío, accesibilidad y acabado claro/oscuro. Estado por ítem en `PENDIENTES.md` §8. Hallazgos y aceptación en [LIVE_UX_REDESIGN_AUDIT.md](./LIVE_UX_REDESIGN_AUDIT.md#actualización-2026-10-13--clase-completa-predeterminada-y-comunidad). Ensayo de calidad 6000 → 8000 → 10.000 kbps en [OBS_CONFIGURACION.md](./OBS_CONFIGURACION.md#5-mejor-calidad-podemos-transmitir-a-10000-kbps). No se comprobaron OBS activo, Cloudflare/Supabase desplegados ni pantallas renderizadas en esta entrega.
 
 ---
 
@@ -40,7 +42,7 @@
 - `VIPLiveRoom.tsx`: resuelve la sala activa del plan del alumno (Realtime sobre `lives` + polling 3 s, errores de carga con reintento) y la señal de OBS; la presentación es `LiveRoom`. Valida `allowed_plans` al entrar y redirige al dashboard si el plan no está.
 - `PublicLiveRoom.tsx`: link público por `share_token`, solo polling; repetición paga salvo `replay_is_public`.
 - `LiveChat.tsx`: chat en tiempo real (Supabase Realtime) con historial de los últimos 200, seguimiento del final que respeta la lectura, borrador que no se pierde y reintento sin duplicados.
-- `CommunityFeed.tsx` (Foro VIP): Foro tipo Reddit con categorias (pregunta, discusión, recurso), ordenamiento (reciente/popular), anidamiento de comentarios de 1 nivel, botones de "Me gusta". Usa `sql/sync_community.sql` (RLS para que solo VIP y Admins puedan interactuar).
+- `CommunityFeed.tsx`: comunidad compartida con categorías, orden reciente/popular, detalle de publicación, respuestas y reacciones. El contrato actual en `src/lib/plans.ts` y las migraciones permite lectura a Free y escritura a Individual/VIP/admin; el nombre histórico «Foro VIP» no describe todos los permisos actuales. Gran parte de las superficies usa tokens claro/oscuro; quedan mejoras de diseño y estados documentadas en la actualización del 2026-10-13. Policies desplegadas sin revalidar en esta revisión.
 
 **Admin shell**
 - `AdminLayout.tsx`: sidebar premium con shimmer en item activo, profile card, mouse-tracking glow, animated orbs en fondo. Sheet en mobile.

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowLeft, Loader2, Lock, MessageSquare, Pin, PinOff, Send, Shield, Trash2, CornerDownRight } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Loader2, Lock, MessageSquare, Pin, PinOff, RotateCw, Send, Trash2, CornerDownRight } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
@@ -16,7 +16,9 @@ import {
   type CommunityPost,
 } from "@/lib/api/community";
 import { LikeButton } from "./LikeButton";
-import { authorInitials, authorName, categoryMeta, formatRelative } from "./community-utils";
+import { AuthorAvatar } from "./AuthorAvatar";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { authorName, categoryMeta, formatRelative, mergeComments } from "./community-utils";
 
 interface PostDetailProps {
   postId: string;
@@ -31,26 +33,35 @@ export function PostDetail({ postId, currentUserId, isAdmin, canWrite, onBack, o
   const navigate = useNavigate();
   const [post, setPost] = useState<CommunityPost | null>(null);
   const [comments, setComments] = useState<CommunityComment[]>([]);
-  const [loading, setLoading] = useState(true);
+  // "notfound" (eliminada o inexistente) y "error" (falló la lectura) son
+  // distintos: antes ambos decían "No se encontró la publicación".
+  const [status, setStatus] = useState<"loading" | "ready" | "notfound" | "error">("loading");
+  const [reloadKey, setReloadKey] = useState(0);
   const [body, setBody] = useState("");
   const [replyTo, setReplyTo] = useState<CommunityComment | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [confirmingPostDelete, setConfirmingPostDelete] = useState(false);
+  const [pendingCommentDelete, setPendingCommentDelete] = useState<string | null>(null);
   const replyInputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      setLoading(true);
-      const [p, c] = await Promise.all([fetchPost(postId), fetchComments(postId)]);
-      if (cancelled) return;
-      setPost(p);
-      setComments(c);
-      setLoading(false);
+      setStatus("loading");
+      try {
+        const [p, c] = await Promise.all([fetchPost(postId), fetchComments(postId)]);
+        if (cancelled) return;
+        setPost(p);
+        setComments(c);
+        setStatus(p ? "ready" : "notfound");
+      } catch {
+        if (!cancelled) setStatus("error");
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [postId]);
+  }, [postId, reloadKey]);
 
   useEffect(() => {
     const channel = supabase
@@ -59,8 +70,12 @@ export function PostDetail({ postId, currentUserId, isAdmin, canWrite, onBack, o
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "community_comments", filter: `post_id=eq.${postId}` },
         async () => {
-          const c = await fetchComments(postId);
-          setComments(c);
+          try {
+            const fetched = await fetchComments(postId);
+            setComments((prev) => mergeComments(fetched, prev));
+          } catch {
+            // Sin red: la lista a la vista se conserva; el próximo evento reintenta.
+          }
         }
       )
       .on(
@@ -130,7 +145,6 @@ export function PostDetail({ postId, currentUserId, isAdmin, canWrite, onBack, o
 
   const handleDeletePost = async () => {
     if (!post) return;
-    if (!confirm("¿Eliminar esta publicación y todos sus comentarios?")) return;
     try {
       await deletePost(post.id);
       toast.success("Publicación eliminada");
@@ -138,6 +152,7 @@ export function PostDetail({ postId, currentUserId, isAdmin, canWrite, onBack, o
     } catch (err) {
       console.error(err);
       toast.error("No se pudo eliminar");
+      throw err;
     }
   };
 
@@ -154,14 +169,16 @@ export function PostDetail({ postId, currentUserId, isAdmin, canWrite, onBack, o
     }
   };
 
-  const handleDeleteComment = async (id: string) => {
-    if (!confirm("¿Eliminar este comentario?")) return;
+  const handleDeleteComment = async () => {
+    const id = pendingCommentDelete;
+    if (!id) return;
     try {
       await deleteComment(id);
       setComments((prev) => prev.filter((c) => c.id !== id && c.parent_id !== id));
     } catch (err) {
       console.error(err);
       toast.error("No se pudo eliminar el comentario");
+      throw err;
     }
   };
 
@@ -176,7 +193,8 @@ export function PostDetail({ postId, currentUserId, isAdmin, canWrite, onBack, o
         body: txt,
         parentId: replyTo?.parent_id ? replyTo.parent_id : replyTo?.id ?? null,
       });
-      setComments((prev) => [...prev, comment]);
+      // El realtime puede haberlo traído antes que esta respuesta.
+      setComments((prev) => (prev.some((c) => c.id === comment.id) ? prev : [...prev, comment]));
       setBody("");
       setReplyTo(null);
     } catch (err) {
@@ -192,10 +210,32 @@ export function PostDetail({ postId, currentUserId, isAdmin, canWrite, onBack, o
     setTimeout(() => replyInputRef.current?.focus(), 50);
   };
 
-  if (loading) {
+  if (status === "loading") {
     return (
-      <div className="flex items-center justify-center py-24">
-        <Loader2 className="animate-spin text-accent" size={32} />
+      <div className="flex items-center justify-center py-24" role="status" aria-label="Cargando publicación">
+        <Loader2 className="animate-spin text-accent" size={32} aria-hidden />
+      </div>
+    );
+  }
+
+  if (status === "error") {
+    return (
+      <div role="alert" className="py-20 text-center">
+        <AlertTriangle className="mx-auto mb-3 text-red-400 light:text-danger" size={28} aria-hidden />
+        <p className="font-semibold text-foreground-strong">No pudimos cargar la publicación</p>
+        <p className="mt-1 text-sm text-foreground-muted">Revisa tu conexión e inténtalo de nuevo.</p>
+        <div className="mt-5 flex items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => setReloadKey((k) => k + 1)}
+            className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand px-5 font-bold text-on-brand transition-colors hover:bg-brand-hover"
+          >
+            <RotateCw size={16} aria-hidden /> Reintentar
+          </button>
+          <button type="button" onClick={onBack} className="min-h-11 px-3 text-accent hover:underline">
+            Volver al foro
+          </button>
+        </div>
       </div>
     );
   }
@@ -203,8 +243,8 @@ export function PostDetail({ postId, currentUserId, isAdmin, canWrite, onBack, o
   if (!post) {
     return (
       <div className="py-20 text-center">
-        <p className="text-foreground-muted">No se encontró la publicación.</p>
-        <button onClick={onBack} className="mt-4 text-accent hover:underline">
+        <p className="text-foreground-muted">Esta publicación ya no existe o fue eliminada.</p>
+        <button type="button" onClick={onBack} className="mt-4 min-h-11 text-accent hover:underline">
           Volver al foro
         </button>
       </div>
@@ -249,27 +289,7 @@ export function PostDetail({ postId, currentUserId, isAdmin, canWrite, onBack, o
 
         <div className="relative p-6 sm:p-8">
           <header className="mb-5 flex items-start gap-4">
-            <div className="relative shrink-0">
-              <div
-                className={cn(
-                  "relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-full text-lg font-bold ring-2 transition-all",
-                  isPostAuthorAdmin
-                    ? "bg-gradient-to-br from-brand/30 to-brand/10 text-accent ring-focus/50"
-                    : "bg-gradient-to-br from-white/15 to-white/5 text-fg-90 ring-ink/15 light:from-surface-subtle light:to-surface-panel"
-                )}
-              >
-                {post.author?.avatar_url ? (
-                  <img src={post.author.avatar_url} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  authorInitials(post.author)
-                )}
-              </div>
-              {isPostAuthorAdmin && (
-                <div className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-brand ring-2 ring-darker">
-                  <Shield size={10} className="text-on-brand" strokeWidth={3} />
-                </div>
-              )}
-            </div>
+            <AuthorAvatar author={post.author} size="xl" />
 
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
@@ -305,8 +325,10 @@ export function PostDetail({ postId, currentUserId, isAdmin, canWrite, onBack, o
                   <button
                     type="button"
                     onClick={handleTogglePin}
+                    aria-label={post.is_pinned ? "Desfijar publicación" : "Fijar publicación"}
+                    aria-pressed={post.is_pinned}
                     className={cn(
-                      "inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs transition-colors",
+                      "inline-flex min-h-11 items-center gap-1 rounded-lg px-2.5 text-xs transition-colors",
                       post.is_pinned
                         ? "bg-brand/15 text-accent ring-1 ring-focus/30 hover:bg-brand/20"
                         : "text-foreground-muted hover:bg-ink/5 hover:text-accent"
@@ -319,8 +341,9 @@ export function PostDetail({ postId, currentUserId, isAdmin, canWrite, onBack, o
                 {canDeletePost && (
                   <button
                     type="button"
-                    onClick={handleDeletePost}
-                    className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs text-danger transition-colors hover:bg-red-500/10 hover:text-red-300 light:hover:text-danger"
+                    onClick={() => setConfirmingPostDelete(true)}
+                    aria-label="Eliminar publicación"
+                    className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2.5 text-xs text-danger transition-colors hover:bg-red-500/10 hover:text-red-300 light:hover:text-danger"
                   >
                     <Trash2 size={14} />
                     <span className="hidden sm:inline">Eliminar</span>
@@ -341,7 +364,7 @@ export function PostDetail({ postId, currentUserId, isAdmin, canWrite, onBack, o
             <div className="mt-5 overflow-hidden rounded-2xl border border-line-subtle bg-black">
               <img
                 src={post.image_url}
-                alt="Imagen adjunta"
+                alt={`Imagen adjunta a «${post.title}»`}
                 className="w-full max-h-[600px] object-contain"
               />
             </div>
@@ -427,7 +450,11 @@ export function PostDetail({ postId, currentUserId, isAdmin, canWrite, onBack, o
               </motion.div>
             )}
           </AnimatePresence>
+          <label htmlFor={`comment-composer-${postId}`} className="sr-only">
+            {replyTo ? `Respuesta a ${authorName(replyTo.author)}` : "Tu comentario"}
+          </label>
           <textarea
+            id={`comment-composer-${postId}`}
             ref={replyInputRef}
             value={body}
             onChange={(e) => setBody(e.target.value)}
@@ -469,13 +496,30 @@ export function PostDetail({ postId, currentUserId, isAdmin, canWrite, onBack, o
                   isAdmin={isAdmin}
                   canWrite={canWrite}
                   onReply={startReply}
-                  onDelete={handleDeleteComment}
+                  onDelete={setPendingCommentDelete}
                 />
               ))}
             </AnimatePresence>
           </motion.div>
         )}
       </section>
+
+      <ConfirmDialog
+        open={confirmingPostDelete}
+        onOpenChange={setConfirmingPostDelete}
+        title="¿Eliminar esta publicación?"
+        description="Se eliminarán también todos sus comentarios. No se puede deshacer."
+        confirmLabel="Eliminar"
+        onConfirm={handleDeletePost}
+      />
+      <ConfirmDialog
+        open={pendingCommentDelete !== null}
+        onOpenChange={(open) => { if (!open) setPendingCommentDelete(null); }}
+        title="¿Eliminar este comentario?"
+        description="Si tiene respuestas, también se eliminarán."
+        confirmLabel="Eliminar"
+        onConfirm={handleDeleteComment}
+      />
     </motion.div>
   );
 }
@@ -510,7 +554,7 @@ function CommentNode({ comment, replies, currentUserId, isAdmin, canWrite, onRep
       />
       {replies.length > 0 && (
         <div className="relative mt-4 space-y-3 pl-5 sm:pl-7">
-          <div className="absolute left-1.5 top-0 bottom-2 w-px bg-gradient-to-b from-brand/30 via-white/10 to-transparent" />
+          <div className="absolute left-1.5 top-0 bottom-2 w-px bg-gradient-to-b from-brand/30 via-ink/10 to-transparent" />
           <AnimatePresence initial={false}>
             {replies.map((r) => (
               <motion.div
@@ -556,28 +600,7 @@ function CommentBody({ comment, currentUserId, isAdmin, canWrite, onReply, onDel
 
   return (
     <div className="group/comment flex items-start gap-3">
-      <div className="relative shrink-0">
-        <div
-          className={cn(
-            "flex items-center justify-center overflow-hidden rounded-full text-xs font-bold ring-1 transition-all",
-            isReply ? "h-8 w-8" : "h-10 w-10",
-            authorIsAdmin
-              ? "bg-gradient-to-br from-brand/25 to-brand/5 text-accent ring-focus/40"
-              : "bg-gradient-to-br from-white/15 to-white/5 text-fg-90 ring-ink/15"
-          )}
-        >
-          {comment.author?.avatar_url ? (
-            <img src={comment.author.avatar_url} alt="" className="h-full w-full object-cover" />
-          ) : (
-            authorInitials(comment.author)
-          )}
-        </div>
-        {authorIsAdmin && (
-          <div className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-brand ring-2 ring-darker">
-            <Shield size={8} className="text-on-brand" strokeWidth={3} />
-          </div>
-        )}
-      </div>
+      <AuthorAvatar author={comment.author} size={isReply ? "sm" : "md"} />
       <div className="min-w-0 flex-1">
         <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
           <span className="font-semibold text-foreground-strong">{authorName(comment.author)}</span>
@@ -608,13 +631,15 @@ function CommentBody({ comment, currentUserId, isAdmin, canWrite, onReply, onDel
             </button>
           )}
           {canDelete && (
+            // Visible sin hover: en celular y con teclado no había forma de
+            // llegar. Atenuado hasta que se pasa por encima o se enfoca.
             <button
               type="button"
               onClick={() => onDelete(comment.id)}
-              className="ml-auto inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs text-danger opacity-0 transition-all hover:bg-red-500/10 hover:text-red-300 light:hover:text-danger group-hover/comment:opacity-100"
-              aria-label="Eliminar comentario"
+              className="ml-auto inline-flex size-9 items-center justify-center rounded-full text-xs text-danger opacity-60 transition-all hover:bg-red-500/10 hover:text-red-300 hover:opacity-100 focus-visible:opacity-100 light:hover:text-danger group-hover/comment:opacity-100"
+              aria-label={`Eliminar comentario de ${authorName(comment.author)}`}
             >
-              <Trash2 size={12} />
+              <Trash2 size={14} aria-hidden />
             </button>
           )}
         </div>

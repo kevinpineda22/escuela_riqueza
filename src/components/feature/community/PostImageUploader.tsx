@@ -8,14 +8,20 @@ interface PostImageUploaderProps {
   value: string | null;
   onChange: (url: string | null) => void;
   disabled?: boolean;
+  /** Avisa mientras la imagen se sube: publicar antes dejaba el post sin adjunto. */
+  onUploadingChange?: (uploading: boolean) => void;
 }
 
 const ACCEPTED_TYPES = ["image/png", "image/webp", "image/jpeg", "image/gif"];
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 
-export function PostImageUploader({ value, onChange, disabled }: PostImageUploaderProps) {
+export function PostImageUploader({ value, onChange, disabled, onUploadingChange }: PostImageUploaderProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
+  const [uploading, setUploadingState] = useState(false);
+  const setUploading = (next: boolean) => {
+    setUploadingState(next);
+    onUploadingChange?.(next);
+  };
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
 
@@ -93,19 +99,23 @@ export function PostImageUploader({ value, onChange, disabled }: PostImageUpload
     <div className="space-y-3">
       {displayUrl ? (
         <div className="relative rounded-xl border border-line-subtle bg-surface-page overflow-hidden group">
-          <img src={displayUrl} alt="Adjunto" className={cn("w-full h-auto max-h-[300px] object-cover transition-opacity", uploading && "opacity-50")} />
+          <img src={displayUrl} alt="Vista previa de la imagen adjunta" className={cn("w-full h-auto max-h-[300px] object-cover transition-opacity", uploading && "opacity-50")} />
           {uploading ? (
-            <div className="absolute inset-0 flex items-center justify-center">
-               <Loader2 className="text-accent animate-spin" size={32} />
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2" role="status">
+               <Loader2 className="text-accent animate-spin" size={32} aria-hidden />
+               <span className="rounded-full bg-black/60 px-3 py-1 text-xs font-semibold text-media-foreground">Subiendo imagen…</span>
             </div>
           ) : (
+            // Siempre visible: antes aparecía solo con hover y en celular o
+            // con teclado no había forma de quitar la imagen.
             <button
               type="button"
               onClick={handleRemove}
               disabled={disabled}
-              className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 text-media-foreground hover:bg-red-500/80 hover:text-media-foreground transition-colors backdrop-blur-md opacity-0 group-hover:opacity-100"
+              aria-label="Quitar imagen"
+              className="absolute top-2 right-2 inline-flex size-11 items-center justify-center rounded-full bg-black/60 text-media-foreground hover:bg-red-500/80 hover:text-media-foreground transition-colors backdrop-blur-md"
             >
-              <X size={16} />
+              <X size={18} aria-hidden />
             </button>
           )}
         </div>
@@ -123,7 +133,7 @@ export function PostImageUploader({ value, onChange, disabled }: PostImageUpload
       )}
 
       {error && (
-        <div className="flex items-start gap-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300 light:text-danger">
+        <div role="alert" className="flex items-start gap-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300 light:text-danger">
           <AlertCircle size={14} className="shrink-0 mt-0.5" />
           <p className="text-xs leading-tight">{error}</p>
         </div>

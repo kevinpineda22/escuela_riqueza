@@ -1,11 +1,19 @@
 import { useState } from "react";
 import { motion } from "motion/react";
-import { MessageSquare, MoreHorizontal, Pin, PinOff, Shield, Trash2 } from "lucide-react";
+import { MessageSquare, MoreHorizontal, Pin, PinOff, Trash2 } from "lucide-react";
 import type { CommunityPost } from "@/lib/api/community";
 import { togglePinPost } from "@/lib/api/community";
 import { toast } from "@/components/ui/toaster";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { LikeButton } from "./LikeButton";
-import { authorInitials, authorName, categoryMeta, formatRelative } from "./community-utils";
+import { AuthorAvatar } from "./AuthorAvatar";
+import { authorName, categoryMeta, formatRelative } from "./community-utils";
 import { cn } from "@/lib/utils";
 
 interface PostCardProps {
@@ -24,17 +32,14 @@ export function PostCard({ post, canDelete, isAdmin, canWrite, onOpen, onDelete,
   const cat = categoryMeta(post.category);
   const CatIcon = cat.icon;
   const isAuthorAdmin = post.author?.role === "admin";
-  const [menuOpen, setMenuOpen] = useState(false);
   const [pinning, setPinning] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
   const tooLong = post.body.length > PREVIEW_LIMIT;
   const displayBody = expanded || !tooLong ? post.body : post.body.slice(0, PREVIEW_LIMIT) + "…";
 
-  const handleTogglePin = async (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleTogglePin = async () => {
     if (pinning) return;
-    setMenuOpen(false);
     setPinning(true);
     try {
       await togglePinPost(post.id, !post.is_pinned);
@@ -55,9 +60,12 @@ export function PostCard({ post, canDelete, isAdmin, canWrite, onOpen, onDelete,
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -6, scale: 0.98 }}
       transition={{ type: "spring", stiffness: 280, damping: 28 }}
+      // Con el mouse toda la tarjeta abre. Con teclado y lector de pantalla
+      // abre el título (un botón real): un <article> clickeable no se enfoca.
       onClick={onOpen}
+      aria-labelledby={`post-title-${post.id}`}
       className={cn(
-        "group relative cursor-pointer overflow-hidden rounded-2xl border bg-surface-page/60 light:bg-surface-panel light:shadow-panel transition-all duration-300",
+        "group relative cursor-pointer overflow-hidden rounded-2xl border bg-surface-page/60 light:bg-surface-panel light:shadow-panel transition-all duration-300 focus-within:border-brand/50",
         post.is_pinned
           ? "border-brand/40 shadow-[0_8px_32px_-16px_rgba(204,164,59,0.45)] hover:border-brand/60"
           : "border-line-subtle hover:border-ink/20 hover:bg-surface-page/80 light:hover:bg-surface-panel"
@@ -68,26 +76,7 @@ export function PostCard({ post, canDelete, isAdmin, canWrite, onOpen, onDelete,
       )}
 
       <div className="flex gap-3 p-5 sm:gap-4">
-        {/* Avatar */}
-        <div className="relative shrink-0">
-          <div className={cn(
-            "relative h-12 w-12 overflow-hidden rounded-full flex items-center justify-center text-base font-bold ring-2 transition-all",
-            isAuthorAdmin
-              ? "bg-gradient-to-br from-brand/30 to-brand/10 text-accent ring-focus/50"
-              : "bg-gradient-to-br from-white/15 to-white/5 text-fg-90 light:from-surface-subtle light:to-surface-panel ring-ink/10 group-hover:ring-ink/20"
-          )}>
-            {post.author?.avatar_url ? (
-              <img src={post.author.avatar_url} alt="" className="h-full w-full object-cover" />
-            ) : (
-              authorInitials(post.author)
-            )}
-          </div>
-          {isAuthorAdmin && (
-            <div className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-brand ring-2 ring-darker">
-              <Shield size={10} className="text-on-brand" strokeWidth={3} />
-            </div>
-          )}
-        </div>
+        <AuthorAvatar author={post.author} size="lg" />
 
         {/* Content */}
         <div className="min-w-0 flex-1">
@@ -110,67 +99,63 @@ export function PostCard({ post, canDelete, isAdmin, canWrite, onOpen, onDelete,
                     cat.chip
                   )}
                 >
-                  <CatIcon size={10} />
+                  <CatIcon size={10} aria-hidden />
                   {cat.label}
                 </span>
                 {post.is_pinned && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-brand/15 px-2 py-0.5 text-[10px] font-bold uppercase text-accent ring-1 ring-focus/30">
-                    <Pin size={10} /> Fijado
+                    <Pin size={10} aria-hidden /> Fijado
                   </span>
                 )}
               </div>
             </div>
 
-            {/* Actions menu */}
+            {/* Acciones: menú de Radix (Escape, flechas y foco de vuelta al
+                botón). El de antes era un div propio sin teclado. */}
             {(isAdmin || canDelete) && (
-              <div className="relative" onClick={(e) => e.stopPropagation()}>
-                <button
-                  type="button"
-                  onClick={() => setMenuOpen((v) => !v)}
-                  className="rounded-full p-1.5 text-foreground-muted opacity-60 transition-all hover:bg-ink/10 hover:text-foreground-strong group-hover:opacity-100"
-                  aria-label="Más opciones"
-                >
-                  <MoreHorizontal size={18} />
-                </button>
-                {menuOpen && (
-                  <>
-                    <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                    <div className="absolute right-0 top-full z-20 mt-1 w-52 overflow-hidden rounded-xl border border-line-subtle bg-surface-page/95 shadow-2xl backdrop-blur-xl light:bg-surface-panel light:shadow-panel">
-                      {isAdmin && (
-                        <button
-                          type="button"
-                          onClick={handleTogglePin}
-                          disabled={pinning}
-                          className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-foreground-strong transition-colors hover:bg-brand/10 hover:text-accent disabled:opacity-50"
-                        >
-                          {post.is_pinned ? <PinOff size={15} /> : <Pin size={15} />}
-                          {post.is_pinned ? "Desfijar publicación" : "Fijar publicación"}
-                        </button>
-                      )}
-                      {canDelete && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setMenuOpen(false);
-                            onDelete();
-                          }}
-                          className="flex w-full items-center gap-2 border-t border-ink/5 px-3 py-2.5 text-left text-sm text-danger transition-colors hover:bg-red-500/10 hover:text-red-300 light:hover:text-danger"
-                        >
-                          <Trash2 size={15} />
-                          Eliminar
-                        </button>
-                      )}
-                    </div>
-                  </>
-                )}
+              <div onClick={(e) => e.stopPropagation()}>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className="-m-1.5 inline-flex size-11 items-center justify-center rounded-full text-foreground-muted transition-all hover:bg-ink/10 hover:text-foreground-strong data-[state=open]:bg-ink/10 data-[state=open]:text-foreground-strong"
+                      aria-label="Más opciones de la publicación"
+                    >
+                      <MoreHorizontal size={18} aria-hidden />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-[13rem]">
+                    {isAdmin && (
+                      <DropdownMenuItem onSelect={handleTogglePin} disabled={pinning} className="cursor-pointer gap-2">
+                        {post.is_pinned ? <PinOff size={15} aria-hidden /> : <Pin size={15} aria-hidden />}
+                        {post.is_pinned ? "Desfijar publicación" : "Fijar publicación"}
+                      </DropdownMenuItem>
+                    )}
+                    {isAdmin && canDelete && <DropdownMenuSeparator />}
+                    {canDelete && (
+                      <DropdownMenuItem onSelect={onDelete} className="cursor-pointer gap-2 text-danger focus:text-danger">
+                        <Trash2 size={15} aria-hidden />
+                        Eliminar
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             )}
           </div>
 
           {/* Title */}
-          <h3 className="mt-2.5 text-lg font-bold leading-snug text-foreground-strong transition-colors group-hover:text-accent sm:text-xl">
-            {post.title}
+          <h3 id={`post-title-${post.id}`} className="mt-2.5 text-lg font-bold leading-snug text-foreground-strong transition-colors group-hover:text-accent sm:text-xl">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpen();
+              }}
+              className="rounded-md text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-surface-page"
+            >
+              {post.title}
+            </button>
           </h3>
 
           {/* Body */}
@@ -184,18 +169,20 @@ export function PostCard({ post, canDelete, isAdmin, canWrite, onOpen, onDelete,
                 e.stopPropagation();
                 setExpanded((v) => !v);
               }}
+              aria-expanded={expanded}
               className="mt-1 text-xs font-semibold text-accent hover:text-accent-hover"
             >
               {expanded ? "Ver menos" : "Ver más"}
             </button>
           )}
 
-          {/* Image */}
+          {/* Image: el fondo negro es el lienzo de la imagen, en ambos temas. */}
           {post.image_url && (
             <div className="mt-3 overflow-hidden rounded-xl border border-line-subtle bg-black">
               <img
                 src={post.image_url}
-                alt="Adjunto"
+                alt={`Imagen adjunta a «${post.title}»`}
+                loading="lazy"
                 className="max-h-[480px] w-full object-contain transition-transform duration-700 group-hover:scale-[1.01]"
               />
             </div>
@@ -214,9 +201,10 @@ export function PostCard({ post, canDelete, isAdmin, canWrite, onOpen, onDelete,
             <button
               type="button"
               onClick={onOpen}
+              aria-label={`${post.comment_count} ${post.comment_count === 1 ? "comentario" : "comentarios"}: abrir la publicación`}
               className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-foreground-muted transition-colors hover:bg-ink/5 hover:text-foreground-strong"
             >
-              <MessageSquare size={14} />
+              <MessageSquare size={14} aria-hidden />
               <span className="tabular-nums">{post.comment_count}</span>
               <span className="hidden sm:inline">
                 {post.comment_count === 1 ? "Comentario" : "Comentarios"}

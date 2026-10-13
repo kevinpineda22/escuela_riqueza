@@ -13,10 +13,15 @@ function DropdownMenuContent({
   className,
   sideOffset = 8,
   ref,
+  container,
   ...props
-}: ComponentProps<typeof DropdownMenuPrimitive.Content> & { ref?: Ref<HTMLDivElement> }) {
+}: ComponentProps<typeof DropdownMenuPrimitive.Content> & {
+  ref?: Ref<HTMLDivElement>;
+  /** Dónde se portalea el menú. Con un contenedor en pantalla completa, el body no se ve. */
+  container?: HTMLElement | null;
+}) {
   return (
-    <DropdownMenuPrimitive.Portal>
+    <DropdownMenuPrimitive.Portal container={container ?? undefined}>
       <DropdownMenuPrimitive.Content
         ref={ref}
         sideOffset={sideOffset}

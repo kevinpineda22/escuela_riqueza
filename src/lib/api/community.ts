@@ -112,23 +112,30 @@ export async function fetchPosts(
   }
   query = query.limit(100);
 
+  // Un error de lectura LANZA: devolver [] le decía al alumno "aún no hay
+  // publicaciones" cuando en realidad falló la carga.
   const { data, error } = await query;
   if (error) {
     console.error("fetchPosts error", error);
-    return [];
+    throw error;
   }
   const posts = (data ?? []) as unknown as CommunityPost[];
   const liked = await getMyLikes("post", posts.map((p) => p.id));
   return posts.map((p) => ({ ...p, liked_by_me: liked.has(p.id) }));
 }
 
+/** `null` = no existe (o fue eliminada). Un error de lectura lanza. */
 export async function fetchPost(id: string): Promise<CommunityPost | null> {
   const { data, error } = await supabase
     .from("community_posts")
     .select(POST_SELECT)
     .eq("id", id)
     .maybeSingle();
-  if (error || !data) return null;
+  if (error) {
+    console.error("fetchPost error", error);
+    throw error;
+  }
+  if (!data) return null;
   const post = data as unknown as CommunityPost;
   const liked = await getMyLikes("post", [post.id]);
   return { ...post, liked_by_me: liked.has(post.id) };
@@ -188,7 +195,7 @@ export async function fetchComments(postId: string): Promise<CommunityComment[]>
 
   if (error) {
     console.error("fetchComments error", error);
-    return [];
+    throw error;
   }
   const comments = (data ?? []) as unknown as CommunityComment[];
   const liked = await getMyLikes("comment", comments.map((c) => c.id));

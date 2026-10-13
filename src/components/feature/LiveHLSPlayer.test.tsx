@@ -468,6 +468,54 @@ describe('LiveHLSPlayer recovery', () => {
     expect(playSpy).not.toHaveBeenCalled();
   });
 
+  it('no arranca debajo del overlay si el manifest se parsea con la sala en pausa', () => {
+    const { container } = renderPlayerWithRef({ autoPlay: true, roomPaused: true });
+    const video = container.querySelector('video') as HTMLVideoElement;
+    const playSpy = vi.fn().mockReturnValue(Promise.resolve());
+    video.play = playSpy;
+    act(() => { handlers.manifestParsed('manifestParsed', {}); });
+    expect(playSpy).not.toHaveBeenCalled();
+  });
+
+  it('goLive va a la posición de sync y reanuda; con la sala en pausa no reproduce', () => {
+    const { container, ref, rerender } = renderPlayerWithRef();
+    const video = driveVideo(container, { paused: true, currentTime: 20 });
+    mockSeekable(video, [[0, 100]]);
+    const playSpy = vi.fn().mockReturnValue(Promise.resolve());
+    video.play = playSpy;
+    hlsInstance.liveSyncPosition = 94;
+    act(() => { ref.current?.goLive(); });
+    expect(video.currentTime).toBe(94);
+    expect(playSpy).toHaveBeenCalledTimes(1);
+
+    rerender(<LiveHLSPlayer ref={ref} liveInputId="input-1" customerCode="abc" muted autoPlay={false} roomPaused />);
+    playSpy.mockClear();
+    video.currentTime = 20;
+    act(() => { ref.current?.goLive(); });
+    expect(video.currentTime).toBe(94);
+    expect(playSpy).not.toHaveBeenCalled();
+  });
+
+  it('seekTo dentro de un hueco de la ventana va al borde real más cercano', () => {
+    const { container, ref } = renderPlayerWithRef();
+    const video = driveVideo(container, { paused: false, currentTime: 0 });
+    mockSeekable(video, [[0, 40], [60, 100]]);
+    act(() => { ref.current?.seekTo(55); });
+    expect(video.currentTime).toBe(60);
+    act(() => { ref.current?.seekTo(43); });
+    expect(video.currentTime).toBe(40);
+  });
+
+  it('clase finalizada: un error de red no recarga el manifest y avisa onFatalError', () => {
+    const onFatalError = vi.fn();
+    renderPlayer({ onFatalError, streamEnded: true });
+    hlsInstance.loadSource.mockClear();
+    act(() => { handlers.error('error', { fatal: true, type: 'networkError', details: 'levelLoadError' }); });
+    act(() => { vi.advanceTimersByTime(10_000); });
+    expect(hlsInstance.loadSource).not.toHaveBeenCalled();
+    expect(onFatalError).toHaveBeenCalledTimes(1);
+  });
+
   // Regresión del fix H1: una pausa nativa SIN intención del usuario (tab
   // backgrounded, interrupción del SO, `ended`) no debe envenenar el flag de
   // "pausó a propósito" — de lo contrario el alumno queda trabado en un frame

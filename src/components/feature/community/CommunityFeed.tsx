@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
-import { Flame, Lock, MessageSquare, Pin, Plus, Sparkles, Clock, Users } from "lucide-react";
+import { AlertTriangle, Flame, Loader2, Lock, MessageSquare, Pin, Plus, RotateCw, Sparkles, Clock, Users } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
@@ -16,6 +16,10 @@ import { CATEGORIES } from "./community-utils";
 import { PostCard } from "./PostCard";
 import { NewPostDialog } from "./NewPostDialog";
 import { PostDetail } from "./PostDetail";
+import { ConfirmDialog } from "./ConfirmDialog";
+
+/** Tope de `fetchPosts`: las métricas cuentan solo lo cargado. */
+const POSTS_LIMIT = 100;
 
 interface CommunityFeedProps {
   currentUserId: string;
@@ -26,23 +30,58 @@ interface CommunityFeedProps {
 export function CommunityFeed({ currentUserId, isAdmin, canWrite }: CommunityFeedProps) {
   const navigate = useNavigate();
   const [posts, setPosts] = useState<CommunityPost[]>([]);
-  const [loading, setLoading] = useState(true);
+  // "loading" = primera carga (o cambio de filtro) sin nada que mostrar; un
+  // refresco con lista a la vista NO vuelve al skeleton (antes cada INSERT de
+  // realtime y cada vuelta del detalle hacían parpadear el feed entero).
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [refreshing, setRefreshing] = useState(false);
   const [sort, setSort] = useState<CommunitySort>("recent");
   const [category, setCategory] = useState<CommunityCategory | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<CommunityPost | null>(null);
+  // Solo la respuesta del pedido más reciente se aplica: con filtros rápidos,
+  // una respuesta vieja llegaba tarde y pisaba la vista nueva.
+  const requestIdRef = useRef(0);
+  // Posición de lectura al abrir una publicación, para volver al mismo lugar.
+  const savedScrollRef = useRef<number | null>(null);
 
-  const load = async () => {
-    setLoading(true);
-    const list = await fetchPosts(sort, category ?? undefined);
-    setPosts(list);
-    setLoading(false);
+  const load = async ({ silent = false }: { silent?: boolean } = {}) => {
+    const requestId = ++requestIdRef.current;
+    if (silent) setRefreshing(true);
+    else setStatus("loading");
+    try {
+      const list = await fetchPosts(sort, category ?? undefined);
+      if (requestId !== requestIdRef.current) return;
+      setPosts(list);
+      setStatus("ready");
+    } catch {
+      if (requestId !== requestIdRef.current) return;
+      // Con lista a la vista se conserva y se avisa; sin lista, estado de error.
+      if (silent) toast.error("No pudimos actualizar la comunidad");
+      else setStatus("error");
+    } finally {
+      if (requestId === requestIdRef.current) setRefreshing(false);
+    }
   };
 
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sort, category]);
+
+  // Volver del detalle restaura la posición de lectura (la lista se desmonta
+  // mientras se ve una publicación).
+  useLayoutEffect(() => {
+    if (selectedPostId !== null || savedScrollRef.current === null) return;
+    window.scrollTo({ top: savedScrollRef.current });
+    savedScrollRef.current = null;
+  }, [selectedPostId]);
+
+  const openPost = (id: string) => {
+    savedScrollRef.current = window.scrollY;
+    setSelectedPostId(id);
+  };
 
   useEffect(() => {
     const channel = supabase
@@ -51,7 +90,7 @@ export function CommunityFeed({ currentUserId, isAdmin, canWrite }: CommunityFee
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "community_posts" },
         () => {
-          load();
+          load({ silent: true });
         }
       )
       .on(
@@ -96,17 +135,21 @@ export function CommunityFeed({ currentUserId, isAdmin, canWrite }: CommunityFee
     return { totalPosts: posts.length, totalLikes, totalComments, uniqueAuthors };
   }, [posts]);
 
-  const handleDeleteFromCard = async (post: CommunityPost) => {
-    if (!confirm("¿Eliminar esta publicación?")) return;
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
     try {
-      await deletePost(post.id);
-      setPosts((prev) => prev.filter((p) => p.id !== post.id));
+      await deletePost(pendingDelete.id);
+      setPosts((prev) => prev.filter((p) => p.id !== pendingDelete.id));
       toast.success("Publicación eliminada");
     } catch (err) {
       console.error(err);
       toast.error("No se pudo eliminar");
+      throw err;
     }
   };
+
+  const loading = status === "loading";
+  const categoryLabel = category ? CATEGORIES.find((cat) => cat.id === category)?.label : null;
 
   if (selectedPostId) {
     return (
@@ -117,11 +160,11 @@ export function CommunityFeed({ currentUserId, isAdmin, canWrite }: CommunityFee
         canWrite={canWrite}
         onBack={() => {
           setSelectedPostId(null);
-          load();
+          load({ silent: true });
         }}
         onDeleted={() => {
           setSelectedPostId(null);
-          load();
+          load({ silent: true });
         }}
       />
     );
@@ -164,12 +207,13 @@ export function CommunityFeed({ currentUserId, isAdmin, canWrite }: CommunityFee
       >
         <div className="pointer-events-none absolute -top-24 -right-24 h-72 w-72 rounded-full bg-brand/20 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-32 -left-20 h-72 w-72 rounded-full bg-purple-500/8 blur-3xl" />
-        <div className="pointer-events-none absolute inset-0 opacity-[0.03] [background-image:radial-gradient(circle_at_1px_1px,white_1px,transparent_0)] [background-size:20px_20px]" />
+        {/* Textura de puntos en el color del texto: blanca era invisible en claro. */}
+        <div className="pointer-events-none absolute inset-0 text-foreground-strong opacity-[0.04] [background-image:radial-gradient(circle_at_1px_1px,currentColor_1px,transparent_0)] [background-size:20px_20px]" />
 
         <div className="relative flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-brand/30 bg-brand/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-accent backdrop-blur-sm">
-              <Sparkles size={12} /> Espacio exclusivo
+              <Sparkles size={12} aria-hidden /> Espacio de miembros
             </div>
             <h2 className="text-3xl font-extrabold tracking-tight text-foreground-strong sm:text-4xl">
               Comunidad{" "}
@@ -190,18 +234,26 @@ export function CommunityFeed({ currentUserId, isAdmin, canWrite }: CommunityFee
             onClick={() => setDialogOpen(true)}
             className="group relative inline-flex items-center justify-center gap-2 self-start overflow-hidden rounded-2xl bg-brand px-6 py-3 font-bold text-on-brand shadow-[0_8px_32px_-8px_rgba(204,164,59,0.6)] transition-all hover:bg-brand-hover sm:self-auto"
           >
-            <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/40 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
-            <Plus size={18} /> Nueva publicación
+            <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/40 to-transparent transition-transform duration-700 group-hover:translate-x-full motion-reduce:hidden" />
+            <Plus size={18} aria-hidden /> Crear publicación
           </motion.button>
           )}
         </div>
 
-        {/* mini stats strip */}
-        <div className="relative mt-6 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
-          <StatPill icon={MessageSquare} label="Publicaciones" value={stats.totalPosts} />
-          <StatPill icon={Flame} label="Me gusta" value={stats.totalLikes} />
-          <StatPill icon={MessageSquare} label="Comentarios" value={stats.totalComments} />
-          <StatPill icon={Users} label="Miembros activos" value={stats.uniqueAuthors} />
+        {/* Métricas de lo que se ve: cuentan las publicaciones cargadas con el
+            filtro actual (tope POSTS_LIMIT). "Miembros activos" sugería
+            gente conectada o el total de miembros; son autores de esta vista. */}
+        <div className="relative mt-6">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+            <StatPill icon={MessageSquare} label="Publicaciones" value={loading ? null : stats.totalPosts} capped={posts.length >= POSTS_LIMIT} />
+            <StatPill icon={Flame} label="Me gusta" value={loading ? null : stats.totalLikes} />
+            <StatPill icon={MessageSquare} label="Comentarios" value={loading ? null : stats.totalComments} />
+            <StatPill icon={Users} label="Autores en esta vista" value={loading ? null : stats.uniqueAuthors} />
+          </div>
+          <p className="mt-2 text-[11px] text-foreground-muted">
+            {categoryLabel ? `En «${categoryLabel}»` : "En todas las categorías"}
+            {posts.length >= POSTS_LIMIT && ` · últimas ${POSTS_LIMIT} publicaciones`}
+          </p>
         </div>
       </motion.div>
 
@@ -219,6 +271,7 @@ export function CommunityFeed({ currentUserId, isAdmin, canWrite }: CommunityFee
                 <button
                   key={opt.id}
                   type="button"
+                  aria-pressed={active}
                   onClick={() => setSort(opt.id)}
                   className={cn(
                     "relative inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
@@ -238,8 +291,9 @@ export function CommunityFeed({ currentUserId, isAdmin, canWrite }: CommunityFee
             })}
           </div>
 
-          <div className="hidden text-xs text-foreground-muted sm:block">
-            {posts.length} {posts.length === 1 ? "publicación" : "publicaciones"}
+          <div className="hidden items-center gap-2 text-xs text-foreground-muted sm:flex" aria-live="polite">
+            {refreshing && <Loader2 size={12} className="animate-spin" aria-hidden />}
+            {refreshing ? "Actualizando…" : `${posts.length} ${posts.length === 1 ? "publicación" : "publicaciones"}`}
           </div>
         </div>
 
@@ -262,10 +316,36 @@ export function CommunityFeed({ currentUserId, isAdmin, canWrite }: CommunityFee
 
       {/* Feed */}
       {loading ? (
-        <div className="space-y-3">
+        <div className="space-y-3" aria-busy="true" aria-label="Cargando publicaciones">
           {[0, 1, 2].map((i) => (
             <SkeletonCard key={i} delay={i * 0.08} />
           ))}
+        </div>
+      ) : status === "error" ? (
+        <div role="alert" className="rounded-3xl border border-red-500/25 bg-red-500/[0.06] px-6 py-12 text-center">
+          <AlertTriangle className="mx-auto mb-3 text-red-400 light:text-danger" size={28} aria-hidden />
+          <h3 className="mb-1 text-lg font-bold text-foreground-strong">No pudimos cargar la comunidad</h3>
+          <p className="mx-auto mb-5 max-w-sm text-sm text-foreground-muted">Revisa tu conexión. Tus filtros se mantienen.</p>
+          <button
+            type="button"
+            onClick={() => load()}
+            className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand px-5 font-bold text-on-brand transition-colors hover:bg-brand-hover"
+          >
+            <RotateCw size={16} aria-hidden /> Reintentar
+          </button>
+        </div>
+      ) : posts.length === 0 && category ? (
+        // Vacío por filtro: no es "nadie publicó nunca".
+        <div className="rounded-3xl border border-dashed border-ink/15 px-6 py-12 text-center light:bg-surface-panel">
+          <h3 className="mb-1 text-lg font-bold text-foreground-strong">Sin publicaciones en «{categoryLabel}»</h3>
+          <p className="mx-auto mb-5 max-w-sm text-sm text-foreground-muted">Prueba con otra categoría o mira todo lo publicado.</p>
+          <button
+            type="button"
+            onClick={() => setCategory(null)}
+            className="inline-flex min-h-11 items-center rounded-xl border border-line-subtle px-5 font-semibold text-foreground-strong transition-colors hover:border-brand/40 hover:text-accent"
+          >
+            Ver todas
+          </button>
         </div>
       ) : posts.length === 0 ? (
         <motion.div
@@ -291,7 +371,7 @@ export function CommunityFeed({ currentUserId, isAdmin, canWrite }: CommunityFee
               onClick={() => setDialogOpen(true)}
               className="inline-flex items-center gap-2 rounded-xl bg-brand px-5 py-2.5 font-bold text-on-brand transition-colors hover:bg-brand-hover"
             >
-              <Plus size={16} /> Crear la primera
+              <Plus size={16} aria-hidden /> Crear la primera
             </button>
           )}
         </motion.div>
@@ -323,8 +403,8 @@ export function CommunityFeed({ currentUserId, isAdmin, canWrite }: CommunityFee
                       canDelete={isAdmin || post.author_id === currentUserId}
                       isAdmin={isAdmin}
                       canWrite={canWrite}
-                      onOpen={() => setSelectedPostId(post.id)}
-                      onDelete={() => handleDeleteFromCard(post)}
+                      onOpen={() => openPost(post.id)}
+                      onDelete={() => setPendingDelete(post)}
                       onPinChanged={(updated) =>
                         setPosts((prev) => prev.map((p) => (p.id === updated.id ? { ...p, is_pinned: updated.is_pinned } : p)))
                       }
@@ -350,8 +430,8 @@ export function CommunityFeed({ currentUserId, isAdmin, canWrite }: CommunityFee
                       canDelete={isAdmin || post.author_id === currentUserId}
                       isAdmin={isAdmin}
                       canWrite={canWrite}
-                      onOpen={() => setSelectedPostId(post.id)}
-                      onDelete={() => handleDeleteFromCard(post)}
+                      onOpen={() => openPost(post.id)}
+                      onDelete={() => setPendingDelete(post)}
                       onPinChanged={(updated) =>
                         setPosts((prev) => prev.map((p) => (p.id === updated.id ? { ...p, is_pinned: updated.is_pinned } : p)))
                       }
@@ -369,22 +449,34 @@ export function CommunityFeed({ currentUserId, isAdmin, canWrite }: CommunityFee
         onOpenChange={setDialogOpen}
         isAdmin={isAdmin}
         onCreated={(post) => {
-          setPosts((prev) => [post, ...prev]);
-          setSelectedPostId(post.id);
+          setPosts((prev) => (prev.some((p) => p.id === post.id) ? prev : [post, ...prev]));
+          openPost(post.id);
         }}
+      />
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => { if (!open) setPendingDelete(null); }}
+        title="¿Eliminar esta publicación?"
+        description="Se eliminarán también sus comentarios. No se puede deshacer."
+        confirmLabel="Eliminar"
+        onConfirm={confirmDelete}
       />
     </div>
   );
 }
 
-function StatPill({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: number }) {
+function StatPill({ icon: Icon, label, value, capped = false }: { icon: React.ElementType; label: string; value: number | null; capped?: boolean }) {
   return (
     <div className="flex items-center gap-3 rounded-xl border border-line-subtle bg-ink/[0.03] light:bg-surface-panel px-3 py-2.5 backdrop-blur-sm">
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-accent ring-1 ring-focus/20">
-        <Icon size={15} />
+        <Icon size={15} aria-hidden />
       </div>
       <div className="min-w-0">
-        <div className="text-base font-bold tabular-nums text-foreground-strong leading-none">{value}</div>
+        {/* Cargando: guion, no un 0 que diga "no hay nada". */}
+        <div className="text-base font-bold tabular-nums text-foreground-strong leading-none">
+          {value === null ? "—" : capped ? `${value}+` : value}
+        </div>
         <div className="mt-0.5 truncate text-[10px] uppercase tracking-wide text-foreground-muted">{label}</div>
       </div>
     </div>
@@ -406,6 +498,7 @@ function CategoryChip({
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
         "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all",
         active

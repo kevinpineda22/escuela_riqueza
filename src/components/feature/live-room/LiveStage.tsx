@@ -15,6 +15,9 @@ interface LiveStageProps {
   status: LiveRoomStatus;
   playerRef: RefObject<LiveHLSPlayerHandle | null>;
   playback: LivePlayback;
+  /** La sala finalizó y el alumno sigue viendo lo que le faltaba (Clase completa). */
+  continuingAfterEnd?: boolean;
+  onLeaveEndedContinuation?: () => void;
   /** Grabación a mostrar una vez finalizada (solo la sala pública la ofrece). */
   replay?: ReactNode;
   /** Reemplaza el "Transmisión finalizada" (ej. el paywall de la repetición). */
@@ -28,7 +31,7 @@ interface LiveStageProps {
 }
 
 /** Escenario de la sala: decide qué se ve según el estado del en vivo. */
-export function LiveStage({ live, status, playerRef, playback, replay, endedNotice, waitingLabel, waitingTitleFallback, fitToVideo = false, compact = false }: LiveStageProps) {
+export function LiveStage({ live, status, playerRef, playback, continuingAfterEnd = false, onLeaveEndedContinuation, replay, endedNotice, waitingLabel, waitingTitleFallback, fitToVideo = false, compact = false }: LiveStageProps) {
   const { isLive, isEnded, isPaused, showPlayer } = status;
   const hasStreamId = Boolean(live.stream_live_input_id);
 
@@ -54,7 +57,18 @@ export function LiveStage({ live, status, playerRef, playback, replay, endedNoti
       <AnimatePresence mode="wait">
         {showPlayer && hasStreamId ? (
           <motion.div key="player" initial={false} className="w-full h-full relative bg-black flex items-center justify-center">
-            <LivePlayerStage liveInputId={live.stream_live_input_id!} resumeKey={live.id} isPaused={isPaused} playerRef={playerRef} playback={playback} />
+            <LivePlayerStage
+              liveInputId={live.stream_live_input_id!}
+              // Identidad de la emisión, no solo de la sala: reprogramar o
+              // reactivar la sala cambia `starts_at` y una posición guardada
+              // de la emisión anterior ya no se restaura en la nueva.
+              resumeKey={`${live.id}:${live.starts_at}`}
+              isPaused={isPaused && !continuingAfterEnd}
+              streamEnded={continuingAfterEnd}
+              onLeaveEnded={onLeaveEndedContinuation}
+              playerRef={playerRef}
+              playback={playback}
+            />
           </motion.div>
         ) : isEnded && replay ? (
           <motion.div key="replay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full h-full relative bg-black flex items-center justify-center p-4 sm:p-8">

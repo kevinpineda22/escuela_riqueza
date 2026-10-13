@@ -1,8 +1,23 @@
 import { describe, it, expect } from "vitest";
-import { getLiveRoomStatus, isSameLive } from "./liveRoomStatus";
+import { getLiveRoomStatus, isSameLive, withEndedContinuation } from "./liveRoomStatus";
 import type { LiveEvent } from "@/lib/api/stream/lives";
 
 const liveWith = (fields: Partial<LiveEvent>) => ({ status: "scheduled", is_paused: false, ...fields }) as LiveEvent;
+
+describe("withEndedContinuation", () => {
+  it("finalizada con clase pendiente: el player sigue montado", () => {
+    const ended = getLiveRoomStatus(liveWith({ status: "ended" }), true);
+    expect(ended.showPlayer).toBe(false);
+    expect(withEndedContinuation(ended, true)).toEqual({ ...ended, showPlayer: true });
+  });
+
+  it("sin continuación o con la sala abierta no cambia nada", () => {
+    const ended = getLiveRoomStatus(liveWith({ status: "ended" }), false);
+    const live = getLiveRoomStatus(liveWith({ status: "live" }), false);
+    expect(withEndedContinuation(ended, false)).toBe(ended);
+    expect(withEndedContinuation(live, true)).toBe(live);
+  });
+});
 
 describe("getLiveRoomStatus", () => {
   it("programada sin señal: ni en vivo ni player", () => {
