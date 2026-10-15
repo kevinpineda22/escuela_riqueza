@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth.store";
 import { supabase } from "@/lib/supabase";
-import { PLANS } from "@/types/user";
 import { canAccessCertificates } from "@/lib/plans";
 import AnimationToggle from "@/components/feature/AnimationToggle";
 import AppearanceToggle from "@/components/feature/AppearanceToggle";
@@ -56,6 +55,7 @@ const DASHBOARD_TABS: DashboardTab[] = [
   { id: "notas", icon: Edit3, label: "Notas personales" },
   { id: "certificados", icon: Award, label: "Certificado", premiumOnly: true },
   { id: "comunidad", icon: UsersIcon, label: "Comunidad VIP" },
+  { id: "grabaciones", icon: Video, label: "En vivo y grabaciones" },
   { id: "perfil", icon: UserIcon, label: "Mi Panel" },
 ];
 
@@ -79,7 +79,6 @@ const Header = () => {
   const closeMenu = () => setIsMobileMenuOpen(false);
   const isAdmin = user?.role === "admin";
   const inDashboard = pathname.startsWith("/dashboard");
-  const isVip = user?.plan === PLANS.VIP;
   const canSeeCertificates = canAccessCertificates(user?.plan, user?.role);
   const currentTab = searchParams.get("tab") || "modulos";
 
@@ -296,20 +295,6 @@ const Header = () => {
                         </Link>
                       );
                     })}
-
-                    {isVip && (
-                      <Link
-                        to="/vip-live"
-                        onClick={closeMenu}
-                        className="mt-2 flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all bg-red-600/10 text-danger hover:bg-red-600/20 border border-danger-line"
-                      >
-                        <div className="relative">
-                          <Video size={18} />
-                          <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                        </div>
-                        Eventos en vivo
-                      </Link>
-                    )}
                   </>
                 )}
 

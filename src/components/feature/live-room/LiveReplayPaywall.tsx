@@ -9,8 +9,9 @@ interface LiveReplayPaywallProps {
 
 /**
  * En lugar de la repetición, para quien no la puede ver: el en vivo público es
- * abierto, la grabación es de los planes Individual/VIP (`canWatchReplay`),
- * salvo que la sala la haya abierto a todos (`replay_is_public`).
+ * abierto, la grabación es de los planes Individual/VIP cuando
+ * `replay_visibility = 'paid'` (con 'all' la ve cualquiera; con 'hidden' no se
+ * muestra este paywall).
  */
 export function LiveReplayPaywall({ title, loggedIn, loginPath }: LiveReplayPaywallProps) {
   const navigate = useNavigate();

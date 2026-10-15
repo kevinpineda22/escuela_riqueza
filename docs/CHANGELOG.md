@@ -5,6 +5,24 @@
 
 ---
 
+## 2026-10-15
+
+### Escuela — "En vivo y grabaciones": repeticiones visibles para alumnos con visibilidad por sala
+- **Modelo**: nueva columna `lives.replay_visibility` (`hidden` por defecto, `paid`, `all`). `hidden` no se lista a alumnos; `paid` la reproducen Individual y VIP (Free la ve bloqueada con CTA a `/planes`); `all` la reproduce cualquier plan. El admin siempre puede reproducir. Ver abajo «Regla unificada» para el link público.
+- **SQL a correr ANTES de desplegar el frontend**: `sql/migrate-lives-replay-visibility.sql` (idempotente; verificado dos veces sobre PGlite con usuarios free/individual/vip/admin). Todas las filas existentes quedan en `hidden`. Crea `can_watch_school_replay`, `list_school_replays()` y `get_school_replay(uuid)` (SECURITY DEFINER, solo `authenticated`): solo lives `ended` con grabación, anulan `recording_stream_uid` si el usuario no puede reproducir y nunca devuelven `recording_r2_key`.
+- **API**: `/api/stream/recording-url` (rama autenticada) autoriza además si el live está `ended` y la visibilidad habilita el plan (`api/_lib/replayVisibility.ts`, copia mínima de `src/lib/replayVisibility.ts` porque `api/` no importa desde `src/`). (Reemplazado por la regla unificada de abajo: `allowed_plans` ya no autoriza grabaciones.)
+- **Admin**: control segmentado "¿Quién ve esta grabación?" (Oculta / Planes pagos / Todos los planes) en cada tarjeta de "Finalizados" (`ReplayVisibilityControl`), con actualización optimista y reversión con toast; deshabilitado si la sala no tiene grabación vinculada.
+- **Alumno**: botón "En vivo y grabaciones" para todos los planes (rojo con punto solo si hay un live activo permitido para su plan; el menú móvil lo incluye como pestaña y reemplaza el enlace "Eventos en vivo" solo-VIP), nueva pestaña `?tab=grabaciones` (`ReplaysTab`) y ruta `/grabaciones/:liveId` (`ReplayViewer`, reutiliza `RecordingPlayer`).
+- **Pendiente conocido (fuera de alcance)**: el SELECT de `lives` está abierto a `authenticated`, así que los ids de grabación siguen siendo legibles con una consulta directa a la tabla aunque la visibilidad sea `hidden`. Requiere un seguimiento aparte (restringir columnas o mover la lectura a RPC).
+
+### Regla unificada: `replay_visibility` decide la repetición en la escuela Y en el link público
+- **Regla**: `hidden` = nadie salvo admin (por el link público no hay repetición, ni para alumnos pagos); `paid` = Individual/VIP con sesión (anónimos y Free ven el paywall del link); `all` = todos los planes en la escuela y **cualquiera sin cuenta** por el link público. `is_public` solo controla si el link/sala pública existe.
+- **`replay_is_public` deprecada**: la columna se conserva pero nada la lee para autorizar. Se quitó el toggle «Repetición abierta a todos» de `PublicLinkControl` y `setLiveReplayPublic`; también `canWatchReplay` (`src/lib/plans.ts`), reemplazada por `canWatchSchoolReplay`.
+- **SQL**: `sql/migrate-replay-visibility-public-link.sql` (idempotente; correr DESPUÉS de `migrate-lives-replay-visibility.sql` y ANTES de desplegar el frontend). Migra los datos (`replay_is_public = true` pasa a `replay_visibility = 'all'`; ninguna otra fila cambia), agrega el helper interno `can_watch_public_replay` (sin grants) y recrea `get_public_live` (revela las grabaciones si admin, `all`, o `paid` + Individual/VIP) y `public_live_has_recording` (false con `hidden`, para que se vea como "sin repetición" y no como paywall). Verificado en PGlite (anon/free/individual/vip/admin x hidden/paid/all, doble ejecución).
+- **API**: `/api/stream/recording-url`: la rama anónima (`share_token`) firma solo con `replay_visibility = 'all'`; la autenticada (`live_id`) autoriza admin o live `ended` + `canWatchSchoolReplay`. `allowed_plans` ya no abre grabaciones: un live `hidden` se bloquea aunque el plan esté en `allowed_plans`.
+- **Cambio de comportamiento**: los lives `hidden` (el default) ya no reproducen por el link público ni para alumnos Individual/VIP. Para mantener el acceso hay que marcarlos `paid` o `all`. El frontend viejo seguirá mostrando el toggle de «Repetición abierta» pero será un no-op tras correr el SQL.
+- **Admin**: «¿Quién ve esta grabación?» aplica en «En vivo y grabaciones» y en el link público; con `all` y link público apagado muestra el aviso para activarlo.
+
 ## 2026-10-13
 
 ### Grabaciones — `configure-live-input.mjs` ya no baja el timeout desplegado
