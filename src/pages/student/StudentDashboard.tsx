@@ -34,10 +34,11 @@ import { supabase } from "@/lib/supabase";
 import { fetchModules, fetchLessons, type Module as DBModule, type Lesson as DBLesson } from "@/lib/api/stream/content";
 import { fetchActiveLive, type LiveEvent } from "@/lib/api/stream/lives";
 import { fetchAllUserProgress } from "@/lib/api/stream/progress";
+import { ReplaysTab } from "@/components/feature/replays/ReplaysTab";
 import { CommunityFeed } from "@/components/feature/community/CommunityFeed";
 import { canAccessCertificates, canReadCommunity, canWriteCommunity } from "@/lib/plans";
 
-type TabId = "modulos" | "notas" | "certificados" | "comunidad" | "perfil";
+type TabId = "modulos" | "notas" | "certificados" | "comunidad" | "grabaciones" | "perfil";
 
 const getInitials = (name: string) => {
   if (!name) return "US";
@@ -48,7 +49,7 @@ const getInitials = (name: string) => {
   return name.slice(0, 2).toUpperCase();
 };
 
-const VALID_TABS: TabId[] = ["modulos", "notas", "certificados", "comunidad", "perfil"];
+const VALID_TABS: TabId[] = ["modulos", "notas", "certificados", "comunidad", "grabaciones", "perfil"];
 
 const BADGE_CONTENT: Record<string, { description: string; keyPhrase: string }> = {
   "inteligencia mental": {
@@ -120,17 +121,16 @@ const StudentDashboard = () => {
   const [dbLessonsMap, setDbLessonsMap] = useState<Record<string, DBLesson[]>>({});
   const [userProgress, setUserProgress] = useState<{ lesson_id: string, is_completed: boolean }[]>([]);
   const [isLoadingContent, setIsLoadingContent] = useState(true);
-  const [liveEvent, setLiveEvent] = useState<LiveEvent | null>(null);
+  // Sala activa sin filtrar por plan (la pestaña de grabaciones decide si se puede entrar)
+  const [activeLive, setActiveLive] = useState<LiveEvent | null>(null);
 
   useEffect(() => {
-    fetchActiveLive().then(active => {
-      if (active && user?.plan && active.allowed_plans?.includes(user.plan)) {
-        setLiveEvent(active);
-      } else {
-        setLiveEvent(null);
-      }
-    }).catch(() => setLiveEvent(null));
-  }, [user?.plan]);
+    fetchActiveLive().then(setActiveLive).catch(() => setActiveLive(null));
+  }, []);
+
+  // Live relevante para el plan del usuario (banner y botón rojo del menú)
+  const liveEvent =
+    activeLive && user?.plan && activeLive.allowed_plans?.includes(user.plan) ? activeLive : null;
 
   // Progress calculations
   const getModuleProgress = (moduleId: string) => {
@@ -444,23 +444,26 @@ const StudentDashboard = () => {
                 );
               })}
 
-              {user?.plan === PLANS.VIP && (
-                <div className="pt-4 mt-4 border-t border-line-subtle">
-                  <button
-                    type="button"
-                    onClick={() => navigate("/vip-live")}
-                    className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl transition-all text-sm font-bold bg-red-600/10 text-danger hover:bg-red-600/20 border border-red-500/30 group"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="relative">
-                        <Video size={18} className="group-hover:scale-110 transition-transform" />
-                        <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-                      </div>
-                      Eventos en Vivo
-                    </div>
-                  </button>
-                </div>
-              )}
+              <div className="pt-4 mt-4 border-t border-line-subtle">
+                <button
+                  type="button"
+                  onClick={() => changeTab("grabaciones")}
+                  className={cn(
+                    "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm group border",
+                    liveEvent
+                      ? "font-bold bg-red-600/10 text-danger hover:bg-red-600/20 border-red-500/30"
+                      : activeTab === "grabaciones"
+                        ? "font-medium bg-ink/10 text-foreground-strong shadow-sm border-ink/5"
+                        : "font-medium text-foreground-muted hover:text-foreground-strong hover:bg-ink/5 border-transparent"
+                  )}
+                >
+                  <div className="relative">
+                    <Video size={18} className={liveEvent ? "group-hover:scale-110 transition-transform" : activeTab === "grabaciones" ? "text-accent" : "text-foreground-muted group-hover:text-fg-80 transition-colors"} />
+                    {liveEvent && <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}
+                  </div>
+                  En vivo y grabaciones
+                </button>
+              </div>
             </nav>
           </motion.div>
         </aside>
@@ -1309,6 +1312,10 @@ const StudentDashboard = () => {
                   </div>
                 )}
               </motion.div>
+            )}
+
+            {activeTab === "grabaciones" && (
+              <ReplaysTab plan={user?.plan} role={user?.role} activeLive={activeLive} />
             )}
 
             {activeTab === "perfil" && (

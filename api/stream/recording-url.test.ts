@@ -4,7 +4,7 @@ import { signR2RecordingUrl } from './recording-url';
 
 // `signR2RecordingUrl` es la lógica de firma compartida entre la rama
 // autenticada (dashboard/admin, `live_id`) y la rama pública de repetición
-// abierta (`share_token`, gated por `replay_is_public`) de recording-url.ts
+// pública (`share_token`, gated por `replay_visibility = 'all'`) de recording-url.ts
 // — se extrajo para que ambas ramas firmen exactamente igual y para poder
 // testearla sin mockear `VercelRequest`/`VercelResponse`.
 const creds = {
@@ -45,7 +45,7 @@ describe('signR2RecordingUrl', () => {
 // ---- Rama pública (`share_token`) del handler ----
 //
 // Mockeamos `@supabase/supabase-js` para controlar la respuesta de la RPC
-// `get_public_live` y así probar el gate de `replay_is_public` sin una base
+// `get_public_live` y así probar el gate de `replay_visibility` sin una base
 // real. `requireAuth`/`applyRateLimit` se dejan pasar (fail-open, como en
 // dev sin Upstash) para aislar el comportamiento del endpoint.
 const rpcMock = vi.fn();
@@ -98,9 +98,9 @@ describe('POST /api/stream/recording-url — rama pública (share_token)', () =>
     process.env = { ...ORIGINAL_ENV };
   });
 
-  it('firma la URL cuando la sala tiene replay_is_public = true', async () => {
+  it('firma la URL cuando la sala tiene replay_visibility all', async () => {
     rpcMock.mockResolvedValue({
-      data: [{ replay_is_public: true, recording_storage: 'r2', recording_r2_key: 'lives/open/vivo.mp4' }],
+      data: [{ replay_visibility: 'all', recording_storage: 'r2', recording_r2_key: 'lives/open/vivo.mp4' }],
       error: null,
     });
 
@@ -115,9 +115,9 @@ describe('POST /api/stream/recording-url — rama pública (share_token)', () =>
     expect((res._json as any).url).toContain('lives/open/vivo.mp4');
   });
 
-  it('rechaza con 403 cuando replay_is_public es false', async () => {
+  it.each(['paid', 'hidden'])('rechaza con 403 cuando replay_visibility es %s', async (visibility) => {
     rpcMock.mockResolvedValue({
-      data: [{ replay_is_public: false, recording_storage: 'r2', recording_r2_key: 'lives/paid/vivo.mp4' }],
+      data: [{ replay_visibility: visibility, recording_storage: 'r2', recording_r2_key: 'lives/paid/vivo.mp4' }],
       error: null,
     });
 

@@ -9,7 +9,7 @@ import { LiveRoomLoading } from "@/components/feature/live-room/LiveRoomLoading"
 import { LiveReplay } from "@/components/feature/live-room/LiveReplay";
 import { LiveReplayPaywall } from "@/components/feature/live-room/LiveReplayPaywall";
 import { getPublicLive, publicLiveHasRecording, type LiveEvent } from "@/lib/api/stream/lives";
-import { canWatchReplay } from "@/lib/plans";
+import { canWatchSchoolReplay } from "@/lib/replayVisibility";
 import { useAuthStore } from "@/stores/auth.store";
 
 const POLL_INTERVAL_MS = 3000;
@@ -35,13 +35,15 @@ function getOrCreateAnonId(): string {
  * clientes anónimos. Con sesión iniciada, la presencia y el chat son los de la
  * sala VIP.
  *
- * El EN VIVO es público para cualquiera. La REPETICIÓN no: es contenido de
- * los planes Individual/VIP (`canWatchReplay`), salvo que el admin abra ESTA
- * sala con `replay_is_public`. Finalizado el en vivo, si hay grabación y el
- * visitante está habilitado se muestra el replay (sin chat ni presencia); si
- * no, un paywall. `get_public_live` ya anula `recording_stream_uid` /
+ * El EN VIVO es público para cualquiera. La REPETICIÓN depende de
+ * `replay_visibility` (la misma regla que la sección «En vivo y grabaciones»):
+ * 'hidden' no la ofrece a nadie salvo admin, 'paid' solo a Individual/VIP con
+ * sesión y 'all' a cualquiera, incluso sin cuenta. Finalizado el en vivo, si hay
+ * grabación y el visitante está habilitado se muestra el replay (sin chat ni
+ * presencia); si no, un paywall (nunca para 'hidden', que se ve como "sin
+ * repetición"). `get_public_live` ya anula `recording_stream_uid` /
  * `recording_r2_key` para quien no está habilitado (ver
- * sql/migrate-public-live-replay-paid.sql).
+ * sql/migrate-replay-visibility-public-link.sql).
  */
 const PublicLiveRoom = () => {
   const { token } = useParams<{ token: string }>();
@@ -53,11 +55,11 @@ const PublicLiveRoom = () => {
   const [anonId] = useState(getOrCreateAnonId);
 
   const isEnded = live?.status === "ended";
-  // Distingue por qué puede ver la repetición: entitlement de plan (pide la
-  // URL con sesión) vs. sala abierta a todos (pide la URL anónima). Alguien
-  // con plan pago en una sala abierta usa la rama autenticada, la más específica.
-  const entitledByPlan = canWatchReplay(sessionUser?.plan, sessionUser?.role);
-  const canReplay = entitledByPlan || live?.replay_is_public === true;
+  // Con sesión, la URL de R2 se pide por `live_id` + JWT; sin sesión (solo
+  // posible con visibilidad 'all') se pide la anónima por `share_token`. En ambos
+  // casos el servidor vuelve a validar `replay_visibility` antes de firmar.
+  const signedIn = Boolean(sessionUser);
+  const canReplay = canWatchSchoolReplay(live?.replay_visibility ?? "hidden", sessionUser?.plan, sessionUser?.role);
 
   // `get_public_live` anula las columnas de la grabación para quien no está
   // habilitado, así que desde la fila no se distingue "sin grabación todavía"
@@ -184,11 +186,11 @@ const PublicLiveRoom = () => {
       replay={
         replaySource ? (
           <LiveReplay
-            key={`${replaySource}-${entitledByPlan}`}
+            key={`${replaySource}-${signedIn}`}
             live={live}
             token={token}
             source={replaySource}
-            entitledByPlan={entitledByPlan}
+            signedIn={signedIn}
           />
         ) : undefined
       }

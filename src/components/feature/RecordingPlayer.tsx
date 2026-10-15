@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Loader2, Video } from "lucide-react";
-import { fetchRecordingUrl, type LiveEvent } from "@/lib/api/stream/lives";
+import { fetchRecordingUrl } from "@/lib/api/stream/lives";
 
 // Normalizamos el subdominio igual que el player del vivo (VIPLiveRoom): extraemos
 // el "code" con regex y reconstruimos la URL canónica. Así el iframe NO se rompe si
@@ -11,8 +11,21 @@ const CF_CUSTOMER_CODE =
   (import.meta.env.VITE_CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN || "").match(/customer-([^.]+)/)?.[1] || "";
 const CF_STREAM_HOST = CF_CUSTOMER_CODE ? `customer-${CF_CUSTOMER_CODE}.cloudflarestream.com` : "";
 
+/**
+ * Datos mínimos para reproducir. `recording_r2_key` es opcional: las RPC de la
+ * escuela nunca la devuelven (el servidor firma por `id`), así que `undefined`
+ * con storage 'r2' cuenta como grabación en R2; `null` (admin) significa que no hay key.
+ */
+export interface RecordingSource {
+  id: string;
+  title: string;
+  recording_storage: "stream" | "r2" | null;
+  recording_stream_uid: string | null;
+  recording_r2_key?: string | null;
+}
+
 interface RecordingPlayerProps {
-  live: LiveEvent;
+  live: RecordingSource;
 }
 
 /**
@@ -21,7 +34,7 @@ interface RecordingPlayerProps {
  * - `recording_stream_uid` (legacy) → iframe de Cloudflare Stream.
  */
 const RecordingPlayer = ({ live }: RecordingPlayerProps) => {
-  const isR2 = live.recording_storage === "r2" && !!live.recording_r2_key;
+  const isR2 = live.recording_storage === "r2" && live.recording_r2_key !== null && live.recording_r2_key !== "";
   const [r2Url, setR2Url] = useState<string | null>(null);
   const [loading, setLoading] = useState(isR2);
 

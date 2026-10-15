@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { Radio, Image as ImageIcon, Settings2, Save, Plus, Trash2, PlayCircle, Calendar, Clock, Monitor, Copy, Upload, Download, Video, Info, Archive, Pencil, Check, X, Link2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { fetchLives, fetchEndedLives, fetchRecording, createLive, updateLive, deleteLive, setActiveLive as apiSetActiveLive, deactivateAllLives, checkLiveInputStatus, archiveRecording, fetchRecordingUrl, setLivePublic, setLiveReplayPublic, buildPublicLiveUrl, type LiveEvent, type StreamRecording } from "@/lib/api/stream/lives";
+import { fetchLives, fetchEndedLives, fetchRecording, createLive, updateLive, deleteLive, setActiveLive as apiSetActiveLive, deactivateAllLives, checkLiveInputStatus, archiveRecording, fetchRecordingUrl, setLivePublic, buildPublicLiveUrl, type LiveEvent, type StreamRecording } from "@/lib/api/stream/lives";
 import { supabase } from "@/lib/supabase";
 import { authedFetch } from "@/lib/api/client";
 import { toast } from "@/components/ui/toaster";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ReplayVisibilityControl } from "@/components/feature/admin-live/ReplayVisibilityControl";
 import RecordingPlayer from "@/components/feature/RecordingPlayer";
 import { AdminBroadcastPanel } from "@/components/feature/admin-live/AdminBroadcastPanel";
 
@@ -58,8 +59,8 @@ function highestPlan(plans: string[]): "free" | "individual" | "vip" {
 /**
  * Link público — cualquiera con la URL ve el en vivo sin registrarse. Se usa
  * tanto en la pestaña de salas activas como en "Finalizados": una repetición
- * también puede compartirse por link público (con el paywall de plan pago
- * aplicando del lado del visitante), así que el admin necesita poder
+ * también puede compartirse por link público (quién la ve lo decide
+ * `replay_visibility`), así que el admin necesita poder
  * activar/copiar el link ahí también, no solo mientras la sala está en vivo.
  */
 function PublicLinkControl({
@@ -73,8 +74,6 @@ function PublicLinkControl({
   setTogglingPublicId: (id: string | null) => void;
   onUpdated: (updated: LiveEvent) => void;
 }) {
-  const [togglingReplay, setTogglingReplay] = useState(false);
-
   return (
     <div className="flex flex-col gap-2 pt-3 border-t border-ink/5">
       <div className="flex items-center justify-between gap-3">
@@ -127,43 +126,7 @@ function PublicLinkControl({
             </button>
           </div>
           <p className="text-[10px] text-yellow-500/80 light:text-warning leading-relaxed">
-            Cualquier persona con este link puede ver el en vivo sin registrarse. También permite ver la grabación cuando el en vivo termine.
-          </p>
-
-          <div className="flex items-center justify-between gap-3 pt-2 mt-1 border-t border-ink/5">
-            <span className="text-xs font-bold text-fg-70 flex items-center gap-1.5">
-              <Video size={13} className="text-accent" /> Repetición abierta a todos
-            </span>
-            <button
-              onClick={async e => {
-                e.stopPropagation();
-                setTogglingReplay(true);
-                try {
-                  const updated = await setLiveReplayPublic(live.id, !live.replay_is_public);
-                  onUpdated(updated);
-                  toast.success(updated.replay_is_public ? "Repetición abierta a todos" : "Repetición vuelve a ser solo para alumnos");
-                } catch {
-                  toast.error("Error al actualizar la repetición pública");
-                } finally {
-                  setTogglingReplay(false);
-                }
-              }}
-              disabled={togglingReplay}
-              className={cn(
-                "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border disabled:opacity-50",
-                live.replay_is_public
-                  ? "bg-brand/15 text-accent border-brand/30"
-                  : "bg-ink/5 text-fg-40 border-line-subtle hover:border-ink/30 hover:text-fg-70"
-              )}
-            >
-              <span className={cn("w-2 h-2 rounded-full", live.replay_is_public ? "bg-brand shadow-[0_0_6px_rgba(204,164,59,0.6)]" : "bg-ink/20")} />
-              {live.replay_is_public ? "Abierta" : "Solo alumnos"}
-            </button>
-          </div>
-          <p className="text-[10px] text-fg-50 leading-relaxed">
-            {live.replay_is_public
-              ? "Cualquier persona con el link podrá ver la repetición, sin cuenta ni plan."
-              : "Al terminar, solo los alumnos con plan Individual o VIP pueden ver la repetición."}
+            Cualquier persona con este link ve el en vivo sin crear una cuenta. Quién ve la grabación al terminar se define en «¿Quién ve esta grabación?».
           </p>
         </div>
       )}
@@ -1322,6 +1285,10 @@ const AdminLiveManager = () => {
                     )}
                   </div>
                 )}
+                <ReplayVisibilityControl
+                  live={live}
+                  onUpdated={updated => setEndedLives(prev => prev.map(l => l.id === updated.id ? updated : l))}
+                />
                 <PublicLinkControl
                   live={live}
                   togglingPublicId={togglingPublicId}

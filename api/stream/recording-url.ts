@@ -4,18 +4,19 @@ import { createClient } from '@supabase/supabase-js';
 import { AwsClient } from 'aws4fetch';
 import { applyCors, requireAuth } from '../_lib/auth.js';
 import { applyRateLimit } from '../_lib/ratelimit.js';
+import { canWatchSchoolReplay } from '../_lib/replayVisibility.js';
 
-// Rama autenticada (dashboard / admin, y repetición paga del link público
-// con sesión iniciada): identifica el live por `live_id` y autoriza contra
-// `allowed_plans` del usuario logueado.
+// Rama autenticada (dashboard / admin, y repetición del link público con
+// sesión iniciada): identifica el live por `live_id` y autoriza con la regla
+// unificada `replay_visibility` (ver canWatchSchoolReplay).
 const AuthedBodySchema = z.object({
   live_id: z.string().uuid(),
 });
 
 // Rama pública (`/live/:token`, sin sesión): identifica el live por
-// `share_token`. Solo firma si la sala tiene `replay_is_public = true` —
-// ver sql/migrate-public-live-open-replay.sql. Una rama anónima anterior sin
-// ese chequeo fue eliminada porque firmaba sin validar plan ni opt-in (ver
+// `share_token`. Solo firma si la sala tiene `replay_visibility = 'all'` —
+// ver sql/migrate-replay-visibility-public-link.sql. Una rama anónima anterior
+// sin ese chequeo fue eliminada porque firmaba sin validar plan ni opt-in (ver
 // docs/CHANGELOG.md 2026-09-22); esta la reintroduce con el gate explícito.
 const PublicBodySchema = z.object({
   share_token: z.string().trim().min(10).max(128),
@@ -104,7 +105,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: 'Almacenamiento de grabaciones no configurado' });
   }
 
-  // ---- Rama pública: repetición abierta por opt-in del admin, sin JWT ----
+  // ---- Rama pública: repetición con visibilidad 'all', sin JWT ----
   if ('share_token' in parsed.data) {
     if (!SUPABASE_ANON_KEY) {
       console.error('Missing SUPABASE_ANON_KEY for public recording-url branch');
@@ -134,10 +135,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json({ error: 'Link inválido o sala no pública' });
     }
     // Gate explícito: `get_public_live` YA anula recording_stream_uid/recording_r2_key
-    // salvo entitlement pago o `replay_is_public = true`, pero volvemos a chequear
+    // salvo que `replay_visibility` habilite al caller, pero volvemos a chequear
     // acá porque este endpoint firma una URL real (no solo la muestra) — nunca
     // confiar en una sola capa para firmar contenido.
-    if (row.replay_is_public !== true) {
+    if (row.replay_visibility !== 'all') {
       return res.status(403).json({ error: 'La repetición de este en vivo no está abierta a todos' });
     }
     if (row.recording_storage !== 'r2' || !row.recording_r2_key) {
@@ -153,7 +154,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // ---- Rama autenticada: dashboard / admin, y repetición paga con sesión ----
+  // ---- Rama autenticada: dashboard / admin, y repetición con sesión ----
   const user = await requireAuth(req, res);
   if (!user) return;
 
@@ -167,14 +168,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { live_id } = parsed.data;
 
   // Cliente con service role: leemos el live y autorizamos nosotros
-  // (comparando el plan del usuario contra allowed_plans).
+  // (comparando el plan del usuario contra replay_visibility).
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY!, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
   const { data: live, error } = await supabase
     .from('lives')
-    .select('recording_r2_key, recording_storage, allowed_plans')
+    .select('recording_r2_key, recording_storage, replay_visibility, status')
     .eq('id', live_id)
     .maybeSingle();
 
@@ -186,9 +187,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(404).json({ error: 'Grabación no encontrada' });
   }
 
-  // Autorización: el plan del usuario debe estar en allowed_plans (admin siempre pasa).
-  const allowed: string[] = Array.isArray(live.allowed_plans) ? live.allowed_plans : [];
-  const authorized = user.role === 'admin' || (user.plan != null && allowed.includes(user.plan));
+  // Autorización: admin siempre pasa; si no, el live ya terminó y su visibilidad
+  // (`replay_visibility`) habilita al plan del usuario. `allowed_plans` ya no
+  // decide el acceso a grabaciones: 'hidden' bloquea a todos salvo admin.
+  const authorized =
+    user.role === 'admin' ||
+    (live.status === 'ended' && canWatchSchoolReplay(live.replay_visibility, user.plan, user.role));
   if (!authorized) {
     return res.status(403).json({ error: 'Tu plan no incluye acceso a esta grabación' });
   }

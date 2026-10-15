@@ -15,6 +15,7 @@ import MaintenancePage from "@/pages/public/MaintenancePage";
 import PublicLiveRoom from "@/pages/public/PublicLiveRoom";
 import StudentDashboard from "@/pages/student/StudentDashboard";
 import VIPLiveRoom from "@/pages/student/VIPLiveRoom";
+import ReplayViewer from "@/pages/student/ReplayViewer";
 import AdminMetrics from "@/pages/admin/AdminMetrics";
 import AdminContentManager from "@/pages/admin/AdminContentManager";
 import AdminUsers from "@/pages/admin/AdminUsers";
@@ -117,6 +118,16 @@ const AppRoutes = () => {
           element={
             <RequireAuth>
               <PageTransition><VIPLiveRoom /></PageTransition>
+            </RequireAuth>
+          }
+        />
+
+        {/* Grabación de la escuela — visibilidad validada por RPC y por /api/stream/recording-url */}
+        <Route
+          path="/grabaciones/:liveId"
+          element={
+            <RequireAuth>
+              <PageTransition><ReplayViewer /></PageTransition>
             </RequireAuth>
           }
         />
