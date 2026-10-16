@@ -43,6 +43,7 @@ Si tuvieras que recrear la base desde cero, un orden razonable es:
 |---|---|
 | `migrate-lives-schema.sql` | Tabla/columnas de `lives` + RLS. |
 | `migrate-recordings-r2.sql` | Columnas de archivado en R2 en `lives` (`recording_r2_key`, `recording_storage`, `recording_bytes`, `recording_duration_seconds`, `archived_at`). Ver [`../docs/RECORDINGS_ARCHITECTURE.md`](../docs/RECORDINGS_ARCHITECTURE.md). |
+| `migrate-replay-progress.sql` | Tabla `user_replay_progress` + RLS por usuario: posición de reproducción de grabaciones para retomar. |
 
 ### Configuración de la plataforma
 | Archivo | Qué hace |

@@ -25,9 +25,9 @@ describe('signR2RecordingUrl', () => {
     expect(url).toContain('lives/2026%2009%2012/vivo%20final.mp4');
   });
 
-  it('usa el TTL default de 900s si no se pasa uno explícito', async () => {
+  it('usa el TTL default de 6 h si no se pasa uno explícito', async () => {
     const url = await signR2RecordingUrl(creds, 'key.mp4');
-    expect(url).toContain('X-Amz-Expires=900');
+    expect(url).toContain('X-Amz-Expires=21600');
   });
 
   it('respeta un TTL explícito distinto del default', async () => {

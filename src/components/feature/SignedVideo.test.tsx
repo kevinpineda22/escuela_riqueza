@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { SignedVideo } from "./SignedVideo";
+import { ApiError } from "@/lib/api/client";
 import type { SignedRecordingUrl } from "@/lib/api/stream/lives";
 
 interface VideoState {
@@ -203,5 +204,62 @@ describe("SignedVideo", () => {
     });
     expect(errorSpy).not.toHaveBeenCalled();
     errorSpy.mockRestore();
+  });
+
+  it("applies startAt once on the first load and keeps the refresh position afterwards", async () => {
+    const state = { paused: true, currentTime: 0 };
+    const getUrl = vi
+      .fn<() => Promise<SignedRecordingUrl | null>>()
+      .mockResolvedValue({ url: "https://r2.test/new.mp4", expiresIn: 900 });
+    const { container } = render(<SignedVideo initial={initial} getUrl={getUrl} startAt={300} />);
+    const video = driveVideo(container, state);
+    fireEvent.loadedMetadata(video);
+    expect(state.currentTime).toBe(300);
+
+    state.currentTime = 800;
+    fireEvent.error(video);
+    await flush();
+    state.currentTime = 0;
+    fireEvent.loadedMetadata(video);
+    expect(state.currentTime).toBe(800);
+
+    state.currentTime = 0;
+    fireEvent.loadedMetadata(video);
+    expect(state.currentTime).toBe(0); // startAt no se repite
+  });
+
+  it("shows a session-expired overlay with a login link and stops retrying on a 401", async () => {
+    window.history.pushState({}, "", "/grabaciones/live-1?x=1");
+    const getUrl = vi
+      .fn<() => Promise<SignedRecordingUrl | null>>()
+      .mockRejectedValue(new ApiError("UNAUTHENTICATED", "Sesión expirada", 401));
+    const { container } = render(<SignedVideo initial={initial} getUrl={getUrl} />);
+    const video = driveVideo(container, { paused: true, currentTime: 5 });
+    fireEvent.error(video);
+    await flush();
+
+    expect(screen.getByText("Tu sesión expiró. Inicia sesión de nuevo para seguir viendo.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Iniciar sesión" })).toHaveAttribute(
+      "href",
+      `/login?returnTo=${encodeURIComponent("/grabaciones/live-1?x=1")}`,
+    );
+    expect(screen.queryByText("No se pudo continuar la reproducción.")).not.toBeInTheDocument();
+
+    fireEvent.error(video);
+    await flush();
+    expect(getUrl).toHaveBeenCalledTimes(1);
+    window.history.pushState({}, "", "/");
+  });
+
+  it("keeps the retry flow for non-401 errors", async () => {
+    const getUrl = vi.fn<() => Promise<SignedRecordingUrl | null>>().mockRejectedValue(new Error("network"));
+    const { container } = render(<SignedVideo initial={initial} getUrl={getUrl} />);
+    const video = driveVideo(container, { paused: true, currentTime: 5 });
+    fireEvent.error(video);
+    await flush();
+    expect(screen.queryByText(/Tu sesión expiró/)).not.toBeInTheDocument();
+    fireEvent.error(video);
+    await flush();
+    expect(getUrl).toHaveBeenCalledTimes(2);
   });
 });

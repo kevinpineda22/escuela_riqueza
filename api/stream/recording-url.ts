@@ -29,7 +29,10 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 
 // Cuánto vive la URL firmada (segundos). Corta a propósito: es contenido VIP.
-const URL_TTL_SECONDS = 900; // 15 min
+// 6 h: longer than the longest class (4 h 9 min) plus pauses, so a viewer never
+// hits expiry mid-session (each expiry cost a visible 1-3 s reload). SignedVideo
+// still renews the URL if it does expire (tab left open overnight).
+const URL_TTL_SECONDS = 21600; // 6 h
 
 interface R2Credentials {
   accountId: string;
