@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
+import { ApiError } from "@/lib/api/client";
 import type { SignedRecordingUrl } from "@/lib/api/stream/lives";
 
 /** Si la URL vence en menos de este tiempo, un seek o una espera dispara la renovación. */
@@ -19,7 +20,15 @@ interface SignedVideoProps {
   autoPlay?: boolean;
   controls?: boolean;
   preload?: "none" | "metadata" | "auto";
+  /** Segundo en el que arranca la primera carga (se aplica una sola vez; las renovaciones restauran su propia posición). */
+  startAt?: number;
+  /** Expone el `<video>` interno (ref como prop, React 19). */
+  ref?: Ref<HTMLVideoElement | null>;
+  /** Eventos de reproducción para quien necesite seguir la posición (progreso, analítica). */
+  onPlayback?: (type: PlaybackEventType, video: HTMLVideoElement) => void;
 }
+
+export type PlaybackEventType = "timeupdate" | "pause" | "seeked" | "ended";
 
 interface PendingRestore {
   time: number;
@@ -27,18 +36,30 @@ interface PendingRestore {
 }
 
 /**
- * <video> para URLs firmadas de vida corta (R2, 15 min). El navegador baja el MP4
+ * <video> para URLs firmadas que vencen (R2, 6 h). El navegador baja el MP4
  * con range requests; al vencer la URL cada pedido nuevo es rechazado y el video se
  * congela sin disparar `error`. Este componente renueva la URL antes (seek/espera
  * con la URL por vencer) o después (watchdog de 1 s, evento `error`) y retoma la
  * posición y el estado de reproducción.
  */
-export function SignedVideo({ initial, getUrl, className, autoPlay, controls = true, preload }: SignedVideoProps) {
+export function SignedVideo({
+  initial,
+  getUrl,
+  className,
+  autoPlay,
+  controls = true,
+  preload,
+  startAt,
+  ref,
+  onPlayback,
+}: SignedVideoProps) {
   const [src, setSrc] = useState(initial.url);
   const [generation, setGeneration] = useState(0);
   const [failed, setFailed] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  useImperativeHandle(ref, () => videoRef.current as HTMLVideoElement);
   const getUrlRef = useRef(getUrl);
   const expiresAtRef = useRef(0);
   const refreshingRef = useRef(false);
@@ -49,9 +70,13 @@ export function SignedVideo({ initial, getUrl, className, autoPlay, controls = t
   const lastTimeRef = useRef(0);
   const stallSecondsRef = useRef(0);
   const refreshRef = useRef<() => void>(() => {});
+  const sessionExpiredRef = useRef(false);
+  const startAppliedRef = useRef(false);
+  const startAtRef = useRef(startAt);
 
   useEffect(() => {
     getUrlRef.current = getUrl;
+    startAtRef.current = startAt;
   });
 
   useEffect(() => {
@@ -60,7 +85,7 @@ export function SignedVideo({ initial, getUrl, className, autoPlay, controls = t
 
     const refresh = () => {
       const video = videoRef.current;
-      if (!video || refreshingRef.current) return;
+      if (!video || refreshingRef.current || sessionExpiredRef.current) return;
       if (retriesRef.current >= MAX_REFRESHES_WITHOUT_PROGRESS) {
         setFailed(true);
         return;
@@ -83,7 +108,14 @@ export function SignedVideo({ initial, getUrl, className, autoPlay, controls = t
         setGeneration((g) => g + 1);
         setSrc(next.url);
       };
-      getUrlRef.current().then(finish, () => finish(null));
+      getUrlRef.current().then(finish, (err: unknown) => {
+        // Sin sesión no tiene sentido reintentar: se pide iniciar sesión.
+        if (err instanceof ApiError && err.status === 401 && mountedRef.current) {
+          sessionExpiredRef.current = true;
+          setSessionExpired(true);
+        }
+        finish(null);
+      });
     };
     refreshRef.current = refresh;
 
@@ -128,10 +160,14 @@ export function SignedVideo({ initial, getUrl, className, autoPlay, controls = t
   const handleLoadedMetadata = () => {
     const video = videoRef.current;
     const pending = pendingRef.current;
-    if (!video || !pending) return;
+    if (!video) return;
     pendingRef.current = null;
-    if (pending.time > 0) video.currentTime = pending.time;
-    if (pending.wasPlaying) {
+    // Posición inicial: solo en la primera carga y sin pisar la de una renovación.
+    const firstLoad = !startAppliedRef.current;
+    startAppliedRef.current = true;
+    const target = pending && pending.time > 0 ? pending.time : firstLoad ? (startAtRef.current ?? 0) : 0;
+    if (target > 0) video.currentTime = target;
+    if (pending?.wasPlaying) {
       // play() puede rechazarse (autoplay bloqueado, src cambiado): el watchdog cubre el resto.
       Promise.resolve(video.play()).catch(() => {});
     }
@@ -159,8 +195,12 @@ export function SignedVideo({ initial, getUrl, className, autoPlay, controls = t
         onWaiting={refreshIfExpiring}
         onStalled={refreshIfExpiring}
         onError={() => refreshRef.current()}
+        onTimeUpdate={(e) => onPlayback?.("timeupdate", e.currentTarget)}
+        onPause={(e) => onPlayback?.("pause", e.currentTarget)}
+        onSeeked={(e) => onPlayback?.("seeked", e.currentTarget)}
+        onEnded={(e) => onPlayback?.("ended", e.currentTarget)}
       />
-      {failed && (
+      {failed && !sessionExpired && (
         <div
           role="alert"
           className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80 text-center p-4"
@@ -175,6 +215,26 @@ export function SignedVideo({ initial, getUrl, className, autoPlay, controls = t
           </button>
         </div>
       )}
+      {sessionExpired && (
+        <div
+          role="alert"
+          className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80 text-center p-4"
+        >
+          <p className="text-sm text-foreground-muted">Tu sesión expiró. Inicia sesión de nuevo para seguir viendo.</p>
+          <a
+            href={loginHref()}
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-black"
+          >
+            Iniciar sesión
+          </a>
+        </div>
+      )}
     </div>
   );
+}
+
+/** `/login?returnTo=<ruta actual>`, igual que RequireAuth. */
+function loginHref(): string {
+  const { pathname, search, hash } = window.location;
+  return `/login?returnTo=${encodeURIComponent(`${pathname}${search}${hash}`)}`;
 }

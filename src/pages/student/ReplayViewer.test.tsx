@@ -8,7 +8,9 @@ vi.mock("@/lib/api/stream/replays", () => ({ getSchoolReplay: vi.fn() }));
 vi.mock("@/components/layout/Header", () => ({ default: () => <header /> }));
 vi.mock("@/components/layout/Footer", () => ({ default: () => <footer /> }));
 vi.mock("@/components/feature/RecordingPlayer", () => ({
-  default: ({ live }: { live: { id: string } }) => <div data-testid="player" data-id={live.id} />,
+  default: ({ live, trackProgress }: { live: { id: string }; trackProgress?: boolean }) => (
+    <div data-testid="player" data-id={live.id} data-track={String(Boolean(trackProgress))} />
+  ),
 }));
 
 const get = vi.mocked(getSchoolReplay);
@@ -42,6 +44,7 @@ describe("ReplayViewer", () => {
     get.mockResolvedValue(base);
     renderViewer();
     expect(await screen.findByTestId("player")).toHaveAttribute("data-id", "r1");
+    expect(screen.getByTestId("player")).toHaveAttribute("data-track", "true");
     expect(screen.getByRole("heading", { name: "Clase de ahorro" })).toBeInTheDocument();
     expect(screen.getByText("Descripción de la clase")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Volver a grabaciones/ })).toHaveAttribute("href", "/dashboard?tab=grabaciones");

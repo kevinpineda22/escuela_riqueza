@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import { authedFetch } from "@/lib/api/client";
+import { ApiError, authedFetch } from "@/lib/api/client";
 import type { ReplayVisibility } from "@/lib/replayVisibility";
 
 export type LiveStatus = "scheduled" | "live" | "ended";
@@ -391,8 +391,8 @@ export interface SignedRecordingUrl {
   expiresIn: number;
 }
 
-/** Vida útil asumida si el servidor no informa `expiresIn` (TTL actual del servidor: 900 s). */
-const DEFAULT_SIGNED_URL_TTL_SECONDS = 900;
+/** Vida útil asumida si el servidor no informa `expiresIn` (TTL actual del servidor: 6 h). */
+const DEFAULT_SIGNED_URL_TTL_SECONDS = 21600;
 
 function parseSignedRecordingUrl(data: unknown): SignedRecordingUrl | null {
   const body = data as { url?: unknown; expiresIn?: unknown } | null;
@@ -402,17 +402,33 @@ function parseSignedRecordingUrl(data: unknown): SignedRecordingUrl | null {
   return { url: body.url, expiresIn };
 }
 
-/** Pide una URL firmada de vida corta (con su `expiresIn`) para reproducir una grabación en R2. */
-export async function fetchSignedRecordingUrl(liveId: string): Promise<SignedRecordingUrl | null> {
+/**
+ * Pide una URL firmada (con su `expiresIn`) para una grabación en R2. `null` = no se
+ * pudo (red, 403, 5xx). Si la sesión ya no es válida lanza `ApiError` con status 401
+ * (del propio `authedFetch` o de la respuesta del servidor) para que el reproductor
+ * pueda pedir iniciar sesión en vez de reintentar sin sentido.
+ */
+export async function requestSignedRecordingUrl(liveId: string): Promise<SignedRecordingUrl | null> {
   try {
     const res = await authedFetch("/api/stream/recording-url", {
       method: "POST",
       body: JSON.stringify({ live_id: liveId }),
     });
+    if (res.status === 401) throw new ApiError("UNAUTHENTICATED", "Sesión expirada, inicia sesión de nuevo", 401);
     if (!res.ok) return null;
     return parseSignedRecordingUrl(await res.json());
   } catch (err) {
+    if (err instanceof ApiError && err.status === 401) throw err;
     console.error("Error fetching recording URL:", err);
+    return null;
+  }
+}
+
+/** Pide una URL firmada de vida corta (con su `expiresIn`) para reproducir una grabación en R2. */
+export async function fetchSignedRecordingUrl(liveId: string): Promise<SignedRecordingUrl | null> {
+  try {
+    return await requestSignedRecordingUrl(liveId);
+  } catch {
     return null;
   }
 }

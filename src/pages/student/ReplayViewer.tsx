@@ -110,7 +110,7 @@ const ReplayViewer = () => {
 
         {state.kind === "ready" && (
           <article className="space-y-4">
-            <RecordingPlayer live={state.replay} />
+            <RecordingPlayer live={state.replay} trackProgress />
             <div className="space-y-2">
               <h1 className="text-xl font-bold text-foreground-strong sm:text-2xl">{state.replay.title}</h1>
               <p className="text-xs text-foreground-muted">
