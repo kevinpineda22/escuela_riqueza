@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Loader2, Video } from "lucide-react";
-import { fetchRecordingUrl } from "@/lib/api/stream/lives";
+import { fetchSignedRecordingUrl, type SignedRecordingUrl } from "@/lib/api/stream/lives";
+import { SignedVideo } from "./SignedVideo";
 
 // Normalizamos el subdominio igual que el player del vivo (VIPLiveRoom): extraemos
 // el "code" con regex y reconstruimos la URL canónica. Así el iframe NO se rompe si
@@ -30,21 +31,21 @@ interface RecordingPlayerProps {
 
 /**
  * Reproduce la grabación de un live según dónde esté almacenada:
- * - `recording_storage === 'r2'` → <video> con URL firmada de vida corta.
+ * - `recording_storage === 'r2'` → <SignedVideo> con URL firmada de vida corta (se renueva sola).
  * - `recording_stream_uid` (legacy) → iframe de Cloudflare Stream.
  */
 const RecordingPlayer = ({ live }: RecordingPlayerProps) => {
   const isR2 = live.recording_storage === "r2" && live.recording_r2_key !== null && live.recording_r2_key !== "";
-  const [r2Url, setR2Url] = useState<string | null>(null);
+  const [r2Url, setR2Url] = useState<SignedRecordingUrl | null>(null);
   const [loading, setLoading] = useState(isR2);
 
   useEffect(() => {
     if (!isR2) return;
     let active = true;
     setLoading(true);
-    fetchRecordingUrl(live.id).then((url) => {
+    fetchSignedRecordingUrl(live.id).then((signed) => {
       if (!active) return;
-      setR2Url(url);
+      setR2Url(signed);
       setLoading(false);
     });
     return () => { active = false; };
@@ -70,7 +71,12 @@ const RecordingPlayer = ({ live }: RecordingPlayerProps) => {
     }
     return (
       <div className="aspect-video bg-black rounded-xl overflow-hidden border border-line-subtle">
-        <video src={r2Url} controls className="w-full h-full" preload="metadata" />
+        <SignedVideo
+          initial={r2Url}
+          getUrl={() => fetchSignedRecordingUrl(live.id)}
+          className="w-full h-full"
+          preload="metadata"
+        />
       </div>
     );
   }

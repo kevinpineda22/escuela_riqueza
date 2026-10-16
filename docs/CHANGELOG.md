@@ -7,6 +7,12 @@
 
 ## 2026-10-15
 
+### Grabaciones — las repeticiones en R2 ya no se congelan a los ~15 minutos
+- **Síntoma**: alumnos reportan que la grabación "se estanca en algún momento y no logro hacerla continuar" (clases de 1 a 4 h).
+- **Causa verificada**: el `<video src>` usaba la URL firmada de `/api/stream/recording-url` (TTL 900 s). El navegador baja el MP4 con range requests; al vencer la URL cada pedido nuevo es rechazado, el buffer deja de crecer y la reproducción se congela. Al saltar con la barra el elemento quedaba para siempre en `readyState 1` / `networkState 2` sin disparar `error`.
+- **Fix**: nuevo `SignedVideo` (`src/components/feature/SignedVideo.tsx`), usado por `RecordingPlayer` (`/grabaciones/:liveId` y tarjetas de "Finalizados") y `LiveReplay` (link público). Renueva la URL (a) al instante en `seeking`/`waiting`/`stalled` si vence en menos de 60 s o ya venció, (b) con un watchdog de 1 s si reproduciendo no avanza `currentTime` en 8 s, (c) en el evento `error`. Tras renovar retoma `currentTime` y solo hace `play()` si estaba reproduciendo. Tope de 3 renovaciones sin progreso real (se reinicia tras 5 s de avance); agotado, muestra «No se pudo continuar la reproducción.» con botón «Reintentar».
+- **API cliente**: `fetchSignedRecordingUrl` / `fetchSignedPublicRecordingUrl` devuelven `{ url, expiresIn }`; `fetchRecordingUrl` / `fetchPublicRecordingUrl` se conservan como wrappers que devuelven solo la URL. El servidor no cambia (TTL 900 s).
+
 ### Escuela — "En vivo y grabaciones": repeticiones visibles para alumnos con visibilidad por sala
 - **Modelo**: nueva columna `lives.replay_visibility` (`hidden` por defecto, `paid`, `all`). `hidden` no se lista a alumnos; `paid` la reproducen Individual y VIP (Free la ve bloqueada con CTA a `/planes`); `all` la reproduce cualquier plan. El admin siempre puede reproducir. Ver abajo «Regla unificada» para el link público.
 - **SQL a correr ANTES de desplegar el frontend**: `sql/migrate-lives-replay-visibility.sql` (idempotente; verificado dos veces sobre PGlite con usuarios free/individual/vip/admin). Todas las filas existentes quedan en `hidden`. Crea `can_watch_school_replay`, `list_school_replays()` y `get_school_replay(uuid)` (SECURITY DEFINER, solo `authenticated`): solo lives `ended` con grabación, anulan `recording_stream_uid` si el usuario no puede reproducir y nunca devuelven `recording_r2_key`.
