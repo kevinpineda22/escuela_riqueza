@@ -385,30 +385,51 @@ export async function archiveRecording(liveId: string, streamVideoUid: string): 
   }
 }
 
-/** Pide una URL firmada de vida corta para reproducir/descargar una grabación en R2. */
-export async function fetchRecordingUrl(liveId: string): Promise<string | null> {
+/** URL firmada de R2 junto con su vida útil en segundos (`expiresIn`). */
+export interface SignedRecordingUrl {
+  url: string;
+  expiresIn: number;
+}
+
+/** Vida útil asumida si el servidor no informa `expiresIn` (TTL actual del servidor: 900 s). */
+const DEFAULT_SIGNED_URL_TTL_SECONDS = 900;
+
+function parseSignedRecordingUrl(data: unknown): SignedRecordingUrl | null {
+  const body = data as { url?: unknown; expiresIn?: unknown } | null;
+  if (!body || typeof body.url !== "string" || !body.url) return null;
+  const expiresIn =
+    typeof body.expiresIn === "number" && body.expiresIn > 0 ? body.expiresIn : DEFAULT_SIGNED_URL_TTL_SECONDS;
+  return { url: body.url, expiresIn };
+}
+
+/** Pide una URL firmada de vida corta (con su `expiresIn`) para reproducir una grabación en R2. */
+export async function fetchSignedRecordingUrl(liveId: string): Promise<SignedRecordingUrl | null> {
   try {
     const res = await authedFetch("/api/stream/recording-url", {
       method: "POST",
       body: JSON.stringify({ live_id: liveId }),
     });
     if (!res.ok) return null;
-    const data = await res.json();
-    return data?.url || null;
+    return parseSignedRecordingUrl(await res.json());
   } catch (err) {
     console.error("Error fetching recording URL:", err);
     return null;
   }
 }
 
+/** Pide una URL firmada de vida corta para reproducir/descargar una grabación en R2. */
+export async function fetchRecordingUrl(liveId: string): Promise<string | null> {
+  return (await fetchSignedRecordingUrl(liveId))?.url ?? null;
+}
+
 /**
- * Pide una URL firmada de vida corta para una repetición con visibilidad
- * 'all' (`replay_visibility`), sin sesión. A diferencia de `fetchRecordingUrl`
- * usa `fetch` crudo (no `authedFetch`): un visitante anónimo no tiene JWT que
- * mandar. El servidor vuelve a validar `replay_visibility` antes de firmar
- * nada — ver api/stream/recording-url.ts.
+ * Pide una URL firmada de vida corta (con su `expiresIn`) para una repetición con
+ * visibilidad 'all' (`replay_visibility`), sin sesión. A diferencia de
+ * `fetchSignedRecordingUrl` usa `fetch` crudo (no `authedFetch`): un visitante
+ * anónimo no tiene JWT que mandar. El servidor vuelve a validar
+ * `replay_visibility` antes de firmar nada — ver api/stream/recording-url.ts.
  */
-export async function fetchPublicRecordingUrl(token: string): Promise<string | null> {
+export async function fetchSignedPublicRecordingUrl(token: string): Promise<SignedRecordingUrl | null> {
   try {
     const res = await fetch("/api/stream/recording-url", {
       method: "POST",
@@ -416,11 +437,14 @@ export async function fetchPublicRecordingUrl(token: string): Promise<string | n
       body: JSON.stringify({ share_token: token }),
     });
     if (!res.ok) return null;
-    const data = await res.json();
-    return data?.url || null;
+    return parseSignedRecordingUrl(await res.json());
   } catch (err) {
     console.error("Error fetching public recording URL:", err);
     return null;
   }
 }
 
+/** Variante que devuelve solo la URL; ver `fetchSignedPublicRecordingUrl`. */
+export async function fetchPublicRecordingUrl(token: string): Promise<string | null> {
+  return (await fetchSignedPublicRecordingUrl(token))?.url ?? null;
+}
