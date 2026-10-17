@@ -20,6 +20,28 @@ En OBS: **Ajustes → Salida → Modo de salida: `Avanzado` → pestaña `Emisi�
 
 ⚠️ **Verificar que quede guardado en el perfil que se usa** (menú **Perfil** de OBS). Si se cambia en modo `Simple` o en otro perfil, no aplica.
 
+### 1.1 Ajustes de estabilidad (agregados 2026-10-16)
+
+Para que una clase de 3-4 horas no se corte:
+
+| Dónde | Ajuste | Valor | Por qué |
+|---|---|---|---|
+| Salida → Emisión | Codificador | **Por hardware** si la PC lo tiene (NVIDIA NVENC H.264, Intel QuickSync H.264, Apple VT H.264); si no, x264 con preset `veryfast` | Codificar por hardware libera el procesador. Si el CPU se satura, OBS pierde cuadros y el video llega entrecortado a todos. |
+| Salida → Audio | Tasa de bits de audio | **160 kbps**, AAC | Voz clara. Más no aporta en una clase. |
+| Audio | Frecuencia de muestreo | **48 kHz** | La que espera Cloudflare. |
+| Video | Resolución de salida / FPS | **1280×720, 30 fps** | Es lo que hoy entrega la plataforma (medido el 2026-10-10). Subir a 1080p queda para el ensayo de la sección 5. |
+| Avanzado → Reconexión automática | Activada · Retraso **2 s** · Reintentos máximos **20** | Si el internet del lugar parpadea, OBS vuelve solo en segundos. Sin esto, alguien tiene que darle "Iniciar transmisión" a mano. |
+| Avanzado → Red | **Cambiar la tasa de bits dinámicamente para gestionar la congestión**: activado | Ante congestión de red, OBS baja la calidad un momento en vez de cortar la transmisión. |
+
+**Red y operación:**
+
+- **Cable de red (Ethernet), no Wi-Fi.** Subida sostenida de al menos el **doble** de la tasa de bits: con 6000 kbps de video, mínimo **12 Mbps de subida estable**. Nadie más debe usar esa conexión para subir archivos o videollamadas durante la clase.
+- **No detener la transmisión en los recesos.** Cada "Detener / Iniciar transmisión" corta el video a todos los alumnos y **parte la grabación en dos** (pasó el 2026-10-03). Para una pausa, mostrar una escena con el logo y dejar la transmisión corriendo.
+- **Una sola sala por clase.** No finalizar la sala para crear otra durante la clase: cambia el link y los alumnos quedan afuera. Si hubo un problema, usar **Reactivar**.
+- Durante la clase, mirar abajo a la derecha en OBS: el cuadrado de conexión en **verde** y "Cuadros perdidos" cerca de **0 %**. Amarillo o rojo = problema de internet del lugar, no de la plataforma.
+
+**Modo del reproductor de los alumnos:** desde el 2026-10-16 todos arrancan en **"Clase normal · Fluidez"**, el modo más estable para clases largas. "Clase completa" (con retroceso) sigue disponible en el menú, pero Cloudflare advierte que se degrada en transmisiones de más de 3 horas.
+
 En **Ajustes → Emisión**:
 
 | Ajuste | Valor |

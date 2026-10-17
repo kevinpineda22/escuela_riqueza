@@ -548,24 +548,24 @@ const LivePlayerControls = ({
             Modo de clase
           </DropdownMenuLabel>
           <DropdownMenuItem
-            onClick={() => { onSelectLatencyMode("dvr"); wakeControls(); }}
-            className={cn("cursor-pointer items-start", latencyMode === "dvr" && "text-accent")}
-          >
-            <span className="flex-1 flex flex-col">
-              <span>Clase completa</span>
-              <span className="text-[11px] text-foreground-muted">Puedes retroceder y retomar</span>
-            </span>
-            {latencyMode === "dvr" && <Check size={14} className="text-accent mt-0.5" />}
-          </DropdownMenuItem>
-          <DropdownMenuItem
             onClick={() => { onSelectLatencyMode("smooth"); wakeControls(); }}
             className={cn("cursor-pointer items-start", latencyMode === "smooth" && "text-accent")}
           >
             <span className="flex-1 flex flex-col">
               <span>Clase normal · Fluidez</span>
-              <span className="text-[11px] text-foreground-muted">Siempre en el directo</span>
+              <span className="text-[11px] text-foreground-muted">Recomendado: la más estable</span>
             </span>
             {latencyMode === "smooth" && <Check size={14} className="text-accent mt-0.5" />}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => { onSelectLatencyMode("dvr"); wakeControls(); }}
+            className={cn("cursor-pointer items-start", latencyMode === "dvr" && "text-accent")}
+          >
+            <span className="flex-1 flex flex-col">
+              <span>Clase completa</span>
+              <span className="text-[11px] text-foreground-muted">Puedes retroceder; en clases largas puede trabarse</span>
+            </span>
+            {latencyMode === "dvr" && <Check size={14} className="text-accent mt-0.5" />}
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => { onSelectLatencyMode("low"); wakeControls(); }}

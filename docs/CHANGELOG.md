@@ -5,6 +5,14 @@
 
 ---
 
+## 2026-10-16
+
+### Lives — Fluidez vuelve a ser el modo por defecto (el más estable para clases largas)
+- **Motivo**: queja de alumnos por un vivo que se trababa y obligaba a salir y volver a entrar. Lo de aquella vez (Fluidez) ya estaba corregido: segmentos de 8,33 s por keyframe automático de OBS, `liveSyncDuration: 8` (cambiado a 3 segmentos el 2026-10-10) y el cartel de error sobre un video que seguía (2026-10-03). Pero el default posterior, "Clase completa" (DVR), es el más frágil para clases de 3-4 h: su playlist crece con la clase (57 KB a los 70 min, ~180 KB a las 3 h 40, medido 2026-09-23) y se re-descarga cada pocos segundos; Cloudflare documenta degradación pasadas 3 h y un tope de 7.200 segmentos (= 4 h con keyframe de 2 s; las clases duran hasta 4 h 9 min) y usa HLS v8.
+- **Cambio**: `DEFAULT_LIVE_LATENCY_MODE` = `smooth`. `preferences.store` pasa a `version: 1` con `migrate` que lleva a todos a `smooth` una vez: el modo se persistía aunque el alumno nunca lo eligiera (bastaba cambiar el tema), así que el valor guardado no expresaba una elección. El menú muestra Fluidez primero ("Recomendado: la más estable") y Clase completa avisa "en clases largas puede trabarse".
+- **OBS**: nueva sección 1.1 en `docs/OBS_CONFIGURACION.md` (encoder por hardware, audio 160 kbps / 48 kHz, 720p30, reconexión automática, bitrate dinámico, Ethernet con subida ≥ 2× bitrate, no detener la transmisión en recesos, una sola sala por clase).
+- **Tests**: default `smooth`, migración v0 → v1 (cualquier modo pasa a `smooth` sin tocar tema ni animaciones), modo guardado en v1 se respeta.
+
 ## 2026-10-15
 
 ### Grabaciones — retomar donde quedó el alumno y aviso claro al expirar la sesión

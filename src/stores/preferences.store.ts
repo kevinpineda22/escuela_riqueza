@@ -13,14 +13,18 @@ interface PreferencesState {
   animationsEnabled: boolean;
   toggleAnimations: () => void;
   setAnimationsEnabled: (enabled: boolean) => void;
-  // Modo de clase del player de lives. "dvr" (default, "Clase completa"):
-  // ventana DVR de Cloudflare con timeline, retroceso y retomar posición; en
-  // producción dio 0 stalls en 50 min (2026-10-10). "smooth" ("Clase normal ·
-  // Fluidez"): 3 segmentos del filo, siempre en el directo. "low": LL-HLS,
-  // ~3 s del filo, requiere red estable.
+  // Modo de clase del player de lives. "smooth" (default, "Clase normal ·
+  // Fluidez"): 3 segmentos del filo, playlist de tamaño fijo (~5 KB), HLS
+  // estándar: el más estable para clases de 3-4 h. "dvr" ("Clase completa"):
+  // ventana DVR con timeline y retroceso, pero su playlist crece con la clase
+  // (~180 KB a las 3 h 40, medido 2026-09-23) y Cloudflare advierte
+  // degradación pasadas 3 h y un tope de 7.200 segmentos (4 h con keyframe de
+  // 2 s). "low": LL-HLS, ~3 s del filo, requiere red estable.
   // El default solo alcanza a quien no tiene un valor guardado: `merge`
-  // conserva cualquier modo persistido. Un "smooth" guardado no se distingue
-  // de uno heredado del default anterior, así que no se migra a escondidas.
+  // conserva cualquier modo persistido. La migración a versión 1 lleva a todos
+  // a "smooth" una vez (2026-10-16): el modo se persistía aunque el alumno
+  // nunca lo hubiera elegido (bastaba cambiar el tema), así que un valor
+  // guardado anterior no expresa una elección.
   liveLatencyMode: LiveLatencyMode;
   setLiveLatencyMode: (mode: LiveLatencyMode) => void;
   // Apariencia local del navegador. "system" es una preferencia, no un tercer
@@ -29,7 +33,7 @@ interface PreferencesState {
   setThemePreference: (preference: ThemePreference) => void;
 }
 
-export const DEFAULT_LIVE_LATENCY_MODE: LiveLatencyMode = "dvr";
+export const DEFAULT_LIVE_LATENCY_MODE: LiveLatencyMode = "smooth";
 
 const LIVE_LATENCY_MODES: readonly LiveLatencyMode[] = ["smooth", "low", "dvr"];
 
@@ -48,6 +52,13 @@ export const usePreferencesStore = create<PreferencesState>()(
     }),
     {
       name: PREFERENCES_STORAGE_KEY,
+      // v1 (2026-10-16): todos pasan una vez al modo más estable (ver arriba).
+      version: 1,
+      migrate: (persisted, version) => {
+        // Puede venir incompleto o dañado: `merge` completa y valida cada campo después.
+        const stored = (persisted ?? {}) as Pick<PreferencesState, "animationsEnabled" | "liveLatencyMode" | "themePreference">;
+        return version < 1 ? { ...stored, liveLatencyMode: DEFAULT_LIVE_LATENCY_MODE } : stored;
+      },
       partialize: (state) => ({
         animationsEnabled: state.animationsEnabled,
         liveLatencyMode: state.liveLatencyMode,
