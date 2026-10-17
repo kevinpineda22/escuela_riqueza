@@ -44,7 +44,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const maxDurationSeconds = 3600 * 4;
+    // 6 h: the live classes run up to 4 h 25 min (2026-10-17, two parts joined), and
+    // Cloudflare rejects an upload longer than this at processing time. The reservation
+    // counts against Stream storage only until the upload completes.
+    const maxDurationSeconds = 3600 * 6;
 
     const metadata: string[] = [];
     if (videoName) {
