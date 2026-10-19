@@ -101,9 +101,10 @@ Pasos nuevos, entre "Pick the highest-resolution video stream" y "Verify the MP4
 
 1. **Validar `trim_ranges` en bash/jq**: `0 ≤ start < end ≤ duración`, tramos sin solaparse, y lo que queda dura al menos 60 s. Se re-valida aunque la API ya lo hizo: el workflow también se dispara a mano.
 2. **Calcular los tramos que se conservan** (el complemento): `[0, start)` y `[end, duración)`.
-3. **Extraer cada tramo sin re-encodear** a `.ts`:
-   `ffmpeg -ss <ini> -to <fin> -i "$HLS_URL" -map 0:v -map 0:a -c copy -avoid_negative_ts make_zero parte_N.ts`
-4. **Unir** con el concat demuxer en un MP4: `ffmpeg -f concat -safe 0 -i lista.txt -c copy -movflags +faststart "$LIVE_ID.mp4"`.
+3. **Bajar la grabación entera** a `source.mp4` con el mismo comando del archivado completo, y verificarla contra la duración de Stream (±5 s).
+4. **Cortar y unir desde ese archivo** con el concat demuxer y `inpoint`/`outpoint` (`ffconcat`), con `-c copy`, en un único `recording.mp4`.
+
+> ⚠️ **Descartado tras las pruebas #6 y #7 (2026-10-19):** extraer cada tramo con `-ss` *dentro del HLS* a `.ts` sueltos y unirlos dejó el MP4 con **solo el primer tramo** (599 s de 1.974 s). La causa exacta no se confirmó (sospecha: HLS con el audio en otra lista + timestamps de los `.ts`). El `-nostdin` que se agregó en el medio era necesario, pero no era la causa.
 
 La clave en R2 no cambia (`recordings/<liveId>/<uid>.mp4`): la versión sin cortar nunca se sube, así que no hay nada que pisar. `buildRecordingKey` queda igual.
 

@@ -224,35 +224,55 @@ jobs:
           HLS_URL: ${{ steps.meta.outputs.hls }}
           VIDEO_IDX: ${{ steps.pick.outputs.video }}
           AUDIO_IDX: ${{ steps.pick.outputs.audio }}
+          META_DURATION: ${{ steps.meta.outputs.duration }}
         run: |
-          # Cada tramo conservado se extrae a MPEG-TS con -c copy: el corte cae en el
-          # keyframe anterior a `start` (OBS: cada 2 s). Después el concat demuxer los une
-          # en UN solo MP4, que es lo que se sube: la versión sin cortar nunca llega a R2.
-          : > concat.txt
-          N=0
-          while read -r SEG; do
-            START=$(echo "$SEG" | jq -r '.start')
-            LEN=$(echo "$SEG" | jq -r '.end - .start')
-            N=$((N + 1))
-            echo "Tramo $N: desde ${START}s, ${LEN}s"
-            # -nostdin: sin él, ffmpeg lee la entrada estándar y se come el resto de la
-            # lista de tramos del `while read`. Pasó en la primera prueba (2026-10-19): se
-            # procesó solo el primer tramo y el MP4 quedó con media clase.
-            ffmpeg -nostdin -hide_banner -loglevel warning -stats \
-              -ss "$START" -i "$HLS_URL" -t "$LEN" \
-              -map "0:$VIDEO_IDX" -map "0:$AUDIO_IDX" \
-              -c copy -avoid_negative_ts make_zero \
-              "part_$N.ts"
-            echo "file 'part_$N.ts'" >> concat.txt
-          done < <(jq -c '.[]' kept.json)
-          # Red de seguridad: cada tramo conservado tiene que estar en la lista de unión.
+          # Dos fases, a propósito (pruebas #6 y #7 del 2026-10-19): extraer cada tramo
+          # buscando DENTRO del HLS y unir los .ts sueltos dejaba el MP4 con solo el
+          # primer tramo (599 s de 1974 s). Ahora:
+          #   1. Se baja la grabación entera con el MISMO comando del archivado completo
+          #      (probado en producción) y se verifica contra la duración de Stream.
+          #   2. Se corta y une desde ese único archivo local con inpoint/outpoint del
+          #      concat demuxer: un solo archivo, mismos streams, mismo reloj.
+          # Con -c copy el corte cae en el keyframe anterior (OBS: cada 2 s).
+          # La versión sin cortar queda solo en el runner: nunca llega a R2.
+          dur() { ffprobe -v error -show_entries format=duration -of csv=p=0 "$1"; }
+          streams() { ffprobe -v error -show_entries stream=codec_type,duration -of csv=p=0 "$1" | tr '\n' ' '; }
+
+          echo "== Fase 1: grabación entera =="
+          ffmpeg -nostdin -hide_banner -loglevel warning -stats \
+            -i "$HLS_URL" \
+            -map "0:$VIDEO_IDX" -map "0:$AUDIO_IDX" \
+            -c copy -movflags +faststart \
+            "source.mp4"
+          SRC=$(dur source.mp4)
+          echo "source.mp4: ${SRC}s (Stream dice ${META_DURATION}s) — streams: $(streams source.mp4)"
+          jq -n --argjson a "$SRC" --argjson b "$META_DURATION" -e '($a - $b) | fabs <= 5' > /dev/null \
+            || { echo "::error::La grabación entera bajó incompleta (${SRC}s de ${META_DURATION}s): el problema es la descarga, no el corte"; exit 1; }
+
+          echo "== Fase 2: corte y unión =="
+          {
+            echo "ffconcat version 1.0"
+            while read -r START END; do
+              echo "file 'source.mp4'"
+              echo "inpoint $START"
+              # El último tramo llega al final: sin outpoint, toma hasta el último cuadro.
+              if jq -n --argjson e "$END" --argjson d "$META_DURATION" -e '$e < $d' > /dev/null < /dev/null; then
+                echo "outpoint $END"
+              fi
+            done < <(jq -r '.[] | "\(.start) \(.end)"' kept.json)
+          } > concat.txt
+          echo "Lista de unión:"; cat concat.txt
+          # Red de seguridad: un bloque `file` por tramo conservado.
+          N=$(grep -c "^file " concat.txt)
           EXPECTED=$(jq 'length' kept.json)
-          [[ "$N" == "$EXPECTED" ]] || { echo "::error::Se extrajeron $N tramos de $EXPECTED; no se une un video incompleto"; exit 1; }
+          [[ "$N" == "$EXPECTED" ]] || { echo "::error::La lista de unión tiene $N tramos de $EXPECTED"; exit 1; }
+
           ffmpeg -nostdin -hide_banner -loglevel warning -stats \
             -f concat -safe 0 -i concat.txt \
-            -map 0:v -map 0:a -c copy -bsf:a aac_adtstoasc -movflags +faststart \
+            -map 0:v -map 0:a -c copy -movflags +faststart \
             "recording.mp4"
-          rm -f part_*.ts
+          echo "recording.mp4: $(dur recording.mp4)s — streams: $(streams recording.mp4)"
+          rm -f source.mp4
           ls -lh "recording.mp4"
 
       - name: Verify the MP4
