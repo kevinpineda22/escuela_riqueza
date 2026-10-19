@@ -22,11 +22,14 @@
  */
 
 import {
+  buildClaimExpiredReviewUrl,
+  buildClaimManualArchiveUrl,
   buildLiveStatusUrl,
   buildPendingLivesUrl,
   buildRecordingKey,
   buildRegisterUrl,
   decideExistingObject,
+  decideReviewAction,
   parseContentLength,
 } from './archive-helpers';
 
@@ -49,6 +52,9 @@ const LONG_ARCHIVE_EVENT = 'archive-long-recording';
 interface ArchiveBody {
   live_id: string;
   stream_video_uid: string;
+  // 'trim': disparar la Action del recorte (api/stream/request-trim.ts). Sin acción:
+  // archivar ahora (botón "Archivar en R2").
+  action?: 'trim';
 }
 
 type ArchiveResult =
@@ -70,7 +76,14 @@ const CF_DURATION_TOO_LONG = 10047;
  * (ffmpeg remuxa el HLS a MP4 y lo sube a R2). Devuelve true si GitHub aceptó el
  * evento; false si no hay token o GitHub rechazó.
  */
-async function dispatchLongArchive(liveId: string, videoUid: string, env: Env): Promise<boolean> {
+async function dispatchLongArchive(
+  liveId: string,
+  videoUid: string,
+  env: Env,
+  // 'trim' = recorte del receso: la Action lee los tramos de la base y solo corre si
+  // la sala sigue en 'trimming'. Sin modo = archivado completo (> 4 h).
+  mode: 'full' | 'trim' = 'full',
+): Promise<boolean> {
   if (!env.GITHUB_TOKEN) {
     console.warn('[archive] GITHUB_TOKEN no configurado: la grabación larga queda en Stream');
     return false;
@@ -85,7 +98,7 @@ async function dispatchLongArchive(liveId: string, videoUid: string, env: Env): 
     },
     body: JSON.stringify({
       event_type: LONG_ARCHIVE_EVENT,
-      client_payload: { live_id: liveId, video_uid: videoUid },
+      client_payload: { live_id: liveId, video_uid: videoUid, mode },
     }),
   });
   // GitHub responde 204 sin body cuando acepta el dispatch.
@@ -93,7 +106,7 @@ async function dispatchLongArchive(liveId: string, videoUid: string, env: Env): 
     console.error(`[archive] GitHub rechazó el dispatch (${res.status}): ${await res.text()}`);
     return false;
   }
-  console.log(`[archive] workflow de archivado largo disparado para ${liveId}`);
+  console.log(`[archive] workflow de archivado (${mode}) disparado para ${liveId}`);
   return true;
 }
 
@@ -385,10 +398,14 @@ async function markFailed(liveId: string, env: Env): Promise<void> {
 }
 
 /**
- * Estado actual de la sala, o null si no existe. LANZA si Supabase no responde o
- * devuelve error, para no confundir "no se pudo consultar" con "no finalizada".
+ * Estado actual de la sala y de su revisión, o null si no existe. LANZA si Supabase
+ * no responde o devuelve error, para no confundir "no se pudo consultar" con "no
+ * finalizada".
  */
-async function fetchLiveStatus(liveId: string, env: Env): Promise<string | null> {
+async function fetchLiveStatus(
+  liveId: string,
+  env: Env,
+): Promise<{ status: string | null; review: string | null; streamVideoUid: string | null } | null> {
   const res = await fetch(buildLiveStatusUrl(env.SUPABASE_URL, liveId), {
     headers: {
       apikey: env.SUPABASE_SERVICE_ROLE_KEY,
@@ -396,8 +413,41 @@ async function fetchLiveStatus(liveId: string, env: Env): Promise<string | null>
     },
   });
   if (!res.ok) throw new Error(`Supabase respondió ${res.status}`);
-  const rows = (await res.json()) as { status?: string }[];
-  return rows[0]?.status ?? null;
+  const rows = (await res.json()) as {
+    status?: string;
+    recording_review?: string | null;
+    recording_stream_uid?: string | null;
+  }[];
+  if (!rows[0]) return null;
+  return {
+    status: rows[0].status ?? null,
+    review: rows[0].recording_review ?? null,
+    streamVideoUid: rows[0].recording_stream_uid ?? null,
+  };
+}
+
+/**
+ * Pasa una sala de `pending` a `keep` con un PATCH condicional (la URL trae las
+ * condiciones). Devuelve true solo si afectó exactamente una fila: si afectó cero,
+ * otro proceso (el pedido de recorte) la tomó primero y NO hay que archivarla.
+ */
+async function claimReview(url: string, env: Env): Promise<boolean> {
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    },
+    body: JSON.stringify({ recording_review: 'keep' }),
+  });
+  if (!res.ok) {
+    console.error(`[archive] no se pudo reclamar la revisión (${res.status}): ${await res.text()}`);
+    return false;
+  }
+  const affected = (await res.json().catch(() => null)) as unknown[] | null;
+  return Array.isArray(affected) && affected.length === 1;
 }
 
 /**
@@ -408,7 +458,7 @@ async function fetchLiveStatus(liveId: string, env: Env): Promise<string | null>
  */
 async function fetchPendingLives(
   env: Env,
-): Promise<{ id: string; recording_stream_uid: string }[]> {
+): Promise<{ id: string; recording_stream_uid: string; recording_review: string | null }[]> {
   // Límite bajo a propósito: cada grabación de ~3 h pesa varios GB. Procesar de a
   // pocas por tick evita reventar los límites de duración del Worker; el backlog
   // se limpia en ticks sucesivos.
@@ -424,7 +474,7 @@ async function fetchPendingLives(
     console.error('[cron] no se pudo consultar grabaciones pendientes:', res.status);
     return [];
   }
-  return (await res.json()) as { id: string; recording_stream_uid: string }[];
+  return (await res.json()) as { id: string; recording_stream_uid: string; recording_review: string | null }[];
 }
 
 export default {
@@ -452,15 +502,40 @@ export default {
 
     // Mismo criterio que el cron: no archivar (ni borrar de Stream) una sala que no
     // terminó. Cubre también el botón manual si se pulsa durante el vivo.
-    let liveStatus: string | null;
+    let live: Awaited<ReturnType<typeof fetchLiveStatus>>;
     try {
-      liveStatus = await fetchLiveStatus(live_id, env);
+      live = await fetchLiveStatus(live_id, env);
     } catch (err) {
       console.error('[archive] no se pudo consultar el estado de la sala:', err);
       return json({ error: 'No se pudo consultar el estado de la sala; vuelva a intentarlo en un momento' }, 502);
     }
-    if (liveStatus !== 'ended') {
+    if (live?.status !== 'ended') {
       return json({ error: 'La sala no está finalizada; se archiva cuando termine el vivo' }, 409);
+    }
+
+    if (body.action === 'trim') {
+      // La API ya reclamó la sala (pending → trimming) y guardó los tramos. Se
+      // re-verifica acá porque este endpoint es el que gasta la Action y, al final,
+      // borra de Stream.
+      if (live.review !== 'trimming' || live.streamVideoUid !== stream_video_uid) {
+        return json({ error: 'La sala no está esperando un recorte de este video' }, 409);
+      }
+      const dispatched = await dispatchLongArchive(live_id, stream_video_uid, env, 'trim');
+      if (!dispatched) {
+        return json({ error: 'No se pudo disparar el recorte (GitHub)' }, 503);
+      }
+      return json({ status: 'trimming' }, 202);
+    }
+
+    // Archivar a mano una sala en revisión equivale a "Archivar sin recortar". Se
+    // reclama primero: si el recorte ya se pidió, archivar acá borraría de Stream el
+    // video que la Action está bajando.
+    const reviewAction = decideReviewAction(live.review);
+    if (reviewAction === 'skip') {
+      return json({ error: 'La grabación se está recortando; se archiva sola cuando termine' }, 409);
+    }
+    if (reviewAction === 'claim' && !(await claimReview(buildClaimManualArchiveUrl(env.SUPABASE_URL, live_id), env))) {
+      return json({ error: 'La revisión de la grabación cambió mientras tanto; actualice la página' }, 409);
     }
 
     const result = await archiveOne(live_id, stream_video_uid, env);
@@ -494,6 +569,23 @@ export default {
         console.log(`[cron] ${pending.length} grabación(es) pendiente(s) de archivar`);
         for (const live of pending) {
           try {
+            // El filtro ya excluye `trimming` y las `pending` sin vencer. Una `pending`
+            // vencida se reclama antes de archivarla: si el admin pidió el recorte en
+            // el mismo instante, gana uno solo.
+            const reviewAction = decideReviewAction(live.recording_review);
+            if (reviewAction === 'skip') {
+              console.warn(`[cron] ${live.id}: revisión '${live.recording_review}', se saltea`);
+              continue;
+            }
+            if (reviewAction === 'claim') {
+              const claimed = await claimReview(buildClaimExpiredReviewUrl(env.SUPABASE_URL, live.id), env);
+              if (!claimed) {
+                console.warn(`[cron] ${live.id}: la revisión cambió (recorte pedido); se saltea`);
+                continue;
+              }
+              console.log(`[cron] ${live.id}: venció el plazo de revisión, se archiva completa`);
+            }
+
             const result = await archiveOne(live.id, live.recording_stream_uid, env);
             const label =
               result.status === 'processing' ? `processing ${result.percent}%` : result.status;
