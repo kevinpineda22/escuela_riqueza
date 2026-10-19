@@ -235,14 +235,20 @@ jobs:
             LEN=$(echo "$SEG" | jq -r '.end - .start')
             N=$((N + 1))
             echo "Tramo $N: desde ${START}s, ${LEN}s"
-            ffmpeg -hide_banner -loglevel warning -stats \
+            # -nostdin: sin él, ffmpeg lee la entrada estándar y se come el resto de la
+            # lista de tramos del `while read`. Pasó en la primera prueba (2026-10-19): se
+            # procesó solo el primer tramo y el MP4 quedó con media clase.
+            ffmpeg -nostdin -hide_banner -loglevel warning -stats \
               -ss "$START" -i "$HLS_URL" -t "$LEN" \
               -map "0:$VIDEO_IDX" -map "0:$AUDIO_IDX" \
               -c copy -avoid_negative_ts make_zero \
               "part_$N.ts"
             echo "file 'part_$N.ts'" >> concat.txt
           done < <(jq -c '.[]' kept.json)
-          ffmpeg -hide_banner -loglevel warning -stats \
+          # Red de seguridad: cada tramo conservado tiene que estar en la lista de unión.
+          EXPECTED=$(jq 'length' kept.json)
+          [[ "$N" == "$EXPECTED" ]] || { echo "::error::Se extrajeron $N tramos de $EXPECTED; no se une un video incompleto"; exit 1; }
+          ffmpeg -nostdin -hide_banner -loglevel warning -stats \
             -f concat -safe 0 -i concat.txt \
             -map 0:v -map 0:a -c copy -bsf:a aac_adtstoasc -movflags +faststart \
             "recording.mp4"
