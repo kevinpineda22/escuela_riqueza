@@ -9,6 +9,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { ReplayVisibilityControl } from "@/components/feature/admin-live/ReplayVisibilityControl";
 import RecordingPlayer from "@/components/feature/RecordingPlayer";
 import { AdminBroadcastPanel } from "@/components/feature/admin-live/AdminBroadcastPanel";
+import { RecordingReviewControl } from "@/components/feature/admin-live/RecordingReviewControl";
+import { reviewDeadlineFrom } from "@/lib/recordingReview";
 
 const CF_SUBDOMAIN = import.meta.env.VITE_CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN || "";
 const PRESET_INPUT_IDS = [
@@ -337,9 +339,11 @@ const AdminLiveManager = () => {
     } else if (result.status === "processing") {
       toast.info(`Cloudflare todavía está generando el MP4... ${Math.round(result.percent)}%`, {
         id: `arch-${live.id}`,
-        description: "Vuelve a intentarlo en unos minutos.",
+        description: "Se archiva sola en unos minutos; también puedes reintentarlo a mano.",
         duration: 6000,
       });
+      // El Worker ya pasó la revisión a 'keep': refrescar saca el aviso de revisión pendiente.
+      setEndedLives(await fetchEndedLives());
     } else if (result.status === "unarchivable") {
       toast.warning("Este vivo supera las 4 h", {
         id: `arch-${live.id}`,
@@ -406,6 +410,11 @@ const AdminLiveManager = () => {
       recording_bytes: null,
       recording_duration_seconds: null,
       archived_at: null,
+      // Grabación nueva = revisión nueva, con plazo propio. Si había un recorte en curso
+      // sobre la anterior, la Action lo aborta sola: ya no coincide el video vinculado.
+      recording_review: "pending",
+      review_deadline_at: reviewDeadlineFrom(new Date()),
+      trim_ranges: null,
     });
     setEndedLives(prev => prev.map(l => l.id === updated.id ? updated : l));
     return updated;
@@ -536,7 +545,15 @@ const AdminLiveManager = () => {
       const recordingUid = activeLive.stream_live_input_id
         ? (await fetchRecording(activeLive.stream_live_input_id, { startsAt: activeLive.starts_at })).recording_uid
         : null;
-      const updated = await updateLive(activeLive.id, { status: "ended", recording_stream_uid: recordingUid || formData.recording_stream_uid });
+      // Toda clase arranca en revisión: el cron no la archiva hasta que el admin decida
+      // (recortar el receso o archivar completa) o venza el plazo de 48 h.
+      const updated = await updateLive(activeLive.id, {
+        status: "ended",
+        recording_stream_uid: recordingUid || formData.recording_stream_uid,
+        recording_review: "pending",
+        review_deadline_at: reviewDeadlineFrom(new Date()),
+        trim_ranges: null,
+      });
       setLives(prev => prev.map(l => l.id === updated.id ? updated : l).filter(l => l.status !== "ended"));
       setActiveLive(null);
       setFormData({ title: "", description: "", stream_live_input_id: PRESET_INPUT_IDS[0]?.value || "", recording_stream_uid: "", starts_at: "", background_image_url: "", allowed_plans: ["vip"], status: "scheduled", required_plan: "vip", duration_minutes: null, is_active: false });
@@ -1197,7 +1214,8 @@ const AdminLiveManager = () => {
                         </button>
                         {/* `archived_at` cargado con storage 'stream' = ya se intentó y Stream no
                             puede convertirla a MP4 (supera la duración máxima). No insistir. */}
-                        {!isKeptInStream(live) && (
+                        {/* En revisión o recortándose, las acciones van en RecordingReviewControl. */}
+                        {!isKeptInStream(live) && live.recording_review !== "pending" && live.recording_review !== "trimming" && (
                           <button type="button" onClick={() => handleArchive(live)} disabled={archivingId === live.id}
                             title="Copia la grabación a R2 y la borra de Stream para dejar de pagar storage"
                             className="flex-1 sm:flex-none bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 text-success px-3 sm:px-4 py-2 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-bold transition-colors whitespace-nowrap disabled:opacity-50">
@@ -1285,6 +1303,12 @@ const AdminLiveManager = () => {
                     )}
                   </div>
                 )}
+                <RecordingReviewControl
+                  live={live}
+                  archiving={archivingId === live.id}
+                  onArchiveFull={handleArchive}
+                  onUpdated={updated => setEndedLives(prev => prev.map(l => l.id === updated.id ? updated : l))}
+                />
                 <ReplayVisibilityControl
                   live={live}
                   onUpdated={updated => setEndedLives(prev => prev.map(l => l.id === updated.id ? updated : l))}

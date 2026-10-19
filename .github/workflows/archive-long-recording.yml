@@ -8,8 +8,13 @@
 #
 # Grabaciones de menos de 4 h siguen el camino normal (Worker). Ver docs/RECORDINGS_ARCHITECTURE.md.
 #
+# Modo `trim` (recorte del receso, docs/RECORTE_RECESO_DESIGN.md): mismo camino, pero en vez
+# de remuxar la grabación entera extrae los tramos que se CONSERVAN y los une en un único
+# MP4. Los tramos se leen de `lives.trim_ranges`, nunca del disparo, y la sala tiene que
+# estar en `recording_review = 'trimming'`. Sirve para grabaciones de cualquier duración.
+#
 # Disparo automático: repository_dispatch desde worker/src/index.ts.
-# Disparo manual (pruebas / reintentos): pestaña Actions → "Run workflow" con live_id y video_uid.
+# Disparo manual (pruebas / reintentos): pestaña Actions → "Run workflow" con live_id, video_uid y modo.
 
 name: Archive long recording
 
@@ -19,15 +24,28 @@ on:
   workflow_dispatch:
     inputs:
       live_id:
-        description: "UUID de la sala en la tabla lives"
-        required: true
+        description: "UUID de la sala en la tabla lives (en modo prueba se puede dejar vacío)"
+        required: false
       video_uid:
         description: "UID del video en Cloudflare Stream"
         required: true
+      mode:
+        description: "full = grabación entera · trim = quitar los tramos de lives.trim_ranges"
+        type: choice
+        options: [full, trim]
+        default: full
+      dry_run:
+        description: "Modo prueba: sube a recordings/_prueba/, NO toca la base y NO borra de Stream"
+        type: boolean
+        default: false
+      trim_ranges:
+        description: 'Solo en modo prueba + trim: tramos a quitar, ej. [{"start":3600,"end":5400}]'
+        required: false
+        default: ""
 
 concurrency:
   # Un solo archivado por sala a la vez; un reintento no se pisa con el anterior.
-  group: archive-${{ github.event.client_payload.live_id || inputs.live_id }}
+  group: archive-${{ github.event.client_payload.live_id || inputs.live_id || inputs.video_uid }}
   cancel-in-progress: false
 
 jobs:
@@ -39,6 +57,10 @@ jobs:
     env:
       LIVE_ID: ${{ github.event.client_payload.live_id || inputs.live_id }}
       VIDEO_UID: ${{ github.event.client_payload.video_uid || inputs.video_uid }}
+      # Los disparos anteriores al recorte no traen `mode`: son archivados completos.
+      MODE: ${{ github.event.client_payload.mode || inputs.mode || 'full' }}
+      # Solo existe en el disparo manual: el Worker nunca puede pedir una prueba.
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
       # Mismos nombres que el .env del proyecto (no los del Worker, que usa CF_*).
       CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CF_STREAM_API_TOKEN: ${{ secrets.CLOUDFLARE_STREAM_API_TOKEN }}
@@ -52,25 +74,54 @@ jobs:
     steps:
       - name: Validate inputs
         run: |
-          if [[ -z "$LIVE_ID" || -z "$VIDEO_UID" ]]; then
-            echo "::error::Faltan live_id o video_uid"; exit 1
+          if [[ -z "$VIDEO_UID" ]]; then
+            echo "::error::Falta video_uid"; exit 1
+          fi
+          if [[ -z "$LIVE_ID" && "$DRY_RUN" != "true" ]]; then
+            echo "::error::Falta live_id"; exit 1
           fi
           # Estos valores llegan a rutas de archivo, URLs y comandos: se aceptan solo con formato exacto.
-          if ! [[ "$LIVE_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+          if [[ -n "$LIVE_ID" ]] && ! [[ "$LIVE_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
             echo "::error::live_id no es un UUID válido"; exit 1
           fi
           if ! [[ "$VIDEO_UID" =~ ^[a-f0-9]{32}$ ]]; then
             echo "::error::video_uid no tiene el formato de Stream (32 caracteres hexadecimales)"; exit 1
           fi
-          echo "Sala: $LIVE_ID — Video: $VIDEO_UID"
+          if [[ "$MODE" != "full" && "$MODE" != "trim" ]]; then
+            echo "::error::mode tiene que ser full o trim"; exit 1
+          fi
+          if [[ "$DRY_RUN" == "true" ]]; then
+            echo "::notice::MODO PRUEBA: se sube a recordings/_prueba/, no se toca la base ni se borra de Stream"
+          fi
+          echo "Sala: ${LIVE_ID:-(ninguna)} — Video: $VIDEO_UID — Modo: $MODE — Prueba: $DRY_RUN"
 
       - name: Verify the live has ended
+        id: live
+        # En modo prueba no se mira la base: la grabación de prueba puede no tener sala, y
+        # como no se registra ni se borra nada, no hay estado que proteger.
+        if: env.DRY_RUN != 'true'
         # Misma regla que el Worker: nunca archivar (ni borrar de Stream) una sala en curso.
+        # Y la revisión tiene que coincidir con el modo: el modo viene del disparo, pero la
+        # base es la que manda (ver docs/RECORTE_RECESO_DESIGN.md §4.1).
         run: |
-          STATUS=$(curl -sS "$SUPABASE_URL/rest/v1/lives?select=status&id=eq.$LIVE_ID&limit=1" \
+          ROW=$(curl -sS "$SUPABASE_URL/rest/v1/lives?select=status,recording_review,recording_stream_uid,trim_ranges&id=eq.$LIVE_ID&limit=1" \
             -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
-            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" | jq -r '.[0].status // empty')
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" | jq -c '.[0] // empty')
+          [[ -n "$ROW" ]] || { echo "::error::La sala no existe"; exit 1; }
+          STATUS=$(echo "$ROW" | jq -r '.status // empty')
+          REVIEW=$(echo "$ROW" | jq -r '.recording_review // "null"')
+          LINKED=$(echo "$ROW" | jq -r '.recording_stream_uid // empty')
           [[ "$STATUS" == "ended" ]] || { echo "::error::La sala no está finalizada (estado: ${STATUS:-desconocido})"; exit 1; }
+          [[ "$LINKED" == "$VIDEO_UID" ]] || { echo "::error::La sala ya no apunta a este video (vinculado: ${LINKED:-ninguno})"; exit 1; }
+          if [[ "$MODE" == "trim" ]]; then
+            # Si la sala no sigue en 'trimming' (p. ej. la API la devolvió a 'pending' porque
+            # no le llegó la respuesta del Worker), NO se archiva completa por error: se corta.
+            [[ "$REVIEW" == "trimming" ]] || { echo "::error::Recorte pedido pero la sala está en revisión '$REVIEW'; no se procesa"; exit 1; }
+            echo "trim_ranges=$(echo "$ROW" | jq -c '.trim_ranges')" >> "$GITHUB_OUTPUT"
+          else
+            # 'pending' = el admin todavía no decidió; 'trimming' = es de un recorte.
+            [[ "$REVIEW" == "null" || "$REVIEW" == "keep" ]] || { echo "::error::La sala está en revisión '$REVIEW'; el archivado completo no la toca"; exit 1; }
+          fi
 
       - name: Fetch video metadata from Stream
         id: meta
@@ -83,6 +134,42 @@ jobs:
           echo "duration=$(echo "$RES" | jq -r '.result.duration')" >> "$GITHUB_OUTPUT"
           echo "hls=$(echo "$RES" | jq -r '.result.playback.hls')" >> "$GITHUB_OUTPUT"
           echo "Duración: $(echo "$RES" | jq -r '.result.duration') s"
+
+      - name: Validate trim ranges
+        id: trim
+        if: env.MODE == 'trim'
+        env:
+          TRIM_FROM_DB: ${{ steps.live.outputs.trim_ranges }}
+          TRIM_FROM_INPUT: ${{ inputs.trim_ranges }}
+          META_DURATION: ${{ steps.meta.outputs.duration }}
+        # Mismas reglas que api/_lib/trimRanges.ts (validateTrimRanges y keptSegments): si se
+        # cambia una, cambiar la otra. Se re-valida porque el workflow también corre a mano.
+        run: |
+          # Fuera de la prueba, los tramos salen SOLO de la base; el input se ignora.
+          if [[ "$DRY_RUN" == "true" ]]; then TRIM_RANGES="$TRIM_FROM_INPUT"; else TRIM_RANGES="$TRIM_FROM_DB"; fi
+          echo "$TRIM_RANGES" > trim_ranges.json
+          VALID=$(jq --argjson d "$META_DURATION" '
+            type == "array" and length >= 1 and length <= 5
+            and all(.[]; (.start | type) == "number" and (.end | type) == "number"
+                         and .start >= 0 and .end <= $d and (.end - .start) >= 5)
+            and (sort_by(.start) as $s | [range(1; $s | length)] | all(.[]; $s[.].start >= $s[. - 1].end))
+            and ($d - (map(.end - .start) | add)) >= 60
+          ' trim_ranges.json 2>/dev/null || echo false)
+          [[ "$VALID" == "true" ]] || { echo "::error::trim_ranges inválidos para una grabación de ${META_DURATION}s: $TRIM_RANGES"; exit 1; }
+
+          # Tramos que se CONSERVAN (complemento). Un borde de menos de 1 s se descarta.
+          jq -c --argjson d "$META_DURATION" '
+            sort_by(.start)
+            | reduce .[] as $r ({c: 0, k: []};
+                (if ($r.start - .c) >= 1 then .k += [{start: .c, end: $r.start}] else . end)
+                | .c = $r.end)
+            | (if ($d - .c) >= 1 then .k + [{start: .c, end: $d}] else .k end)
+          ' trim_ranges.json > kept.json
+          KEPT=$(jq -r 'map(.end - .start) | add' kept.json)
+          echo "segments=$(jq 'length' kept.json)" >> "$GITHUB_OUTPUT"
+          echo "kept_seconds=$KEPT" >> "$GITHUB_OUTPUT"
+          echo "Se quitan: $(jq -c . trim_ranges.json)"
+          echo "Se conservan: $(jq -c . kept.json) — ${KEPT}s de ${META_DURATION}s"
 
       - name: Install ffmpeg
         # ubuntu-24.04 (ubuntu-latest) ya NO trae ffmpeg preinstalado; las imágenes
@@ -118,6 +205,7 @@ jobs:
           echo "Video stream #$VIDEO_IDX (${HEIGHT}p), audio stream #$AUDIO_IDX"
 
       - name: Remux HLS to MP4 (no re-encoding)
+        if: env.MODE == 'full'
         env:
           HLS_URL: ${{ steps.meta.outputs.hls }}
           VIDEO_IDX: ${{ steps.pick.outputs.video }}
@@ -127,22 +215,76 @@ jobs:
             -i "$HLS_URL" \
             -map "0:$VIDEO_IDX" -map "0:$AUDIO_IDX" \
             -c copy -movflags +faststart \
-            "$LIVE_ID.mp4"
-          ls -lh "$LIVE_ID.mp4"
+            "recording.mp4"
+          ls -lh "recording.mp4"
+
+      - name: Cut and join the kept segments (no re-encoding)
+        if: env.MODE == 'trim'
+        env:
+          HLS_URL: ${{ steps.meta.outputs.hls }}
+          VIDEO_IDX: ${{ steps.pick.outputs.video }}
+          AUDIO_IDX: ${{ steps.pick.outputs.audio }}
+        run: |
+          # Cada tramo conservado se extrae a MPEG-TS con -c copy: el corte cae en el
+          # keyframe anterior a `start` (OBS: cada 2 s). Después el concat demuxer los une
+          # en UN solo MP4, que es lo que se sube: la versión sin cortar nunca llega a R2.
+          : > concat.txt
+          N=0
+          while read -r SEG; do
+            START=$(echo "$SEG" | jq -r '.start')
+            LEN=$(echo "$SEG" | jq -r '.end - .start')
+            N=$((N + 1))
+            echo "Tramo $N: desde ${START}s, ${LEN}s"
+            ffmpeg -hide_banner -loglevel warning -stats \
+              -ss "$START" -i "$HLS_URL" -t "$LEN" \
+              -map "0:$VIDEO_IDX" -map "0:$AUDIO_IDX" \
+              -c copy -avoid_negative_ts make_zero \
+              "part_$N.ts"
+            echo "file 'part_$N.ts'" >> concat.txt
+          done < <(jq -c '.[]' kept.json)
+          ffmpeg -hide_banner -loglevel warning -stats \
+            -f concat -safe 0 -i concat.txt \
+            -map 0:v -map 0:a -c copy -bsf:a aac_adtstoasc -movflags +faststart \
+            "recording.mp4"
+          rm -f part_*.ts
+          ls -lh "recording.mp4"
 
       - name: Verify the MP4
         id: verify
         env:
           META_DURATION: ${{ steps.meta.outputs.duration }}
+          KEPT_SECONDS: ${{ steps.trim.outputs.kept_seconds }}
+          SEGMENTS: ${{ steps.trim.outputs.segments }}
         run: |
-          OUT=$(ffprobe -v error -show_entries format=duration,size -of json "$LIVE_ID.mp4")
+          OUT=$(ffprobe -v error -show_entries format=duration,size -of json "recording.mp4")
           GOT=$(echo "$OUT" | jq -r '.format.duration | tonumber | floor')
-          WANT=$(echo "$META_DURATION" | jq -r 'tonumber | floor')
           SIZE=$(echo "$OUT" | jq -r '.format.size')
+          if [[ "$MODE" == "trim" ]]; then
+            WANT=$(echo "$KEPT_SECONDS" | jq -r 'tonumber | floor')
+            # Cada tramo puede arrancar hasta un keyframe antes (y el HLS suma sus bordes).
+            TOLERANCE=$(( 5 * SEGMENTS ))
+          else
+            WANT=$(echo "$META_DURATION" | jq -r 'tonumber | floor')
+            # Toleramos ±5 s por los bordes de los segmentos HLS.
+            TOLERANCE=5
+          fi
           echo "Duración esperada: ${WANT}s — obtenida: ${GOT}s — tamaño: $SIZE bytes"
-          # Toleramos ±5 s por los bordes de los segmentos HLS.
           DIFF=$(( GOT > WANT ? GOT - WANT : WANT - GOT ))
-          [[ "$DIFF" -le 5 ]] || { echo "::error::El MP4 quedó incompleto (faltan $DIFF s)"; exit 1; }
+          [[ "$DIFF" -le "$TOLERANCE" ]] || { echo "::error::El MP4 no tiene la duración esperada (diferencia: $DIFF s, tolerancia: $TOLERANCE s)"; exit 1; }
+
+          if [[ "$MODE" == "trim" ]]; then
+            # Lección del 2026-10-10: decodificar sin errores NO detecta audio perdido. Al
+            # unir tramos, el audio tiene que durar lo mismo que el video.
+            STREAMS=$(ffprobe -v error -show_entries stream=codec_type,duration -of json "recording.mp4")
+            NV=$(echo "$STREAMS" | jq '[.streams[] | select(.codec_type == "video")] | length')
+            NA=$(echo "$STREAMS" | jq '[.streams[] | select(.codec_type == "audio")] | length')
+            [[ "$NV" == "1" && "$NA" == "1" ]] || { echo "::error::Se esperaba 1 video y 1 audio; hay $NV y $NA"; exit 1; }
+            VDUR=$(echo "$STREAMS" | jq -r '.streams[] | select(.codec_type == "video") | .duration | tonumber')
+            ADUR=$(echo "$STREAMS" | jq -r '.streams[] | select(.codec_type == "audio") | .duration | tonumber')
+            echo "Video: ${VDUR}s — audio: ${ADUR}s"
+            jq -n --argjson v "$VDUR" --argjson a "$ADUR" -e '($v - $a) | fabs <= 1' > /dev/null \
+              || { echo "::error::El audio no dura lo mismo que el video (video ${VDUR}s, audio ${ADUR}s)"; exit 1; }
+          fi
           echo "bytes=$SIZE" >> "$GITHUB_OUTPUT"
           echo "seconds=$GOT" >> "$GITHUB_OUTPUT"
 
@@ -151,10 +293,16 @@ jobs:
         run: |
           # Clave única por video de Stream. DEBE coincidir con buildRecordingKey() en
           # worker/src/archive-helpers.ts: si se cambia una, cambiar la otra.
-          KEY="recordings/$LIVE_ID/$VIDEO_UID.mp4"
+          # En modo prueba va a una carpeta aparte, con fecha para no chocar entre pruebas:
+          # nunca puede caer en la clave real de una sala.
+          if [[ "$DRY_RUN" == "true" ]]; then
+            KEY="recordings/_prueba/$VIDEO_UID-$MODE-$(date -u +%Y%m%dT%H%M%SZ).mp4"
+          else
+            KEY="recordings/$LIVE_ID/$VIDEO_UID.mp4"
+          fi
           ENDPOINT="https://$CF_ACCOUNT_ID.r2.cloudflarestorage.com"
           echo "key=$KEY" >> "$GITHUB_OUTPUT"
-          LOCAL_SIZE=$(stat -c %s "$LIVE_ID.mp4")
+          LOCAL_SIZE=$(stat -c %s "recording.mp4")
           # Nunca pisar un objeto existente: puede ser la única copia de otra grabación.
           # Solo un 404 / Not Found significa "ausente"; cualquier otro error (red,
           # credenciales, 5xx) aborta en vez de asumir que la clave está libre.
@@ -175,13 +323,29 @@ jobs:
             echo "::error::No se pudo comprobar si $KEY existe en R2: $HEAD_OUT"; exit 1
           fi
           # aws-cli hace multipart solo para archivos grandes; R2 es S3-compatible.
-          aws s3 cp "$LIVE_ID.mp4" "s3://$R2_BUCKET/$KEY" \
+          aws s3 cp "recording.mp4" "s3://$R2_BUCKET/$KEY" \
             --endpoint-url "$ENDPOINT" \
             --content-type video/mp4 \
             --only-show-errors
           echo "Subido a $KEY"
 
+      - name: Share the test recording
+        # Link firmado de 24 h para mirar y escuchar la unión. Queda en el log de la
+        # Action, visible para quien tenga acceso al repo: por eso vence en un día.
+        if: env.DRY_RUN == 'true'
+        env:
+          R2_KEY: ${{ steps.upload.outputs.key }}
+        run: |
+          URL=$(aws s3 presign "s3://$R2_BUCKET/$R2_KEY" \
+            --endpoint-url "https://$CF_ACCOUNT_ID.r2.cloudflarestorage.com" \
+            --expires-in 86400)
+          echo "::notice::Prueba lista en $R2_KEY (link de 24 h en el log de este paso). No se tocó la base ni Stream."
+          echo "Link para mirarlo (vence en 24 h):"
+          echo "$URL"
+          echo "Cuando termine de revisarlo, borre el objeto desde el panel de R2 (carpeta recordings/_prueba/)."
+
       - name: Register in Supabase
+        if: env.DRY_RUN != 'true'
         env:
           R2_KEY: ${{ steps.upload.outputs.key }}
           MP4_BYTES: ${{ steps.verify.outputs.bytes }}
@@ -195,8 +359,15 @@ jobs:
             --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             '{recording_r2_key:$key, recording_storage:"r2", recording_bytes:$bytes,
               recording_duration_seconds:$secs, recording_stream_uid:null, archived_at:$now}')
+          # La revisión se re-chequea en el PATCH: si cambió durante la Action, no se registra
+          # ni se borra de Stream. Paréntesis y comas sin escapar: PostgREST los acepta así.
+          if [[ "$MODE" == "trim" ]]; then
+            REVIEW_FILTER="recording_review=eq.trimming"
+          else
+            REVIEW_FILTER="or=(recording_review.is.null,recording_review.eq.keep)"
+          fi
           CODE=$(curl -sS -o /tmp/patch.txt -w "%{http_code}" -X PATCH \
-            "$SUPABASE_URL/rest/v1/lives?id=eq.$LIVE_ID&recording_stream_uid=eq.$VIDEO_UID" \
+            "$SUPABASE_URL/rest/v1/lives?id=eq.$LIVE_ID&recording_stream_uid=eq.$VIDEO_UID&$REVIEW_FILTER" \
             -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
             -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
             -H "Content-Type: application/json" -H "Prefer: return=representation" \
@@ -210,6 +381,8 @@ jobs:
 
       - name: Delete from Stream
         # Recién ahora: la copia en R2 y el registro en la base ya están confirmados.
+        # Nunca en modo prueba: el original es lo único que hay de esa clase.
+        if: env.DRY_RUN != 'true'
         run: |
           CODE=$(curl -sS -o /dev/null -w "%{http_code}" -X DELETE \
             "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/stream/$VIDEO_UID" \

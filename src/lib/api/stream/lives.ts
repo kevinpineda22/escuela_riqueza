@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import { ApiError, authedFetch } from "@/lib/api/client";
 import type { ReplayVisibility } from "@/lib/replayVisibility";
+import type { RecordingReview, TrimRange } from "@/lib/recordingReview";
 
 export type LiveStatus = "scheduled" | "live" | "ended";
 export type PlanType = "free" | "individual" | "vip";
@@ -29,6 +30,12 @@ export interface LiveEvent {
   share_token: string | null;
   /** Quién ve la repetición, en la escuela ("En vivo y grabaciones") y en el link público. Default "hidden". La columna `replay_is_public` está deprecada y ya no se lee. */
   replay_visibility: ReplayVisibility;
+  /** Revisión antes de archivar (recorte del receso). `null` = sala anterior a la revisión. Ver docs/RECORTE_RECESO_DESIGN.md. */
+  recording_review: RecordingReview | null;
+  /** Hasta cuándo espera el cron una revisión `pending` antes de archivar completa. */
+  review_deadline_at: string | null;
+  /** Tramos QUITADOS, en segundos de la grabación original. */
+  trim_ranges: TrimRange[] | null;
 }
 
 function sanitize(live: Record<string, unknown>): Record<string, unknown> {
@@ -382,6 +389,30 @@ export async function archiveRecording(liveId: string, streamVideoUid: string): 
   } catch (err) {
     console.error("Error archiving recording:", err);
     return { status: "error", message: "Error de conexión con el servidor" };
+  }
+}
+
+export type RequestTrimResult = { ok: true; ranges: TrimRange[] } | { ok: false; message: string };
+
+/**
+ * Pide recortar los tramos de la grabación y archivarla como un único video. El
+ * servidor valida contra la duración real, reclama la sala (pending → trimming) y
+ * dispara la GitHub Action. Si el cron ya la tomó para archivar completa, responde error.
+ */
+export async function requestTrim(liveId: string, ranges: TrimRange[]): Promise<RequestTrimResult> {
+  try {
+    const res = await authedFetch("/api/stream/request-trim", {
+      method: "POST",
+      body: JSON.stringify({ live_id: liveId, trim_ranges: ranges }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { ok: false, message: data?.error || "No se pudo pedir el recorte" };
+    }
+    return { ok: true, ranges: (data?.trim_ranges as TrimRange[] | undefined) ?? ranges };
+  } catch (err) {
+    console.error("Error requesting trim:", err);
+    return { ok: false, message: "Error de conexión con el servidor" };
   }
 }
 
