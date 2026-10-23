@@ -31,7 +31,7 @@ import { useAuthStore } from "@/stores/auth.store";
 import { usePlayerStore } from "@/stores/player.store";
 import { PLANS } from "@/types/user";
 import { supabase } from "@/lib/supabase";
-import { fetchModules, fetchLessons, type Module as DBModule, type Lesson as DBLesson } from "@/lib/api/stream/content";
+import { fetchModules, fetchLessonsForModules, type Module as DBModule, type Lesson as DBLesson } from "@/lib/api/stream/content";
 import { fetchActiveLive, type LiveEvent } from "@/lib/api/stream/lives";
 import { fetchAllUserProgress } from "@/lib/api/stream/progress";
 import { ReplaysTab } from "@/components/feature/replays/ReplaysTab";
@@ -149,20 +149,19 @@ const StudentDashboard = () => {
     const loadContent = async () => {
       try {
         setIsLoadingContent(true);
-        const modules = await fetchModules();
+        // El progreso no depende de los módulos: viaja en paralelo.
+        const [modules, progress] = await Promise.all([fetchModules(), fetchAllUserProgress()]);
         const publishedModules = modules.filter(m => m.is_published && (!m.allowed_plans || m.allowed_plans.includes(user?.plan as any)));
-        setDbModules(publishedModules);
 
+        const lessonsByModule = await fetchLessonsForModules(publishedModules.map((m) => m.id));
         const lessonsMap: Record<string, DBLesson[]> = {};
         for (const mod of publishedModules) {
-          const lessons = await fetchLessons(mod.id);
-          lessonsMap[mod.id] = lessons.filter(l => l.is_published && (!l.allowed_plans || l.allowed_plans.includes(user?.plan as any)));
+          lessonsMap[mod.id] = lessonsByModule[mod.id].filter(l => l.is_published && (!l.allowed_plans || l.allowed_plans.includes(user?.plan as any)));
         }
+        setDbModules(publishedModules);
         setDbLessonsMap(lessonsMap);
-        
-        const progress = await fetchAllUserProgress();
-        setUserProgress(progress);
-        
+        if (progress) setUserProgress(progress);
+
       } catch {
         toast.error("Error", { description: "No se pudo cargar el contenido" });
       } finally {
@@ -216,8 +215,9 @@ const StudentDashboard = () => {
     if (!user?.id) return;
     const interval = setInterval(async () => {
       try {
+        // null = falló la lectura: conservar lo que se ve en vez de pintar 0%.
         const progress = await fetchAllUserProgress();
-        setUserProgress(progress);
+        if (progress) setUserProgress(progress);
       } catch {
         // silencio
       }
@@ -626,7 +626,11 @@ const StudentDashboard = () => {
                           {/* En claro el envoltorio no pinta: la barra de plan sigue el tema y el
                               lienzo trae su propio negro (isla en LessonPlayer). Spec §7.1. */}
                           <div className="rounded-2xl overflow-hidden shadow-2xl shadow-black/50 border border-line-subtle bg-black light:bg-transparent light:border-transparent light:shadow-none">
-                            <LessonPlayer 
+                            {/* key: cada clase es una instancia nueva. Al cambiar, la anterior se
+                                desmonta y guarda su minuto exacto (antes se perdían hasta 10 s) y
+                                no arrastra estado ni el iframe de la clase anterior. */}
+                            <LessonPlayer
+                              key={activeLesson.id}
                               videoSrc={activeLesson.stream_uid || ""} 
                               isPremium={isPremium} 
                               lesson={{

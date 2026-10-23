@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { AlertTriangle, RefreshCcw, Home } from "lucide-react";
+import { AlertTriangle, RefreshCcw, Home, WifiOff } from "lucide-react";
+import { reportError, type ReportResult } from "@/lib/errors/errorReporter";
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -9,12 +10,14 @@ interface ErrorBoundaryProps {
 interface ErrorBoundaryState {
   hasError: boolean;
   error: Error | null;
+  /** Clasificación y código del registro (null hasta componentDidCatch). */
+  report: ReportResult | null;
 }
 
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  state: ErrorBoundaryState = { hasError: false, error: null };
+  state: ErrorBoundaryState = { hasError: false, error: null, report: null };
 
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
     return { hasError: true, error };
   }
 
@@ -22,9 +25,14 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     // Loguear SIEMPRE (incluso en prod) para poder diagnosticar crashes desde el
     // Web Inspector de Safari iOS conectado por USB.
     console.error("[ErrorBoundary]", error, info);
+    const report = reportError(error, {
+      source: "boundary",
+      detail: { componentStack: info.componentStack?.slice(0, 1500) ?? null },
+    });
+    this.setState({ report });
   }
 
-  reset = () => this.setState({ hasError: false, error: null });
+  reset = () => this.setState({ hasError: false, error: null, report: null });
 
   render() {
     if (!this.state.hasError || !this.state.error) return this.props.children;
@@ -33,16 +41,20 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
       return this.props.fallback(this.state.error, this.reset);
     }
 
-    return <DefaultErrorFallback error={this.state.error} onReset={this.reset} />;
+    return <DefaultErrorFallback error={this.state.error} report={this.state.report} onReset={this.reset} />;
   }
 }
 
 interface DefaultFallbackProps {
   error: Error;
+  report: ReportResult | null;
   onReset: () => void;
 }
 
-const DefaultErrorFallback = ({ error, onReset }: DefaultFallbackProps) => (
+const DefaultErrorFallback = ({ error, report, onReset }: DefaultFallbackProps) => {
+  // Una pantalla que no cargó por falta de internet no es "algo se rompió".
+  const isNetwork = report?.kind === "offline" || report?.kind === "network" || report?.kind === "timeout";
+  return (
   <div className="min-h-[100dvh] w-full bg-[#050505] light:bg-surface-page flex flex-col items-center justify-center relative overflow-hidden font-sans px-6 py-12">
     <div
       aria-hidden
@@ -64,21 +76,30 @@ const DefaultErrorFallback = ({ error, onReset }: DefaultFallbackProps) => (
           className="absolute inset-0 rounded-full bg-red-500/20 blur-2xl scale-150"
         />
         <div className="relative w-16 h-16 rounded-full bg-gradient-to-br from-red-500/20 to-red-700/10 border border-red-500/30 flex items-center justify-center">
-          <AlertTriangle className="text-danger" size={28} strokeWidth={1.8} />
+          {isNetwork
+            ? <WifiOff className="text-danger" size={28} strokeWidth={1.8} />
+            : <AlertTriangle className="text-danger" size={28} strokeWidth={1.8} />}
         </div>
       </div>
 
       <div className="flex flex-col gap-2">
         <span className="text-[11px] uppercase tracking-[0.3em] font-bold text-red-400/80 light:text-danger">
-          Algo se rompió
+          {isNetwork ? "Problema de conexión" : "Falla de la plataforma"}
         </span>
         <h1 className="text-2xl sm:text-3xl font-extrabold text-foreground-strong tracking-tight">
-          Ocurrió un error inesperado
+          {isNetwork ? "Tu conexión a internet falló" : "Ocurrió un error inesperado"}
         </h1>
         <p className="text-sm text-foreground-muted leading-relaxed">
-          No te preocupes, no se perdió tu progreso. Intenta recargar o volver
-          al inicio. Si el problema persiste, contáctanos.
+          {isNetwork
+            ? "No es un problema de la plataforma: la página no pudo cargar. Revisa tu internet e intenta de nuevo."
+            : "No te preocupes, no se perdió tu progreso. Ya quedó registrado; intenta recargar o volver al inicio."}
         </p>
+        {report?.code ? (
+          <p className="text-sm text-foreground-muted">
+            Si nos escribes, comparte este código:{" "}
+            <span className="font-mono font-bold tracking-widest text-foreground-strong select-all">{report.code}</span>
+          </p>
+        ) : null}
       </div>
 
       {import.meta.env.DEV && (
@@ -104,6 +125,7 @@ const DefaultErrorFallback = ({ error, onReset }: DefaultFallbackProps) => (
       </div>
     </div>
   </div>
-);
+  );
+};
 
 export default ErrorBoundary;

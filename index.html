@@ -34,6 +34,13 @@
       html { background: #0a0a0a; }
       html[data-theme="light"] { background: #f8f6f1; }
     </style>
+    <!-- Fuente: pedida desde el HTML y no con @import dentro del CSS, que obligaba
+         a esperar el CSS de la app → luego el de Google → luego la fuente. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" />
+    <!-- Imágenes (foto del hero, logo): la conexión se abre mientras baja el JS. -->
+    <link rel="preconnect" href="https://imagedelivery.net" />
     <title>Escuela de la Riqueza</title>
   </head>
   <body>

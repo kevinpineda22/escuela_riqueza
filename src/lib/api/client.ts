@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { trackedFetch } from "@/lib/errors/errorReporter";
 
 export class ApiError extends Error {
   readonly code: string;
@@ -41,5 +42,5 @@ export async function authedFetch(input: string, init: RequestInit = {}): Promis
   if (init.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  return fetch(input, { ...init, headers });
+  return trackedFetch(input, { ...init, headers });
 }

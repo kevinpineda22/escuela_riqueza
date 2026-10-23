@@ -188,3 +188,13 @@ Vale la pena correr también `mode: full` + `dry_run`: confirma que el carril de
 
 1. ✅ **Decidido 2026-10-19 (Johan): se borra de Stream apenas el recorte termina y se verifica**, igual que hoy. Sin respaldo ni barrido posterior. La red de seguridad es que la Action solo borra después de verificar duración, audio y streams, subir a R2 y registrar en la base.
 2. ✅ **Decidido 2026-10-19 (Johan): toda clase arranca en `pending` al finalizar.** Si no hubo receso, "Archivar sin recortar" es un clic. Olvidarse de marcar era el error más probable.
+
+## Recortador visual y detección del receso (2026-10-23)
+
+La pantalla de revisión ya no pide escribir `h:mm:ss`: es una tira de miniaturas con dos manijas (lo marcado en rojo **se quita**), una lupa de 3 min para afinar al segundo y "Ver cómo queda", que salta el tramo como va a quedar. Confirmación en pantalla, sin `window.confirm`. El contrato con la API no cambia (`TrimRange` en segundos a `requestTrim`).
+
+- **Miniaturas:** `https://<customer>.cloudflarestream.com/<uid>/thumbnails/thumbnail.jpg?time=Ns&height=108` (`streamThumbnails.ts`). Cada combinación tiempo+alto tarda ~4,5 s la primera vez y después sale de caché; se usa UN solo alto para que tira, lupa y detección compartan caché. CORS abierto: se pueden leer los píxeles.
+- **Detección** (`src/lib/breakDetection.ts`): el receso es la pantalla del logo, oscura y quieta (luminosidad 9–10, cambio 0–1 contra 41–110 / 4–18 de la clase; calibrado con `fcc4d6fb…`). Muestreo grueso (~120 cuadros) y bordes afinados cada 10 s. Los bordes caen sobre cuadros de receso: nunca corta clase. ~70 s para 4 h, en segundo plano.
+- **Final de la grabación:** si el logo sigue hasta el final, el corte termina 1 s antes (`lastMarkableSecond`): la validación redondea a milésimas y el servidor mide la duración distinto que el reproductor.
+- **Sin detección y sin tocar las manijas no se puede recortar:** estarían en un lugar inventado.
+- **hls.js antes que HLS nativo:** Chrome 152 responde "maybe" a `canPlayType(HLS)` pero su reproductor nativo no lee los segmentos de Cloudflare (`DEMUXER_ERROR_COULD_NOT_PARSE`).

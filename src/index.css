@@ -1,4 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
 @config "../tailwind.config.js";
@@ -187,6 +186,13 @@
   body {
     @apply bg-surface-page text-foreground antialiased font-sans;
     overflow-x: hidden;
+  }
+
+  /* Tailwind v4 quitó el cursor: pointer de los botones en Preflight. Sin
+     esto, cada <button> sin `cursor-pointer` explícito muestra la flecha. */
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
   }
 
   /* Scrollbar discreto en oro sobre la superficie del tema */

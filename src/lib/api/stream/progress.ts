@@ -25,14 +25,24 @@ export function isKnownCompleted(lessonId: string | number): boolean {
   return completedLessons.has(String(lessonId));
 }
 
+/**
+ * getSession lee la sesión del almacenamiento local; getUser hacía un viaje al
+ * servidor de auth en CADA guardado (cada 10 s reproduciendo) y en cada cambio de
+ * lección. La base igual valida el token por RLS al leer o escribir.
+ */
+async function currentUserId(): Promise<string | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.user.id ?? null;
+}
+
 export async function fetchUserProgress(lessonId: string): Promise<UserLessonProgress | null> {
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) return null;
+  const userId = await currentUserId();
+  if (!userId) return null;
 
   const { data, error } = await supabase
     .from("user_lesson_progress")
     .select("*")
-    .eq("user_id", userData.user.id)
+    .eq("user_id", userId)
     .eq("lesson_id", lessonId)
     .maybeSingle();
 
@@ -45,8 +55,8 @@ export async function fetchUserProgress(lessonId: string): Promise<UserLessonPro
 }
 
 export async function saveUserProgress(lessonId: string, progressSeconds: number, isCompleted: boolean): Promise<void> {
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) return;
+  const userId = await currentUserId();
+  if (!userId) return;
 
   // Una lección completada NUNCA vuelve a incompleta: al repasarla desde el inicio,
   // el cálculo del 90% da false y este upsert pisaba el true anterior, borrando el
@@ -57,7 +67,7 @@ export async function saveUserProgress(lessonId: string, progressSeconds: number
   const { error } = await supabase
     .from("user_lesson_progress")
     .upsert({
-      user_id: userData.user.id,
+      user_id: userId,
       lesson_id: lessonId,
       progress_seconds: Math.floor(progressSeconds),
       is_completed: completed
@@ -114,14 +124,15 @@ export async function flushLessonProgress(
   await saveUserProgress(String(lessonId), resumePoint(seconds, durationSeconds), completed);
 }
 
-export async function fetchAllUserProgress(): Promise<{ lesson_id: string, is_completed: boolean }[]> {
+/** `null` si la lectura falló: el que llama conserva lo que ya mostraba. */
+export async function fetchAllUserProgress(): Promise<{ lesson_id: string, is_completed: boolean }[] | null> {
   const { data, error } = await supabase
     .from("user_lesson_progress")
     .select("lesson_id, is_completed");
     
   if (error) {
     console.error("Error fetching all progress:", error);
-    return [];
+    return null;
   }
   // Alimenta el registro de completadas apenas entra al dashboard, para que el guardado
   // no degrade una lección terminada aunque el alumno la repase tras recargar la página.

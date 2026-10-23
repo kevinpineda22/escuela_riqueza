@@ -125,6 +125,24 @@ describe("SignedVideo", () => {
     expect(getUrl).not.toHaveBeenCalled();
   });
 
+  it("watchdog does not renew while stuck but still downloading (slow network)", async () => {
+    const state = { paused: false, currentTime: 500 };
+    const { video, getUrl } = setup(state);
+    let end = 500;
+    Object.defineProperty(video, "buffered", {
+      get: () => ({ length: 1, start: () => 0, end: () => end }),
+      configurable: true,
+    });
+    await tick(30, () => {
+      end += 0.5; // el navegador sigue bajando aunque la imagen no avance
+    });
+    expect(getUrl).not.toHaveBeenCalled();
+
+    // Deja de descargar (URL vencida sin evento `error`): el watchdog vuelve a actuar.
+    await tick(9);
+    expect(getUrl).toHaveBeenCalledTimes(1);
+  });
+
   it("watchdog does not renew while paused", async () => {
     const { getUrl } = setup({ paused: true, currentTime: 50 });
     await tick(30);
@@ -164,6 +182,8 @@ describe("SignedVideo", () => {
     await tick(8);
     expect(getUrl).toHaveBeenCalledTimes(3);
     expect(screen.getByText("No se pudo continuar la reproducción.")).toBeInTheDocument();
+    // Sin error del video, solo una traba: no se acusa a la plataforma.
+    expect(screen.getByText(/tu conexión está muy lenta/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
     await flush();

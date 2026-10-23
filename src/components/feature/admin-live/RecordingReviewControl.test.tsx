@@ -1,12 +1,20 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { RecordingReviewControl } from "./RecordingReviewControl";
 import { requestTrim, type LiveEvent } from "@/lib/api/stream/lives";
+import { loadFrameSample } from "./streamThumbnails";
+import type * as StreamThumbnails from "./streamThumbnails";
 
 vi.mock("@/lib/api/stream/lives", () => ({ requestTrim: vi.fn() }));
 vi.mock("@/components/ui/toaster", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 vi.mock("@/components/feature/live-room/constants", () => ({ CF_CUSTOMER_HOST: "customer-test.cloudflarestream.com" }));
+// Miniaturas sintéticas: pantalla del logo (oscura y quieta) entre RECESO_DESDE y
+// RECESO_HASTA, clase (que se mueve) en el resto. Ver src/lib/breakDetection.ts.
+vi.mock("./streamThumbnails", async (importOriginal) => ({
+  ...(await importOriginal<typeof StreamThumbnails>()),
+  loadFrameSample: vi.fn(),
+}));
 // jsdom no tiene MediaSource: hls.js se reemplaza por un doble que no hace nada.
 vi.mock("hls.js", () => {
   class FakeHls {
@@ -21,6 +29,17 @@ vi.mock("hls.js", () => {
 });
 
 const trim = vi.mocked(requestTrim);
+const frames = vi.mocked(loadFrameSample);
+const RECESO_DESDE = 3600;
+const RECESO_HASTA = 5640;
+const LOGO = Array.from({ length: 32 }, (_, i) => (i === 13 ? 120 : 6));
+
+function withBreak(from: number, to: number) {
+  frames.mockImplementation(async (_uid, time) => {
+    if (time >= from && time <= to) return { time, luma: 10, sig: LOGO };
+    return { time, luma: 80, sig: Array.from({ length: 32 }, (_, i) => 80 + ((time / 10 + i * 7) % 23) - 11) };
+  });
+}
 const NOW = new Date("2026-10-18T12:00:00.000Z");
 
 function makeLive(overrides: Partial<LiveEvent> = {}): LiveEvent {
@@ -51,6 +70,7 @@ function renderControl(live: LiveEvent, props: Partial<Parameters<typeof Recordi
 describe("RecordingReviewControl", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    withBreak(RECESO_DESDE, RECESO_HASTA);
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(NOW);
   });
@@ -92,76 +112,91 @@ describe("RecordingReviewControl", () => {
     expect(screen.queryByRole("button", { name: /Revisar grabación/ })).not.toBeInTheDocument();
   });
 
-  describe("modal de revisión", () => {
+  describe("recortador", () => {
     async function openDialog() {
       const user = userEvent.setup();
-      renderControl(makeLive());
+      const utils = renderControl(makeLive());
       await user.click(screen.getByRole("button", { name: /Revisar grabación/ }));
-      return user;
+      return { user, ...utils };
     }
 
-    it("resume cuánto queda la clase después del corte", async () => {
-      const user = await openDialog();
-      await user.type(screen.getByLabelText("Inicio del receso"), "1:00:00");
-      await user.type(screen.getByLabelText("Fin del receso"), "1:35:00");
-      expect(screen.getByTestId("trim-summary")).toHaveTextContent("Duración original 4:00:00 → queda 3:25:00");
+    const found = () => screen.findByText(/Encontramos el receso/, undefined, { timeout: 3000 });
+
+    it("encuentra el receso solo y deja las manijas ahí", async () => {
+      await openDialog();
+      await found();
+      expect(screen.getByRole("slider", { name: "Inicio del receso" })).toHaveAttribute("aria-valuetext", "1:00:00");
+      expect(screen.getByRole("slider", { name: "Fin del receso" })).toHaveAttribute("aria-valuetext", "1:34:00");
+      expect(screen.getByTestId("trim-summary")).toHaveTextContent("Se quita 34:00 · Queda 3:26:00");
     });
 
-    it("avisa si el fin queda antes del inicio y no manda nada", async () => {
-      const user = await openDialog();
-      await user.type(screen.getByLabelText("Inicio del receso"), "1:35:00");
-      await user.type(screen.getByLabelText("Fin del receso"), "1:00:00");
-      expect(screen.getByText(/al menos 5 s/)).toBeInTheDocument();
-      await user.click(screen.getByRole("button", { name: /Recortar y archivar/ }));
+    it("las manijas se afinan con el teclado y la lupa", async () => {
+      const { user } = await openDialog();
+      await found();
+      const start = screen.getByRole("slider", { name: "Inicio del receso" });
+      start.focus();
+      await user.keyboard("{ArrowRight}{ArrowRight}");
+      expect(start).toHaveAttribute("aria-valuetext", "1:00:02");
+      await user.click(screen.getByRole("button", { name: "Atrás 5 segundos" }));
+      expect(start).toHaveAttribute("aria-valuetext", "59:57");
+      expect(screen.getByText(/Volver a lo encontrado/)).toBeInTheDocument();
+    });
+
+    it("el inicio no puede pasar al fin", async () => {
+      const { user } = await openDialog();
+      await found();
+      const start = screen.getByRole("slider", { name: "Inicio del receso" });
+      start.focus();
+      for (let i = 0; i < 40; i++) await user.keyboard("{PageUp}");
+      expect(start).toHaveAttribute("aria-valuenow", String(RECESO_HASTA - 5));
+    });
+
+    it("pide confirmación en pantalla y recién ahí pide el recorte", async () => {
+      trim.mockResolvedValue({ ok: true, ranges: [{ start: RECESO_DESDE, end: RECESO_HASTA }] });
+      const { user, onUpdated } = await openDialog();
+      await found();
+      await user.click(screen.getByRole("button", { name: /Quitar receso/ }));
       expect(trim).not.toHaveBeenCalled();
-    });
+      expect(screen.getByTestId("trim-confirm")).toHaveTextContent("Se quita de 1:00:00 a 1:34:00");
 
-    it("avisa si un tiempo escrito no se puede leer", async () => {
-      const user = await openDialog();
-      await user.type(screen.getByLabelText("Fin del receso"), "1:35:001:35:00");
-      expect(screen.getByText(/Escribe los tiempos como h:mm:ss/)).toBeInTheDocument();
-    });
-
-    it("pide marcar los dos tiempos antes de recortar", async () => {
-      const user = await openDialog();
-      await user.click(screen.getByRole("button", { name: /Recortar y archivar/ }));
-      expect(screen.getByRole("alert")).toHaveTextContent("Marca el inicio y el fin del receso.");
-    });
-
-    it("con confirmación, pide el recorte y deja la sala en recorte", async () => {
-      vi.spyOn(window, "confirm").mockReturnValue(true);
-      trim.mockResolvedValue({ ok: true, ranges: [{ start: 3600, end: 5700 }] });
-      const user = userEvent.setup();
-      const { onUpdated } = renderControl(makeLive());
-      await user.click(screen.getByRole("button", { name: /Revisar grabación/ }));
-      await user.type(screen.getByLabelText("Inicio del receso"), "1:00:00");
-      await user.type(screen.getByLabelText("Fin del receso"), "1:35:00");
-      await user.click(screen.getByRole("button", { name: /Recortar y archivar/ }));
-
-      expect(trim).toHaveBeenCalledWith("live-1", [{ start: 3600, end: 5700 }]);
+      await user.click(screen.getByRole("button", { name: /Sí, recortar/ }));
+      expect(trim).toHaveBeenCalledWith("live-1", [{ start: RECESO_DESDE, end: RECESO_HASTA }]);
       expect(onUpdated).toHaveBeenCalledWith(
-        expect.objectContaining({ recording_review: "trimming", trim_ranges: [{ start: 3600, end: 5700 }] }),
+        expect.objectContaining({ recording_review: "trimming", trim_ranges: [{ start: RECESO_DESDE, end: RECESO_HASTA }] }),
       );
     });
 
-    it("sin confirmación no manda nada", async () => {
-      vi.spyOn(window, "confirm").mockReturnValue(false);
-      const user = await openDialog();
-      await user.type(screen.getByLabelText("Inicio del receso"), "1:00:00");
-      await user.type(screen.getByLabelText("Fin del receso"), "1:35:00");
-      await user.click(screen.getByRole("button", { name: /Recortar y archivar/ }));
+    it("Volver no manda nada", async () => {
+      const { user } = await openDialog();
+      await found();
+      await user.click(screen.getByRole("button", { name: /Quitar receso/ }));
+      await user.click(screen.getByRole("button", { name: "Volver" }));
+      expect(screen.queryByTestId("trim-confirm")).not.toBeInTheDocument();
       expect(trim).not.toHaveBeenCalled();
     });
 
+    it("sin receso detectado, no deja recortar un tramo que nadie marcó", async () => {
+      withBreak(-1, -1);
+      const { user } = await openDialog();
+      await screen.findByText(/No encontramos la pantalla del receso/, undefined, { timeout: 3000 });
+      await user.click(screen.getByRole("button", { name: /Quitar receso/ }));
+      expect(screen.getByRole("alert")).toHaveTextContent("Marca el receso con las manijas rojas");
+      expect(screen.queryByTestId("trim-confirm")).not.toBeInTheDocument();
+
+      screen.getByRole("slider", { name: "Fin del receso" }).focus();
+      await user.keyboard("{ArrowRight}");
+      await user.click(screen.getByRole("button", { name: /Quitar receso/ }));
+      expect(screen.getByTestId("trim-confirm")).toBeInTheDocument();
+    });
+
     it("muestra el error del servidor y deja reintentar", async () => {
-      vi.spyOn(window, "confirm").mockReturnValue(true);
       trim.mockResolvedValue({ ok: false, message: "La grabación ya se está archivando completa" });
-      const user = await openDialog();
-      await user.type(screen.getByLabelText("Inicio del receso"), "1:00:00");
-      await user.type(screen.getByLabelText("Fin del receso"), "1:35:00");
-      await user.click(screen.getByRole("button", { name: /Recortar y archivar/ }));
-      expect(screen.getByRole("alert")).toHaveTextContent("La grabación ya se está archivando completa");
-      expect(screen.getByRole("button", { name: /Recortar y archivar/ })).toBeEnabled();
+      const { user } = await openDialog();
+      await found();
+      await user.click(screen.getByRole("button", { name: /Quitar receso/ }));
+      await user.click(screen.getByRole("button", { name: /Sí, recortar/ }));
+      await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("La grabación ya se está archivando completa"));
+      expect(screen.getByRole("button", { name: /Quitar receso/ })).toBeEnabled();
     });
   });
 });

@@ -1,30 +1,36 @@
+import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { useScrollToHash } from "@/hooks/useScrollToHash";
 import LandingPage from "@/pages/public/LandingPage";
-import AuthPage from "@/pages/public/AuthPage";
-import ResetPassword from "@/pages/public/ResetPassword";
-import EmailConfirmed from "@/pages/public/EmailConfirmed";
-import Plans from "@/pages/public/Plans";
-import NotFound from "@/pages/public/NotFound";
-import HistoryPage from "@/pages/public/HistoryPage";
-import TermsPage from "@/pages/public/TermsPage";
-import PrivacyPage from "@/pages/public/PrivacyPage";
-import ModulePreview from "@/pages/public/ModulePreview";
-import MaintenancePage from "@/pages/public/MaintenancePage";
-import PublicLiveRoom from "@/pages/public/PublicLiveRoom";
-import StudentDashboard from "@/pages/student/StudentDashboard";
-import VIPLiveRoom from "@/pages/student/VIPLiveRoom";
-import ReplayViewer from "@/pages/student/ReplayViewer";
-import AdminMetrics from "@/pages/admin/AdminMetrics";
-import AdminContentManager from "@/pages/admin/AdminContentManager";
-import AdminUsers from "@/pages/admin/AdminUsers";
-import AdminUserDetail from "@/pages/admin/AdminUserDetail";
-import AdminSettings from "@/pages/admin/AdminSettings";
-import AdminLiveManager from "@/pages/admin/AdminLiveManager";
-import AdminSponsors from "@/pages/admin/AdminSponsors";
 import RequireAuth from "@/components/layout/RequireAuth";
-import AdminLayout from "@/components/layout/AdminLayout";
+
+// Solo la landing viaja en el paquete inicial: es la puerta de entrada. El resto
+// se descarga al visitar su ruta — antes TODO (admin, gráficos, hls.js, el
+// subidor de videos) se bajaba aunque el visitante solo mirara la portada.
+const AuthPage = lazy(() => import("@/pages/public/AuthPage"));
+const ResetPassword = lazy(() => import("@/pages/public/ResetPassword"));
+const EmailConfirmed = lazy(() => import("@/pages/public/EmailConfirmed"));
+const Plans = lazy(() => import("@/pages/public/Plans"));
+const NotFound = lazy(() => import("@/pages/public/NotFound"));
+const HistoryPage = lazy(() => import("@/pages/public/HistoryPage"));
+const TermsPage = lazy(() => import("@/pages/public/TermsPage"));
+const PrivacyPage = lazy(() => import("@/pages/public/PrivacyPage"));
+const ModulePreview = lazy(() => import("@/pages/public/ModulePreview"));
+const MaintenancePage = lazy(() => import("@/pages/public/MaintenancePage"));
+const PublicLiveRoom = lazy(() => import("@/pages/public/PublicLiveRoom"));
+const StudentDashboard = lazy(() => import("@/pages/student/StudentDashboard"));
+const VIPLiveRoom = lazy(() => import("@/pages/student/VIPLiveRoom"));
+const ReplayViewer = lazy(() => import("@/pages/student/ReplayViewer"));
+const AdminLayout = lazy(() => import("@/components/layout/AdminLayout"));
+const AdminMetrics = lazy(() => import("@/pages/admin/AdminMetrics"));
+const AdminContentManager = lazy(() => import("@/pages/admin/AdminContentManager"));
+const AdminUsers = lazy(() => import("@/pages/admin/AdminUsers"));
+const AdminUserDetail = lazy(() => import("@/pages/admin/AdminUserDetail"));
+const AdminSettings = lazy(() => import("@/pages/admin/AdminSettings"));
+const AdminLiveManager = lazy(() => import("@/pages/admin/AdminLiveManager"));
+const AdminSponsors = lazy(() => import("@/pages/admin/AdminSponsors"));
+const AdminErrors = lazy(() => import("@/pages/admin/AdminErrors"));
 import { USER_ROLES } from "@/types/user";
 import { usePlatformSettings } from "@/hooks/usePlatformSettings";
 import { useAuthStore } from "@/stores/auth.store";
@@ -45,7 +51,9 @@ const PageTransition = ({ children }: { children: React.ReactNode }) => (
     transition={{ duration: 0.3, ease: "easeInOut" }}
     className="w-full min-h-[100dvh]"
   >
-    {children}
+    {/* Cada página se baja al visitarla: mientras llega, el lienzo queda con el
+        fondo del tema (sin spinner — suele tardar menos que la propia transición). */}
+    <Suspense fallback={null}>{children}</Suspense>
   </motion.div>
 );
 
@@ -149,6 +157,7 @@ const AppRoutes = () => {
           <Route path="users/:id" element={<AdminUserDetail />} />
           <Route path="sponsors" element={<AdminSponsors />} />
           <Route path="settings" element={<AdminSettings />} />
+          <Route path="errors" element={<AdminErrors />} />
         </Route>
 
         {/* 404 catch-all */}

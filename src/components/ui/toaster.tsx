@@ -36,4 +36,4 @@ const Toaster = () => {
 };
 
 export { Toaster };
-export { toast } from "sonner";
+export { toast } from "./errorToast";

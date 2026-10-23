@@ -6,7 +6,7 @@ const upsert = vi.fn().mockResolvedValue({ error: null });
 
 vi.mock('@/lib/supabase', () => ({
   supabase: {
-    auth: { getUser: vi.fn() },
+    auth: { getSession: vi.fn() },
     from: vi.fn(),
   },
 }));
@@ -45,7 +45,7 @@ describe('resumePoint', () => {
 describe('flushLessonProgress', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (supabase.auth.getUser as any).mockResolvedValue({ data: { user: { id: 'user-1' } } });
+    (supabase.auth.getSession as any).mockResolvedValue({ data: { session: { user: { id: 'user-1' } } } });
     (supabase.from as any).mockReturnValue({ upsert });
   });
 
@@ -119,7 +119,7 @@ describe('completion is never undone', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    (supabase.auth.getUser as any).mockResolvedValue({ data: { user: { id: 'user-1' } } });
+    (supabase.auth.getSession as any).mockResolvedValue({ data: { session: { user: { id: 'user-1' } } } });
     (supabase.from as any).mockReturnValue({
       upsert,
       select: select.mockReturnValue({

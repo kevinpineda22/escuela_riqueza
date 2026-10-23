@@ -1,6 +1,6 @@
 import { supabase } from "@/lib/supabase";
-import * as tus from "tus-js-client";
 import { authedFetch } from "@/lib/api/client";
+import type { DetailedError } from "tus-js-client";
 
 export interface Module {
   id: string;
@@ -81,6 +81,28 @@ export async function fetchLessons(moduleId: string): Promise<Lesson[]> {
   return data || [];
 }
 
+/**
+ * Lecciones de varios módulos en UNA consulta. Pedirlas módulo por módulo en un
+ * `for` con `await` encadenaba un viaje al servidor por módulo antes de pintar.
+ */
+export async function fetchLessonsForModules(moduleIds: string[]): Promise<Record<string, Lesson[]>> {
+  const byModule: Record<string, Lesson[]> = {};
+  for (const id of moduleIds) byModule[id] = [];
+  if (moduleIds.length === 0) return byModule;
+
+  const { data, error } = await supabase
+    .from("lessons")
+    .select("*")
+    .in("module_id", moduleIds)
+    .order("order_index", { ascending: true });
+
+  if (error) throw error;
+  for (const lesson of (data ?? []) as Lesson[]) {
+    byModule[lesson.module_id]?.push(lesson);
+  }
+  return byModule;
+}
+
 export async function createLesson(lesson: Partial<Lesson>): Promise<Lesson> {
   const { data: countData } = await supabase
     .from("lessons")
@@ -156,11 +178,14 @@ export async function getDirectUploadUrl(size: number, name?: string): Promise<{
   return data;
 }
 
-export function uploadFileWithProgress(
+export async function uploadFileWithProgress(
   uploadURL: string,
   file: File,
   onProgress: (percent: number) => void
 ): Promise<void> {
+  // Import bajo demanda: este módulo también lo usa el panel del alumno (lee
+  // módulos y lecciones) y el cliente de subida solo hace falta en el admin.
+  const tus = await import("tus-js-client");
   return new Promise((resolve, reject) => {
       const upload = new tus.Upload(file, {
         uploadUrl: uploadURL,
@@ -177,7 +202,7 @@ export function uploadFileWithProgress(
         }
       },
       onSuccess: () => resolve(),
-      onError: (error: Error | tus.DetailedError) => {
+      onError: (error: Error | DetailedError) => {
         const msg = error instanceof tus.DetailedError
           ? `Upload failed (HTTP ${error.originalResponse?.getStatus() || "unknown"})`
           : error.message;
