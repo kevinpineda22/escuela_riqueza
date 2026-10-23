@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { preconnect } from "react-dom";
 import { Play, Headphones, ShieldAlert, MonitorPlay, Check, Volume2, Maximize2, Minimize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player.store";
@@ -9,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { fetchPlatformSettings, type PlatformSettings } from "@/lib/api/admin/settings";
 import { fetchActiveAdsCatalog, pickWeightedAd, incrementAdImpression, type ActiveAdVideo } from "@/lib/api/ads";
+import { reportMediaFailure } from "@/lib/errors/errorReporter";
+import { toast } from "@/components/ui/toaster";
 
 interface LessonPlayerProps {
   videoSrc?: string;
@@ -29,6 +32,10 @@ const AD_VIDEO_ID_FALLBACK = "e5d953d28c8b3d1c1ae8f0b0825191be";
 
 const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayerProps) => {
   const { playTrack, isPodcastMode, closePlayer, track, lastKnownTime, lastVideoId, setPlaybackProgress } = usePlayerStore();
+
+  // El iframe de la clase se monta recién al tocar Play: abrir la conexión ahora,
+  // mientras el alumno mira el botón, le ahorra ese saludo al arranque.
+  preconnect("https://iframe.cloudflarestream.com");
 
   // Settings
   const [settings, setSettings] = useState<PlatformSettings | null>(null);
@@ -62,6 +69,9 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
   const pendingSeekRef = useRef<number | null>(null);
 
   const [playRequested, setPlayRequested] = useState(false);
+  // Punto donde arranca el <Stream> al retomar. Va en la URL del iframe: el video
+  // empieza a bajar desde ahí, en vez de cargar el segundo 0 y después saltar.
+  const [resumeStartAt, setResumeStartAt] = useState<number | undefined>(undefined);
   const initializedTimeRef = useRef(false);
 
   // Progreso guardado en base de datos
@@ -118,6 +128,22 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
     : AD_SKIP_SECONDS;
 
   const endedRef = useRef(false);
+  // La falla del reproductor se registra una vez por lección (el componente se
+  // remonta al cambiar de clase).
+  const playbackErrorReportedRef = useRef(false);
+
+  const handleStreamError = () => {
+    if (playbackErrorReportedRef.current) return;
+    playbackErrorReportedRef.current = true;
+    // El iframe de Cloudflare no dice por qué falló: sin internet es de la red;
+    // con internet, del video o de Cloudflare.
+    reportMediaFailure("lesson-stream", {
+      message: "el reproductor de Cloudflare no pudo reproducir la clase",
+      hlsType: "other",
+      detail: { videoId: videoSrc },
+    });
+    toast.error("No se pudo reproducir la clase");
+  };
 
   // Controlar play/pause del video LOCAL
   useEffect(() => {
@@ -152,10 +178,13 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
     lastSavedTimeRef.current = 0;
     endedRef.current = false;
       
-    // Buscar progreso real
+    // Buscar progreso real. `active` descarta la respuesta si la lección cambió
+    // mientras tanto: si no, la clase B podía ofrecer retomar en el minuto de la A.
+    let active = true;
     const loadProgress = async () => {
       if (!lesson || !videoSrc) return;
       const progress = await fetchUserProgress(String(lesson.id));
+      if (!active) return;
       // También se ofrece retomar en lecciones ya completadas: al repasarlas, el alumno
       // no tiene por qué volver a buscar el punto a mano. Cuando la vio entera,
       // `progress_seconds` vale 0 y acá no se ofrece nada.
@@ -166,6 +195,9 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
       }
     };
     loadProgress();
+    return () => {
+      active = false;
+    };
   }, [videoSrc, lesson?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handlePlayRequest = () => {
@@ -274,7 +306,9 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
       startPodcast(seconds);
       return;
     }
-    pendingSeekRef.current = seconds;
+    setResumeStartAt(seconds);
+    // El punto elegido manda sobre el último tiempo local del store.
+    initializedTimeRef.current = true;
     adTrackingRef.current.lastAdTime = seconds;
     startPlayback();
   };
@@ -287,6 +321,7 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
       startPodcast(0);
       return;
     }
+    setResumeStartAt(undefined);
     pendingSeekRef.current = 0;
     adTrackingRef.current.lastAdTime = 0;
     startPlayback();
@@ -327,6 +362,7 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
       if (adTrackingRef.current.lastAdTime > 0) {
         pendingSeekRef.current = adTrackingRef.current.lastAdTime;
         initializedTimeRef.current = false;
+        setResumeStartAt(undefined);
       }
       setShowAd(false);
       setPlayRequested(true);
@@ -461,6 +497,7 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
       // El Stream local se montará con autoplay en el próximo render.
       // Guardamos el tiempo exacto para restaurarlo en el primer onTimeUpdate.
       pendingSeekRef.current = latestTime;
+      setResumeStartAt(undefined);
       setPlayRequested(true);
       // Persistir el minuto exacto del cambio: si no, queda solo en el store local
       // y la base se quedaría con el último guardado periódico (hasta 10s atrás).
@@ -848,9 +885,11 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
               controls
               autoplay
               preload="auto"
+              startTime={resumeStartAt}
               className="w-full h-full border-none"
               onTimeUpdate={handleTimeUpdate}
               onEnded={handleEnded}
+              onError={handleStreamError}
             />
           </div>
         )}

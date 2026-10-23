@@ -1,6 +1,8 @@
 import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 import { ApiError } from "@/lib/api/client";
 import type { SignedRecordingUrl } from "@/lib/api/stream/lives";
+import { describeMediaFailure } from "@/lib/errors/classifyError";
+import { reportMediaFailure, type ReportResult } from "@/lib/errors/errorReporter";
 
 /** Si la URL vence en menos de este tiempo, un seek o una espera dispara la renovación. */
 const EXPIRY_MARGIN_MS = 60_000;
@@ -30,6 +32,24 @@ interface SignedVideoProps {
 
 export type PlaybackEventType = "timeupdate" | "pause" | "seeked" | "ended";
 
+/**
+ * Hasta dónde hay video descargado a partir de la posición actual (0 si no se sabe).
+ * Si crece, el navegador sigue bajando: es una conexión lenta, no una URL vencida.
+ */
+function bufferedEnd(video: HTMLVideoElement): number {
+  try {
+    const ranges = video.buffered;
+    if (!ranges) return 0;
+    const t = video.currentTime;
+    for (let i = 0; i < ranges.length; i++) {
+      if (ranges.start(i) <= t + 0.5 && ranges.end(i) >= t) return ranges.end(i);
+    }
+  } catch {
+    /* sin datos de buffer: se decide solo por el avance */
+  }
+  return 0;
+}
+
 interface PendingRestore {
   time: number;
   wasPlaying: boolean;
@@ -56,6 +76,9 @@ export function SignedVideo({
   const [src, setSrc] = useState(initial.url);
   const [generation, setGeneration] = useState(0);
   const [failed, setFailed] = useState(false);
+  // De quién es la falla, para el cartel. Se registra una vez por episodio.
+  const [failure, setFailure] = useState<ReportResult | null>(null);
+  const failureReportedRef = useRef(false);
   const [sessionExpired, setSessionExpired] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -69,6 +92,7 @@ export function SignedVideo({
   const progressBaseRef = useRef(0);
   const lastTimeRef = useRef(0);
   const stallSecondsRef = useRef(0);
+  const lastBufferedEndRef = useRef(0);
   const refreshRef = useRef<() => void>(() => {});
   const sessionExpiredRef = useRef(false);
   const startAppliedRef = useRef(false);
@@ -87,6 +111,16 @@ export function SignedVideo({
       const video = videoRef.current;
       if (!video || refreshingRef.current || sessionExpiredRef.current) return;
       if (retriesRef.current >= MAX_REFRESHES_WITHOUT_PROGRESS) {
+        if (!failureReportedRef.current) {
+          failureReportedRef.current = true;
+          setFailure(
+            reportMediaFailure("replay-r2", {
+              message: video.error?.message || "no avanza tras renovar la URL",
+              mediaErrorCode: video.error?.code ?? null,
+              stalled: !video.error,
+            }),
+          );
+        }
         setFailed(true);
         return;
       }
@@ -125,6 +159,7 @@ export function SignedVideo({
       if (video.paused || video.ended) {
         stallSecondsRef.current = 0;
         lastTimeRef.current = video.currentTime;
+        lastBufferedEndRef.current = bufferedEnd(video);
         return;
       }
       if (Math.abs(video.currentTime - lastTimeRef.current) > 0.01) {
@@ -136,6 +171,15 @@ export function SignedVideo({
           retriesRef.current = 0;
         }
         lastTimeRef.current = video.currentTime;
+        lastBufferedEndRef.current = bufferedEnd(video);
+        return;
+      }
+      // Quieto pero descargando = cargando en una red lenta. Renovar la URL ahí
+      // recargaba el MP4 desde cero y convertía una espera en un corte más largo.
+      const buffered = bufferedEnd(video);
+      if (buffered > lastBufferedEndRef.current + 0.01) {
+        lastBufferedEndRef.current = buffered;
+        stallSecondsRef.current = 0;
         return;
       }
       stallSecondsRef.current += 1;
@@ -174,6 +218,8 @@ export function SignedVideo({
   };
 
   const handleRetry = () => {
+    failureReportedRef.current = false;
+    setFailure(null);
     retriesRef.current = 0;
     stallSecondsRef.current = 0;
     setFailed(false);
@@ -206,6 +252,9 @@ export function SignedVideo({
           className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80 text-center p-4"
         >
           <p className="text-sm text-foreground-muted">No se pudo continuar la reproducción.</p>
+          {failure ? (
+            <p className="max-w-sm text-xs text-foreground-muted">{describeMediaFailure(failure.kind, failure.code)}</p>
+          ) : null}
           <button
             type="button"
             onClick={handleRetry}

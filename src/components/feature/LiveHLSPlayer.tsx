@@ -1,6 +1,7 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle, useState } from "react";
 import Hls from "hls.js";
 import { clampToSeekable } from "@/lib/live/playerTime";
+import { reportMediaFailure, type ReportResult } from "@/lib/errors/errorReporter";
 
 export interface QualityLevel {
   index: number;
@@ -74,7 +75,9 @@ interface LiveHLSPlayerProps {
   onError?: (err: string) => void;
   // Se agotaron los reintentos de recarga automática — la UI debe mostrar un
   // estado de error con reintento manual (remount vía `key`).
-  onFatalError?: () => void;
+  // Recibe la falla clasificada (red, plataforma o traba ambigua) y su código,
+  // para que la UI diga de quién es. Opcional: llamarla sin argumento sigue valiendo.
+  onFatalError?: (failure?: ReportResult) => void;
   // Tras un `onFatalError`, el video volvió a avanzar solo de forma sostenida:
   // la UI debe quitar el estado de error (se vio el cartel encima de un vivo
   // que seguía sonando, 2026-10-03).
@@ -377,6 +380,25 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       let mediaErrorRetries = 0;
       // Se avisó `onFatalError` y la UI muestra el cartel de error.
       let fatalReported = false;
+      // Último error fatal de hls.js antes de rendirse: dice si la falla fue de la
+      // red (sin respuesta), de la plataforma (HTTP de error, video ilegible) o si
+      // el video solo dejó de avanzar (ambiguo). Se limpia con reproducción estable.
+      let lastHlsFailure: { type: "network" | "media" | "other"; status: number | null; details: string } | null = null;
+      const giveUp = (reason: string) => {
+        const firstTime = !fatalReported;
+        fatalReported = true;
+        // Se registra una vez por episodio: el watchdog sigue intentando cada 12 s.
+        const failure = firstTime
+          ? reportMediaFailure("live", {
+              message: lastHlsFailure?.details ?? reason,
+              hlsType: lastHlsFailure?.type ?? null,
+              status: lastHlsFailure?.status ?? null,
+              stalled: !lastHlsFailure,
+              detail: { mode: latencyModeRef.current, reason },
+            })
+          : undefined;
+        onFatalError?.(failure);
+      };
       let didSeekToLiveEdge = false;
       let stallTimer: number | null = null;
       let pendingReloadTimeout: number | null = null;
@@ -654,8 +676,7 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           }
           if (reloadAttempts >= MAX_RELOAD_ATTEMPTS) {
             console.error(`[LiveHLSPlayer] se alcanzó el máximo de ${MAX_RELOAD_ATTEMPTS} reintentos, abandonando`);
-            fatalReported = true;
-            onFatalError?.();
+            giveUp(reason);
             return;
           }
           reloadingRef.current = true;
@@ -691,6 +712,7 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
             stableTimeoutId = null;
             reloadAttempts = 0;
             mediaErrorRetries = 0;
+            lastHlsFailure = null;
           }, STABLE_PLAYBACK_MS);
         };
         video.addEventListener("playing", handlePlaybackRecovered);
@@ -711,6 +733,11 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           // recupera solo) son constantes, el contador de recargas nunca volvía
           // a 0 y tras 6 recargas espaciadas aparecía el cartel de error.
           clearStableTimer?.();
+          lastHlsFailure = {
+            type: data.type === Hls.ErrorTypes.NETWORK_ERROR ? "network" : data.type === Hls.ErrorTypes.MEDIA_ERROR ? "media" : "other",
+            status: data.response?.code ?? null,
+            details: String(data.details),
+          };
           if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
             reloadFromScratch(`network: ${data.details}`);
           } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
@@ -718,6 +745,7 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
             if (mediaErrorRetries > 2) {
               console.error("[LiveHLSPlayer] media error, unrecoverable", data.details);
               onError?.(`Error de reproducción: ${data.details}`);
+              if (!fatalReported) reportMediaFailure("live", { message: String(data.details), hlsType: "media", detail: { mode: latencyModeRef.current } });
               return;
             }
             console.warn("[LiveHLSPlayer] media error, recovering...", data.details);
@@ -725,6 +753,7 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           } else {
             console.error("[LiveHLSPlayer] fatal error", data);
             onError?.(`Error: ${data.details}`);
+            if (!fatalReported) reportMediaFailure("live", { message: String(data.details), hlsType: "other", detail: { mode: latencyModeRef.current } });
           }
         });
         // Watchdog de estancamiento. Cubre el caso que hls.js NO reporta como fatal:

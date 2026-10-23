@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { startPagePolling } from "@/lib/pagePolling";
 import { useNavigate, useParams } from "react-router-dom";
 import { Radio } from "lucide-react";
 import LiveChat from "@/components/feature/LiveChat";
@@ -126,10 +127,11 @@ const PublicLiveRoom = () => {
     };
 
     load();
-    const poll = setInterval(load, POLL_INTERVAL_MS);
+    // Con la pestaña oculta no consulta; al volver, consulta en el acto.
+    const stopPolling = startPagePolling(load, POLL_INTERVAL_MS);
     return () => {
       isActive = false;
-      clearInterval(poll);
+      stopPolling();
     };
   }, [token]);
 

@@ -7,12 +7,46 @@ import {
   invalidateLandingTextsCache,
 } from "@/lib/api/admin/landing";
 
+const TEXTS_STORAGE_KEY = "landing-texts-v1";
+
+// Copia local de los textos de la última visita. Sin ella, cada carga pinta los
+// defaults del código y medio segundo después salta al texto editado por el
+// admin. localStorage puede faltar o lanzar (modo privado, datos bloqueados):
+// es una comodidad, sin ella la landing funciona igual.
+function readCachedTexts(): Record<string, string> | null {
+  try {
+    const raw = localStorage.getItem(TEXTS_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, string>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedTexts(values: Record<string, string>): void {
+  try {
+    localStorage.setItem(TEXTS_STORAGE_KEY, JSON.stringify(values));
+  } catch {
+    /* sin almacenamiento: la próxima visita vuelve a esperar la base */
+  }
+}
+
+const cachedTexts = readCachedTexts();
+
 interface AdminStore {
   isEditMode: boolean;
   /** Valores confirmados (los que están en la base de datos). */
   values: Record<string, string>;
   /** Ediciones en buffer que AÚN NO se guardaron. */
   pending: Record<string, string>;
+  /**
+   * Hay textos confiables para pintar: vinieron de la copia local o la base ya
+   * respondió (con éxito o no). Antes de esto, lo visible serían los defaults.
+   */
+  ready: boolean;
   loaded: boolean;
   loading: boolean;
   saving: boolean;
@@ -36,8 +70,9 @@ interface AdminStore {
 
 export const useAdminStore = create<AdminStore>((set, get) => ({
   isEditMode: false,
-  values: {},
+  values: cachedTexts ?? {},
   pending: {},
+  ready: cachedTexts !== null,
   loaded: false,
   loading: false,
   saving: false,
@@ -54,8 +89,17 @@ export const useAdminStore = create<AdminStore>((set, get) => ({
     if (s.loaded || s.loading) return;
     set({ loading: true });
     getLandingTexts()
-      .then((map) => set({ values: map, loaded: true, loading: false }))
-      .catch(() => set({ loading: false }));
+      .then((map) => {
+        // getLandingTexts devuelve {} ante un error de red: no pisar la copia
+        // local con un vacío que haría saltar todo a los defaults.
+        if (Object.keys(map).length === 0) {
+          set({ ready: true, loaded: true, loading: false });
+          return;
+        }
+        writeCachedTexts(map);
+        set({ values: map, ready: true, loaded: true, loading: false });
+      })
+      .catch(() => set({ ready: true, loading: false }));
   },
 
   stageChange: (key, value, baseline) =>
@@ -103,8 +147,10 @@ export const useAdminStore = create<AdminStore>((set, get) => ({
       // Confirmamos en `values` lo que se guardó; en `pending` sólo quedan los fallidos.
       const nextPending = { ...s.pending };
       for (const key of Object.keys(saved)) delete nextPending[key];
+      const nextValues = { ...s.values, ...saved };
+      writeCachedTexts(nextValues);
       return {
-        values: { ...s.values, ...saved },
+        values: nextValues,
         pending: nextPending,
         saving: false,
       };

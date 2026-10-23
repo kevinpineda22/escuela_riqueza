@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { startPagePolling } from "@/lib/pagePolling";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { Users, ShieldCheck, LogIn } from "lucide-react";
@@ -118,13 +119,14 @@ const PublicLiveChat = ({ token, loginPath, showWelcome = true }: PublicLiveChat
 
     fetchMessages();
     fetchReactions();
-    const poll = setInterval(() => {
+    // Con la pestaña oculta no consulta (eran 2 pedidos cada 4 s por espectador).
+    const stopPolling = startPagePolling(() => {
       fetchMessages();
       fetchReactions();
     }, POLL_INTERVAL_MS);
     return () => {
       isActive = false;
-      clearInterval(poll);
+      stopPolling();
     };
   }, [token]);
 

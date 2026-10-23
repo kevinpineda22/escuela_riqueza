@@ -1,9 +1,10 @@
-import { useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { motion, useTransform } from "motion/react";
 import EditableField from "@/components/feature/EditableField";
 import AuroraBackground from "@/components/feature/AuroraBackground";
 import ParticleNetwork from "@/components/feature/ParticleNetwork";
 import { useParallax } from "@/hooks/useParallax";
+import { useAdminStore } from "@/stores/admin.store";
 import { cn } from "@/lib/utils";
 
 const IVAN_IMAGE =
@@ -14,10 +15,10 @@ const IVAN_IMAGE =
  * dando la sensación de que la frase "se arma" al entrar. Sólo opacidad (inline
  * seguro, sin transform que rompa el wrapping del gradiente).
  */
-const Reveal = ({ children, delay }: { children: ReactNode; delay: number }) => (
+const Reveal = ({ children, delay, show }: { children: ReactNode; delay: number; show: boolean }) => (
   <motion.span
     initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
+    animate={show ? { opacity: 1 } : undefined}
     transition={{ duration: 0.5, delay, ease: "easeOut" }}
     className="inline"
   >
@@ -34,15 +35,17 @@ const Reveal = ({ children, delay }: { children: ReactNode; delay: number }) => 
 const ShimmerAccent = ({
   children,
   delay,
+  show,
   className,
 }: {
   children: ReactNode;
   delay: number;
+  show: boolean;
   className?: string;
 }) => (
   <motion.span
     initial={{ opacity: 0 }}
-    animate={{ opacity: 1, backgroundPosition: ["0% 50%", "200% 50%"] }}
+    animate={show ? { opacity: 1, backgroundPosition: ["0% 50%", "200% 50%"] } : undefined}
     transition={{
       opacity: { duration: 0.5, delay, ease: "easeOut" },
       backgroundPosition: { duration: 6, repeat: Infinity, ease: "linear" },
@@ -55,6 +58,32 @@ const ShimmerAccent = ({
     {children}
   </motion.span>
 );
+
+const TEXTS_WAIT_MS = 1200;
+
+/**
+ * El titular es editable desde el admin: si animara con los defaults del código,
+ * medio segundo después saltaría al texto de la base. Espera a que haya textos
+ * confiables (copia local o respuesta de la base) y recién ahí arranca la
+ * entrada. El tope evita que una base lenta deje el hero vacío.
+ */
+function useHeroTextsReady(): boolean {
+  const ready = useAdminStore((s) => s.ready);
+  const ensureLoaded = useAdminStore((s) => s.ensureLoaded);
+  const [timedOut, setTimedOut] = useState(false);
+
+  useEffect(() => {
+    ensureLoaded();
+  }, [ensureLoaded]);
+
+  useEffect(() => {
+    if (ready) return;
+    const timer = setTimeout(() => setTimedOut(true), TEXTS_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [ready]);
+
+  return ready || timedOut;
+}
 
 const ScrollIndicator = () => (
   <motion.div
@@ -103,6 +132,7 @@ export const HeroCinematic = () => {
   const contentY = useTransform(progress, [0, 1], [0, 90 * factor]);
   const contentOpacity = useTransform(progress, [0, 0.75], [1, reduce ? 1 : 0]);
   const photoY = useTransform(progress, [0, 1], [0, -55 * factor]);
+  const textsReady = useHeroTextsReady();
 
   return (
     <section
@@ -124,31 +154,31 @@ export const HeroCinematic = () => {
         <div className="md:col-span-7 z-20 flex flex-col items-start text-left order-2 md:order-1">
           <motion.h1
             initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
+            animate={textsReady ? { opacity: 1, y: 0 } : undefined}
             transition={{ duration: 0.9, ease: "easeOut" }}
             className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-extrabold tracking-tight md:tracking-tighter mb-6 sm:mb-8 pb-2 text-foreground-strong leading-[1.2] sm:leading-[1.25] drop-shadow-2xl light:drop-shadow-none text-balance"
           >
-            <Reveal delay={0.15}>
-              <EditableField textKey="hero_title" defaultValue="Una escuela de" as="span" />
+            <Reveal delay={0.15} show={textsReady}>
+              <EditableField textKey="hero_title" defaultValue="Una Escuela de" as="span" />
             </Reveal>{" "}
-            <ShimmerAccent delay={0.35}>
+            <ShimmerAccent delay={0.35} show={textsReady}>
               <EditableField textKey="hero_accent" defaultValue="rediseño cerebral" as="span" className="inline" />
             </ShimmerAccent>
           </motion.h1>
 
           <motion.p
             initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
+            animate={textsReady ? { opacity: 1, y: 0 } : undefined}
             transition={{ duration: 0.8, delay: 0.3, ease: "easeOut" }}
             className="text-base sm:text-xl md:text-2xl lg:text-3xl font-bold tracking-tight text-fg-85 leading-[1.35] max-w-2xl text-pretty pb-2"
           >
-            <Reveal delay={0.5}>
+            <Reveal delay={0.5} show={textsReady}>
               <EditableField textKey="hero_subtitle" defaultValue="para que te conviertas en el" as="span" />
             </Reveal>{" "}
-            <ShimmerAccent delay={0.7}>
+            <ShimmerAccent delay={0.7} show={textsReady}>
               <EditableField textKey="hero_accent_2" defaultValue="gigante mental" as="span" className="inline" />
             </ShimmerAccent>{" "}
-            <Reveal delay={0.85}>
+            <Reveal delay={0.85} show={textsReady}>
               <EditableField textKey="hero_subtitle_end" defaultValue="que llevas dentro." as="span" />
             </Reveal>
           </motion.p>
@@ -182,6 +212,7 @@ export const HeroCinematic = () => {
               src={IVAN_IMAGE}
               alt="Iván Mazo"
               loading="eager"
+              fetchPriority="high"
               className="relative z-[5] w-[55%] sm:w-[50%] md:w-full max-w-[360px] sm:max-w-[480px] lg:max-w-[560px] object-contain drop-shadow-[0_0_40px_rgba(204,164,59,0.3)]"
               animate={{ y: [0, -12, 0] }}
               transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}

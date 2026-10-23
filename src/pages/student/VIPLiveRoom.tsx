@@ -8,6 +8,7 @@ import { LiveRoomLoading } from "@/components/feature/live-room/LiveRoomLoading"
 import { usePlayerStore } from "@/stores/player.store";
 import { useAuthStore } from "@/stores/auth.store";
 import { supabase } from "@/lib/supabase";
+import { startPagePolling } from "@/lib/pagePolling";
 import { fetchActiveLive, fetchLiveForRoom, checkLiveInputStatus, type LiveEvent } from "@/lib/api/stream/lives";
 import type { LiveRoomBranding } from "@/components/feature/live-room/types";
 
@@ -40,6 +41,9 @@ const VIPLiveRoom = () => {
   const [loadError, setLoadError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [liveInputConnected, setLiveInputConnected] = useState(false);
+  // Con Realtime conectado, los cambios de la sala llegan solos: el polling
+  // queda como red de seguridad y se espacia.
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
   const { clearPlayer } = usePlayerStore();
 
   const isEnded = live?.status === "ended";
@@ -94,29 +98,37 @@ const VIPLiveRoom = () => {
     const channel = supabase
       .channel("vip-live-all-changes")
       .on("postgres_changes", { event: "*", schema: "public", table: "lives" }, () => refreshLiveRef.current())
-      .subscribe();
+      .subscribe((status) => setRealtimeConnected(status === "SUBSCRIBED"));
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // Polling 3s como fallback
-  useEffect(() => {
-    const poll = setInterval(() => refreshLiveRef.current(), 3000);
-    return () => clearInterval(poll);
-  }, []);
+  // Polling de respaldo: cada 3 s solo si Realtime no conectó; con Realtime, cada
+  // 15 s. Con cientos de alumnos, 3 s fijos eran ~100 consultas por segundo a la
+  // base durante toda la clase. Con la pestaña oculta no consulta.
+  useEffect(
+    () => startPagePolling(() => refreshLiveRef.current(), realtimeConnected ? 15000 : 3000),
+    [realtimeConnected],
+  );
 
-  // Poll Cloudflare Live Input status: si OBS está transmitiendo, mostrar el player aunque la sala no esté "live"
+  // Poll Cloudflare Live Input status: si OBS está transmitiendo, mostrar el player aunque la sala no esté "live".
+  // Con la sala ya en "live" el player se muestra igual (getLiveRoomStatus), así
+  // que la señal no aporta nada: seguir consultando era una llamada a Vercel +
+  // Cloudflare por alumno cada 10 s durante toda la clase.
+  const isLiveNow = live?.status === "live";
   useEffect(() => {
-    if (!live?.stream_live_input_id || isEnded) return;
+    if (!live?.stream_live_input_id || isEnded || isLiveNow) return;
 
     let failCount = 0;
+    let stopped = false;
 
     const check = async () => {
+      if (stopped) return;
       const { connected, isError, disabled } = await checkLiveInputStatus(live.stream_live_input_id!);
-      if (disabled) { clearInterval(poll); return; }
+      if (disabled) { stop(); return; }
       if (isError) {
         failCount++;
         if (failCount >= 3) {
-          clearInterval(poll);
+          stop();
           return;
         }
       } else {
@@ -125,10 +137,14 @@ const VIPLiveRoom = () => {
       setLiveInputConnected(prev => connected !== prev ? connected : prev);
     };
 
-    const poll = setInterval(check, 10000);
+    const stopPolling = startPagePolling(check, 10000);
+    const stop = () => {
+      stopped = true;
+      stopPolling();
+    };
     check();
-    return () => clearInterval(poll);
-  }, [live?.id, live?.stream_live_input_id, isEnded]);
+    return stop;
+  }, [live?.id, live?.stream_live_input_id, isEnded, isLiveNow]);
 
   if (loading) return <LiveRoomLoading />;
 

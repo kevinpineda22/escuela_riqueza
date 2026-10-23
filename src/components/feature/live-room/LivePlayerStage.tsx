@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { VideoOff, Flag, X } from "lucide-react";
 import { usePreferencesStore } from "@/stores/preferences.store";
 import { toast } from "@/components/ui/toaster";
+import { describeMediaFailure } from "@/lib/errors/classifyError";
 import LiveHLSPlayer, { type LiveHLSPlayerHandle } from "@/components/feature/LiveHLSPlayer";
 import LivePlayerControls from "@/components/feature/LivePlayerControls";
 import { CF_CUSTOMER_CODE } from "./constants";
@@ -197,6 +198,11 @@ export function LivePlayerStage({ liveInputId, resumeKey, isPaused, streamEnded 
                 }
               >
                 No pudimos recuperar la transmisión automáticamente.
+                {playback.playerFailure ? (
+                  <span className="mt-2 block">
+                    {describeMediaFailure(playback.playerFailure.kind, playback.playerFailure.code, { live: true })}
+                  </span>
+                ) : null}
               </LiveStageMessage>
             </motion.div>
           )}

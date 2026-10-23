@@ -883,43 +883,43 @@ const AdminLiveManager = () => {
                   <span>Lo MÁS importante para que el vivo no se corte: transmite por <strong>cable de red (ethernet)</strong>, nunca por WiFi, y usa un bitrate que tu subida soporte. Un corte de conexión = el vivo se congela y la grabación se fragmenta en videos sueltos.</span>
                 </p>
 
-                <p>1. En OBS: <strong>Configuración → Transmisión</strong></p>
+                {/* Espejo de docs/OBS_CONFIGURACION.md §1 — un solo perfil. Si cambia el doc, cambiar acá. */}
+                <p>1. En OBS: <strong>Ajustes → Emisión</strong></p>
                 <div className="pl-4 space-y-1 text-foreground-muted">
-                  <p>• Servicio: <strong>Personalizado (Custom)</strong></p>
+                  <p>• Servicio: <strong>Personalizado</strong></p>
                   <p>• Servidor: <span className="text-accent font-mono text-xs">rtmps://live.cloudflare.com:443/live/</span>
                     <button onClick={() => copyToClipboard("rtmps://live.cloudflare.com:443/live/", "Servidor RTMPS")}
                       className="inline ml-2 text-accent hover:text-accent-hover"><Copy size={14} className="inline" /></button>
                   </p>
-                  <p>• Clave de transmisión: <strong>el Live Input ID de arriba</strong></p>
+                  <p>• Clave de retransmisión: la <strong>RTMPS Key</strong> del Live Input (Cloudflare → Stream → Live Inputs → Broadcast). <strong>No es el Live Input ID</strong> de arriba. Es secreta: no la compartas por chat.</p>
                 </div>
 
-                <p>2. <strong>Configuración → Salida</strong> → Modo de salida: <strong>Avanzado</strong></p>
+                <p>2. <strong>Ajustes → Salida</strong> → Modo de salida: <strong>Avanzado</strong> → pestaña Emisión</p>
                 <div className="pl-4 space-y-1 text-foreground-muted">
-                  <p>• Codificador: <strong>x264</strong> (o NVENC H.264 si tienes GPU Nvidia)</p>
-                  <p>• Control de tasa: <strong>CBR</strong></p>
-                  <p>• Intervalo de keyframe: <strong>2</strong> (obligatorio — en <strong>Auto</strong> la grabación falla al codificar)</p>
-                  <p>• Preajuste de uso de CPU: <strong>veryfast</strong> · Perfil: <strong>main</strong></p>
+                  <p>• Codificador: <strong>por hardware</strong> si la PC lo tiene (NVENC, QuickSync o Apple VT H.264); si no, <strong>x264</strong> con preset <strong>veryfast</strong></p>
+                  <p>• Control de tasa: <strong>CBR</strong> · Tasa de bits: <strong>6000 Kbps</strong></p>
+                  <p>• Intervalo de fotogramas clave: <strong>2</strong> (el ajuste crítico — en automático los fragmentos duran 8 s y la clase llega tarde y con cortes)</p>
+                  <p>• B-frames: <strong>0</strong></p>
+                  <p>• Audio: <strong>AAC 160 Kbps</strong>, <strong>48 kHz</strong></p>
                 </div>
 
-                <p>3. Bitrate según tu subida REAL (medila antes en <span className="text-accent">fast.com</span>):</p>
+                <p>3. <strong>Ajustes → Video</strong>: salida <strong>1280×720</strong>, <strong>30 FPS</strong>.</p>
+
+                <p>4. <strong>Ajustes → Avanzado</strong></p>
                 <div className="pl-4 space-y-1 text-foreground-muted">
-                  <p>• Subida &lt; 5 Mbps → <strong>2.500 Kbps</strong> a 720p30</p>
-                  <p>• Subida 5-10 Mbps → <strong>4.000 Kbps</strong> a 1080p30</p>
-                  <p>• Subida &gt; 10 Mbps estable → <strong>6.000 Kbps</strong> a 1080p30</p>
-                  <p className="text-amber-300/70 light:text-warning">Regla de oro: el bitrate no debe pasar el <strong>50%</strong> de tu subida real. Ante la duda, bajalo: fluido y estable &gt; alta calidad que se corta.</p>
+                  <p>• Reconexión automática: <strong>activada</strong> · retraso <strong>2 s</strong> · <strong>20</strong> reintentos</p>
+                  <p>• Red: <strong>cambiar la tasa de bits dinámicamente</strong> ante congestión: <strong>activado</strong></p>
                 </div>
 
-                <p>4. <strong>Configuración → Video</strong></p>
-                <div className="pl-4 space-y-1 text-foreground-muted">
-                  <p>• Resolución de salida: <strong>1920x1080</strong> (o 1280x720 si tu subida es baja)</p>
-                  <p>• FPS: <strong>30</strong> (nunca 60 para un vivo largo)</p>
-                </div>
+                <p className="text-amber-300/70 light:text-warning">Guarda todo en el <strong>perfil</strong> que usas para transmitir (menú Perfil de OBS): si lo cambias en otro perfil, no aplica. La subida tiene que ser de al menos <strong>12 Mbps estables</strong>.</p>
 
-                <p>5. (Opcional) Menor latencia: en el Live Input de Cloudflare activa <strong>Low-Latency HLS</strong> (~3-5s). No actives WebRTC salvo que lo necesites — suma inestabilidad.</p>
+                <p>5. Antes de empezar: en Cloudflare, el Live Input debe mostrar un valor en <strong>GOP</strong>. Si dice <em>Unavailable</em>, el keyframe sigue en automático.</p>
 
                 <p>6. En OBS <strong>Iniciar transmisión</strong>, espera a que la señal esté estable unos segundos y solo entonces activa <strong>"Forzar EN VIVO"</strong> abajo.</p>
 
                 <p className="text-fg-50 text-[11px] pt-1">Durante el vivo revisa el recuadro de estado de OBS (abajo a la derecha): <strong>verde</strong> = conexión sana. Si parpadea en <strong>amarillo/rojo</strong> estás perdiendo frames → baja el bitrate.</p>
+
+                <p className="text-fg-50 text-[11px]">En el receso <strong>no detengas la transmisión</strong>: cada detener/iniciar corta el video a todos y parte la grabación en dos. Muestra una escena con el logo y déjala corriendo.</p>
               </div>
             </details>
           </div>

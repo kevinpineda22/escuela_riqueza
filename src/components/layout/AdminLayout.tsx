@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { motion, type Variants } from "motion/react";
 import {
@@ -11,7 +11,8 @@ import {
   Crown,
   Radio,
   Megaphone,
-  Pencil
+  Pencil,
+  Bug
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,7 @@ const navItems = [
   { icon: Radio, label: "Eventos en Vivo", path: "/admin/lives" },
   { icon: Megaphone, label: "Aliados", path: "/admin/sponsors" },
   { icon: Users, label: "Usuarios", path: "/admin/users" },
+  { icon: Bug, label: "Errores", path: "/admin/errors" },
   { icon: Settings, label: "Ajustes", path: "/admin/settings" },
 ];
 
@@ -204,7 +206,11 @@ const AdminLayout = () => {
 
         {/* Outlet renderiza la vista activa (Upload, Metrics, etc) */}
         <div className="flex-1 w-full max-w-6xl mx-auto">
-          <Outlet />
+          {/* Las vistas se bajan al visitarlas: el Suspense va acá para que el
+              menú lateral no desaparezca mientras llega la vista nueva. */}
+          <Suspense fallback={null}>
+            <Outlet />
+          </Suspense>
         </div>
       </main>
     </div>

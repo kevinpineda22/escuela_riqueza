@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import type { LiveHLSPlayerHandle, QualityLevel } from "@/components/feature/LiveHLSPlayer";
+import type { ReportResult } from "@/lib/errors/errorReporter";
 
 /**
  * Estado de reproducción de la sala en vivo: audio, play/pausa, calidad y
@@ -31,6 +32,8 @@ export function useLivePlayback() {
   // H8: sin reintentos automáticos disponibles — la UI muestra error + botón
   // manual. `playerKey` fuerza el remount (nuevo `Hls`, contador en 0).
   const [playerError, setPlayerError] = useState(false);
+  // De quién es la falla (red, plataforma o traba ambigua) y su código.
+  const [playerFailure, setPlayerFailure] = useState<ReportResult | null>(null);
   const [playerKey, setPlayerKey] = useState(0);
 
   const enableAudio = async () => {
@@ -73,6 +76,7 @@ export function useLivePlayback() {
 
   const retryPlayer = () => {
     setPlayerError(false);
+    setPlayerFailure(null);
     setPlayerKey((k) => k + 1);
     // El player nuevo arranca en automática: la preferencia vuelve a Auto.
     setCurrentQualityLevel(-1);
@@ -129,6 +133,7 @@ export function useLivePlayback() {
     audioPromptDismissed,
     audioRetryHint,
     playerError,
+    playerFailure,
     enableAudio,
     dismissAudioPrompt,
     retryPlayer,
@@ -145,8 +150,14 @@ export function useLivePlayback() {
         setQualityLevels(levels);
         setActiveQualityLevel(current);
       },
-      onFatalError: () => setPlayerError(true),
-      onRecovered: () => setPlayerError(false),
+      onFatalError: (failure?: ReportResult) => {
+        setPlayerError(true);
+        if (failure) setPlayerFailure(failure);
+      },
+      onRecovered: () => {
+        setPlayerError(false);
+        setPlayerFailure(null);
+      },
     },
   };
 
