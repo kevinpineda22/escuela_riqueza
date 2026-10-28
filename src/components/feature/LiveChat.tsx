@@ -1,6 +1,6 @@
 import { useState, useEffect, type FormEvent, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Send, Users, ShieldCheck, SmilePlus, Reply, Trash2 } from "lucide-react";
+import { Send, Users, ShieldCheck, SmilePlus, Reply, Trash2, MicOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/stores/auth.store";
@@ -17,6 +17,8 @@ import { useLiveReactions } from "@/hooks/useLiveReactions";
 import { useLiveMessageDeletions } from "@/hooks/useLiveMessageDeletions";
 import { useMessageModeration } from "@/hooks/useMessageModeration";
 import { useReplyTarget } from "@/hooks/useReplyTarget";
+import { toast } from "@/components/ui/toaster";
+import { chatRuleMessage, DEFAULT_MUTE_MINUTES, muteChatUser, unmuteChatUser } from "@/lib/api/stream/chatModeration";
 import { excludeDeleted } from "@/lib/chat/excludeDeleted";
 import { mergeMessagesById } from "@/lib/chat/mergeMessagesById";
 import { reconcileWindowedMessages } from "@/lib/chat/reconcileWindowedMessages";
@@ -30,8 +32,18 @@ export interface ChatMessage {
   content: string;
   created_at: string;
   isSystem?: boolean;
+  /**
+   * El autor es del equipo de la escuela (role = 'admin'). Sale del ROL, no del
+   * nombre: cualquiera puede llamarse "Iván Mazo", pero la insignia no se copia.
+   */
+  isTeam?: boolean;
   reply_to?: ReplyTo | null;
 }
+
+/** Largo máximo de un mensaje: lo exige también la base (sql/migrate-live-chat-safety.sql). */
+const MAX_MESSAGE_LENGTH = 300;
+/** Desde acá se muestra cuánto falta para el máximo. */
+const COUNTER_FROM = 250;
 
 /** How long the jump-to-original highlight stays on the target bubble. */
 const HIGHLIGHT_DURATION_MS = 1500;
@@ -60,6 +72,7 @@ const SYSTEM_MESSAGE: ChatMessage = {
   // Época 0: al ordenar por fecha queda siempre primero (no muestra hora).
   created_at: new Date(0).toISOString(),
   isSystem: true,
+  isTeam: true,
 };
 
 // Código de Postgres para clave duplicada.
@@ -100,7 +113,9 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
   const [loading, setLoading] = useState(true);
   const [newMessage, setNewMessage] = useState("");
   const [sending, setSending] = useState(false);
-  const [sendError, setSendError] = useState(false);
+  // Texto del error de envío: una regla del chat (ritmo, silenciado, clase
+  // cerrada) trae su propio mensaje; cualquier otra falla, el genérico.
+  const [sendError, setSendError] = useState<string | null>(null);
   const [historyError, setHistoryError] = useState(false);
   const [connection, setConnection] = useState<"connecting" | "connected" | "reconnecting">("connecting");
   const [openPickerId, setOpenPickerId] = useState<string | null>(null);
@@ -161,6 +176,29 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
     requestDelete(msg);
   };
 
+  // Silenciar: 10 minutos sin poder escribir en esta clase, con "Deshacer". El
+  // servidor lo hace cumplir (live_chat_mutes); el bloqueo total es suspender
+  // la cuenta desde el panel de usuarios.
+  const canMute = (msg: ChatMessage) => isModerator && !msg.isSystem && !msg.isTeam && msg.user_id !== user?.id;
+  const handleMute = async (msg: ChatMessage) => {
+    setOpenPickerId(null);
+    try {
+      await muteChatUser(liveId, msg.user_id);
+      toast.success(`Silenciaste a ${msg.user_name} por ${DEFAULT_MUTE_MINUTES} minutos`, {
+        action: {
+          label: "Deshacer",
+          onClick: () => {
+            unmuteChatUser(liveId, msg.user_id).catch((cause: unknown) =>
+              toast.error("No se pudo quitar el silencio", { cause }),
+            );
+          },
+        },
+      });
+    } catch (cause) {
+      toast.error("No se pudo silenciar", { cause });
+    }
+  };
+
   // Desplaza el mensaje original a la vista y lo resalta unos instantes.
   // No hace nada si ya no está cargado (fuera de la ventana de HISTORY_LIMIT).
   const jumpToMessage = (id: string) => {
@@ -194,17 +232,17 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
     // Nombres ya conocidos: un mensaje de alguien que ya habló no vuelve a
     // consultar `profiles`. Antes cada mensaje entrante disparaba una
     // consulta en CADA espectador (F38).
-    const names = new Map<string, string>();
+    const names = new Map<string, { name: string; isTeam: boolean }>();
     // Mismo Set que mantiene useLiveMessageDeletions (se vacía al cambiar de live).
     const tombstones = tombstonesRef.current;
 
-    const resolveName = async (userId: string): Promise<string> => {
+    const resolveAuthor = async (userId: string): Promise<{ name: string; isTeam: boolean }> => {
       const known = names.get(userId);
       if (known) return known;
-      const { data } = await supabase.from("profiles").select("full_name").eq("id", userId).maybeSingle();
-      const name = data?.full_name || "Usuario";
-      names.set(userId, name);
-      return name;
+      const { data } = await supabase.from("profiles").select("full_name, role").eq("id", userId).maybeSingle();
+      const author = { name: data?.full_name || "Usuario", isTeam: data?.role === USER_ROLES.ADMIN };
+      names.set(userId, author);
+      return author;
     };
 
     // Los ÚLTIMOS HISTORY_LIMIT mensajes (DESC + limit, después en orden de
@@ -222,13 +260,14 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
       const history = (rows as MessageRow[]).slice().reverse();
       const unknownIds = [...new Set(history.map((m) => m.user_id))].filter((id) => !names.has(id));
       if (unknownIds.length > 0) {
-        const { data: profiles } = await supabase.from("profiles").select("id, full_name").in("id", unknownIds);
-        profiles?.forEach((p) => names.set(p.id, p.full_name));
+        const { data: profiles } = await supabase.from("profiles").select("id, full_name, role").in("id", unknownIds);
+        profiles?.forEach((p) => names.set(p.id, { name: p.full_name || "Usuario", isTeam: p.role === USER_ROLES.ADMIN }));
       }
       return history.map((msg) => ({
         id: msg.id,
         user_id: msg.user_id,
-        user_name: names.get(msg.user_id) || "Usuario",
+        user_name: names.get(msg.user_id)?.name || "Usuario",
+        isTeam: names.get(msg.user_id)?.isTeam ?? false,
         content: msg.content,
         created_at: msg.created_at,
         reply_to: buildReplyTo(msg),
@@ -312,10 +351,12 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
       { event: "INSERT", schema: "public", table: "live_messages", filter: `live_id=eq.${liveId}` },
       async (payload: { new: MessageRow }) => {
         const newMsg = payload.new;
+        const author = await resolveAuthor(newMsg.user_id);
         const incomingMessage: ChatMessage = {
           id: newMsg.id,
           user_id: newMsg.user_id,
-          user_name: await resolveName(newMsg.user_id),
+          user_name: author.name,
+          isTeam: author.isTeam,
           content: newMsg.content,
           created_at: newMsg.created_at,
           reply_to: buildReplyTo(newMsg),
@@ -378,7 +419,7 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
 
     const messageText = newMessage.trim();
     setSending(true);
-    setSendError(false);
+    setSendError(null);
 
     // F22: el id lo genera el cliente y un reintento del MISMO texto lo reusa.
     // Si el primer intento llegó a la base pero se perdió la respuesta, el
@@ -393,7 +434,8 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
     // El texto se queda en el campo hasta que Supabase confirme. Antes se
     // borraba antes del insert y un fallo solo iba a consola: el alumno perdía
     // lo que escribió y creía que lo había enviado.
-    let failed = false;
+    let failure: string | null = null;
+    const GENERIC_SEND_ERROR = "No se pudo enviar tu mensaje. Revisa tu conexión e inténtalo de nuevo.";
     try {
       // Solo viaja el id del original — el nombre y el extracto los llena el
       // trigger del lado servidor a partir de la fila real (ver
@@ -408,17 +450,17 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
       // 23505 (unique_violation) en un reintento = el intento anterior sí
       // llegó. El mensaje ya está enviado: no es un error.
       if (error && error.code !== UNIQUE_VIOLATION) {
-        failed = true;
+        failure = chatRuleMessage(error) ?? GENERIC_SEND_ERROR;
         console.error("Error enviando mensaje:", error);
       }
     } catch (err) {
-      failed = true;
+      failure = GENERIC_SEND_ERROR;
       console.error("Error enviando mensaje:", err);
     }
     setSending(false);
 
-    if (failed) {
-      setSendError(true);
+    if (failure) {
+      setSendError(failure);
       return;
     }
     pendingSendRef.current = null;
@@ -507,7 +549,12 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
                     )}>
                       {msg.user_id === user?.id && !msg.isSystem ? "Tú" : msg.user_name}
                     </span>
-                    {msg.isSystem && <ShieldCheck size={10} className="text-accent" />}
+                    {msg.isTeam && (
+                      <span className="inline-flex items-center gap-0.5 rounded-full bg-brand/15 px-1.5 py-px text-[9px] font-black uppercase tracking-wider text-accent">
+                        <ShieldCheck size={10} aria-hidden />
+                        Equipo
+                      </span>
+                    )}
                     {!msg.isSystem && (
                       <span className="text-[9px] font-medium text-fg-30 light:text-fg-50 tracking-wide tabular-nums">
                         {new Date(msg.created_at).toLocaleTimeString(undefined, {
@@ -545,6 +592,8 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
                         isBubbleInteractive && "cursor-pointer",
                         msg.isSystem
                           ? "bg-brand/10 text-accent border border-brand/30 shadow-[0_0_20px_rgba(204,164,59,0.1)]"
+                          : msg.isTeam && msg.user_id !== user?.id
+                            ? "bg-brand/10 text-foreground-strong border border-brand/30"
                           : msg.user_id === user?.id
                             ? "bg-brand text-on-brand font-medium shadow-lg"
                             : "bg-ink/5 text-foreground border border-ink/5 light:bg-surface-panel light:border-line-subtle light:shadow-sm",
@@ -585,6 +634,18 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
                         >
                           <SmilePlus size={16} />
                         </button>
+                        {canMute(msg) && (
+                          <button
+                            type="button"
+                            aria-label={`Silenciar ${DEFAULT_MUTE_MINUTES} minutos`}
+                            title={`Silenciar ${DEFAULT_MUTE_MINUTES} minutos`}
+                            data-reaction-trigger="true"
+                            onClick={() => handleMute(msg)}
+                            className="flex items-center justify-center size-8 rounded-full text-foreground-muted hover:bg-danger-surface hover:text-danger"
+                          >
+                            <MicOff size={16} />
+                          </button>
+                        )}
                         {isModerator && (
                           <button
                             type="button"
@@ -618,6 +679,7 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
                           onClose={() => setOpenPickerId(null)}
                           onReply={() => handleStartReply(msg)}
                           onDelete={isModerator ? () => handleRequestDelete(msg) : undefined}
+                          onMute={canMute(msg) ? () => handleMute(msg) : undefined}
                         />
                       )}
                     </div>
@@ -642,7 +704,7 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
               value={newMessage}
               onChange={(e) => {
                 setNewMessage(e.target.value);
-                if (sendError) setSendError(false);
+                if (sendError) setSendError(null);
               }}
               // Enter que confirma una composición IME (acentos, otros idiomas)
               // no es "enviar": algunos navegadores igual disparaban el submit.
@@ -653,15 +715,27 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
               }}
               enterKeyHint="send"
               autoComplete="off"
+              maxLength={MAX_MESSAGE_LENGTH}
               placeholder={user ? "Escribe a la comunidad..." : "Inicia sesión para participar"}
               aria-label="Mensaje para la comunidad"
-              aria-invalid={sendError || undefined}
-              aria-describedby={sendError ? "live-chat-send-error" : undefined}
+              aria-invalid={sendError ? true : undefined}
+              aria-describedby={sendError ? "live-chat-send-error" : newMessage.length >= COUNTER_FROM ? "live-chat-counter" : undefined}
               disabled={!user}
               // 16 px (text-base): con menos, Safari de iOS agranda la página al
               // enfocar y la sala queda descuadrada al cerrar el teclado (F15/F23).
               className="w-full bg-ink/5 border border-line-subtle text-foreground-strong rounded-xl px-4 py-3 text-base light:bg-surface-input light:border-line-control/50 light:placeholder:text-foreground-placeholder focus:outline-none focus:border-brand/50 focus:ring-1 focus:ring-focus/50 transition-all placeholder:text-fg-20 disabled:opacity-50"
             />
+            {newMessage.length >= COUNTER_FROM && (
+              <span
+                id="live-chat-counter"
+                className={cn(
+                  "pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold tabular-nums",
+                  newMessage.length >= MAX_MESSAGE_LENGTH ? "text-danger" : "text-foreground-muted",
+                )}
+              >
+                {MAX_MESSAGE_LENGTH - newMessage.length}
+              </span>
+            )}
           </div>
           <button
             type="submit"
@@ -674,7 +748,7 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
         </form>
         {sendError && (
           <p id="live-chat-send-error" role="alert" className="text-xs text-danger mt-2 px-1">
-            No se pudo enviar tu mensaje. Revisa tu conexión e inténtalo de nuevo.
+            {sendError}
           </p>
         )}
         {/* Decorativa: con poca altura (horizontal, teclado abierto) cede su lugar. */}

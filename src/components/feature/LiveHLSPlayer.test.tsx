@@ -12,6 +12,7 @@ const hlsInstance = {
   startLoad: vi.fn(),
   stopLoad: vi.fn(),
   recoverMediaError: vi.fn(),
+  swapAudioCodec: vi.fn(),
   destroy: vi.fn(),
   on: vi.fn((evt: string, cb: (evt: string, data: unknown) => void) => { handlers[evt] = cb; }),
   levels: [],
@@ -42,6 +43,7 @@ vi.mock('hls.js', () => {
   Hls.isSupported = () => true;
   Hls.Events = {
     MANIFEST_PARSED: 'manifestParsed',
+    FRAG_LOADED: 'fragLoaded',
     LEVEL_LOADED: 'levelLoaded',
     LEVEL_SWITCHED: 'levelSwitched',
     LEVEL_UPDATED: 'levelUpdated',
@@ -133,8 +135,13 @@ describe('LiveHLSPlayer recovery', () => {
     expect(lastHlsConfig?.lowLatencyMode).toBe(false);
     // Por cantidad de segmentos (no segundos fijos): con segmentos de 8 s los
     // 8 s fijos dejaban al player a menos de un segmento del filo (stalls).
-    expect(lastHlsConfig?.liveSyncDurationCount).toBe(3);
-    expect(lastHlsConfig?.liveMaxLatencyDurationCount).toBe(7);
+    // Fase 1: 4 segmentos de colchón (~8 s) y salto forzado recién a los 9.
+    expect(lastHlsConfig?.liveSyncDurationCount).toBe(4);
+    expect(lastHlsConfig?.liveMaxLatencyDurationCount).toBe(9);
+    // Catch-up suave tras una traba (imperceptible).
+    expect(lastHlsConfig?.maxLiveSyncPlaybackRate).toBe(1.04);
+    // Una conexión colgada se detecta a los 4 s, no a los 10.
+    expect((lastHlsConfig?.fragLoadPolicy as { default: { maxTimeToFirstByteMs: number } }).default.maxTimeToFirstByteMs).toBe(4000);
     // hls.js prohíbe mezclar las variantes en segundos con las de cantidad.
     expect(lastHlsConfig).not.toHaveProperty('liveSyncDuration');
     expect(lastHlsConfig).not.toHaveProperty('liveMaxLatencyDuration');
@@ -220,6 +227,34 @@ describe('LiveHLSPlayer recovery', () => {
     expect(onResumed).toHaveBeenCalledWith(100);
   });
 
+  // Modo automático: el alumno soltó la barra 300 s atrás estando en Fluidez y
+  // la sala cambió a "dvr". Arranca ahí, no en el filo ni en lo guardado.
+  it('modo dvr: arranca N segundos detrás del filo y gana sobre la posición guardada', () => {
+    const store = mockLocalStorage();
+    store.set('live-position:live-1', JSON.stringify({ position: 100, savedAt: Date.now() }));
+    const onResumed = vi.fn();
+    const onStartBehindApplied = vi.fn();
+
+    const { container } = renderPlayer({ latencyMode: 'dvr', resumeKey: 'live-1', onResumed, startBehindLive: 300, onStartBehindApplied });
+    const video = container.querySelector('video') as HTMLVideoElement;
+    mockSeekable(video, [[0, 1000]]);
+
+    act(() => { handlers.manifestParsed('manifestParsed', {}); });
+
+    expect(video.currentTime).toBe(700);
+    expect(onStartBehindApplied).toHaveBeenCalledTimes(1);
+    expect(onResumed).not.toHaveBeenCalled();
+    // Una actualización posterior de la playlist no vuelve a moverlo.
+    video.currentTime = 650;
+    act(() => { handlers.levelUpdated('levelUpdated', {}); });
+    expect(video.currentTime).toBe(650);
+  });
+
+  it('modo dvr: guarda 60 s de lo ya visto para que retroceder sea instantáneo', () => {
+    renderPlayer({ latencyMode: 'dvr' });
+    expect(lastHlsConfig?.backBufferLength).toBe(60);
+  });
+
   it('modo dvr: ignora una posición guardada de más de 12 horas', () => {
     const store = mockLocalStorage();
     const staleSavedAt = Date.now() - 13 * 60 * 60 * 1000;
@@ -261,19 +296,25 @@ describe('LiveHLSPlayer recovery', () => {
     expect(hlsInstance.currentLevel).toBe(-1);
   });
 
-  // Regresión: ante un fallo de red fatal se hacía solo startLoad(), que reintenta
-  // con el mismo manifest ya vencido. El player quedaba "cargando" hasta un F5.
-  it('recarga el manifest completo ante un error de red fatal', () => {
+  // Fase 1: la recarga completa (pantalla negra, buffer perdido) es el último
+  // paso. Primero se reanuda la descarga sin tocar el video. Pero solo una vez
+  // por episodio: con el manifest vencido o el 413 de Cloudflare, reanudar no
+  // alcanza y el player quedaba "cargando" hasta un F5.
+  it('error de red fatal: primero reanuda sin recargar; si vuelve a fallar, recarga completa', () => {
     renderPlayer();
     hlsInstance.loadSource.mockClear();
 
     act(() => { handlers.error('error', { fatal: true, type: 'networkError', details: 'fragLoadError' }); });
-    // H8: backoff — el primer intento espera 1s antes de ejecutar la recarga.
     act(() => { vi.advanceTimersByTime(1_000); });
+    expect(hlsInstance.startLoad).toHaveBeenCalledWith();
+    expect(hlsInstance.loadSource).not.toHaveBeenCalled();
 
+    act(() => { vi.advanceTimersByTime(1_000); }); // ventana anti-cascada
+    act(() => { handlers.error('error', { fatal: true, type: 'networkError', details: 'fragLoadError' }); });
+    act(() => { vi.advanceTimersByTime(1_000); });
     expect(hlsInstance.stopLoad).toHaveBeenCalled();
     expect(hlsInstance.loadSource).toHaveBeenCalledTimes(1);
-    expect(hlsInstance.startLoad).toHaveBeenCalledWith(-1);
+    expect(hlsInstance.startLoad).toHaveBeenLastCalledWith(-1);
   });
 
   it('no encadena recargas si llegan varios errores seguidos', () => {
@@ -287,7 +328,9 @@ describe('LiveHLSPlayer recovery', () => {
     });
     act(() => { vi.advanceTimersByTime(1_000); });
 
-    expect(hlsInstance.loadSource).toHaveBeenCalledTimes(1);
+    // Un solo paso de recuperación (el suave), no tres.
+    expect(hlsInstance.startLoad).toHaveBeenCalledTimes(1);
+    expect(hlsInstance.loadSource).not.toHaveBeenCalled();
   });
 
   // H8: backoff exponencial (1s, 2s, 4s, 8s, tope 8s) + máximo 6 recargas por
@@ -297,6 +340,10 @@ describe('LiveHLSPlayer recovery', () => {
     const onFatalError = vi.fn();
     renderPlayer({ onFatalError });
     hlsInstance.loadSource.mockClear();
+    // Primer error del episodio: recuperación suave, sin recarga.
+    act(() => { handlers.error('error', { fatal: true, type: 'networkError', details: 'fragLoadError' }); });
+    act(() => { vi.advanceTimersByTime(2_000); });
+    expect(hlsInstance.loadSource).not.toHaveBeenCalled();
 
     const delays = [1000, 2000, 4000, 8000, 8000, 8000];
     for (let i = 0; i < delays.length; i++) {
@@ -317,6 +364,9 @@ describe('LiveHLSPlayer recovery', () => {
 
   // 2026-10-03: el cartel de error quedaba encima de un vivo que seguía sonando.
   const exhaustReloads = () => {
+    // Primero la recuperación suave del episodio.
+    act(() => { handlers.error('error', { fatal: true, type: 'networkError', details: 'fragLoadError' }); });
+    act(() => { vi.advanceTimersByTime(2_000); });
     const delays = [1000, 2000, 4000, 8000, 8000, 8000];
     for (const delay of delays) {
       act(() => { handlers.error('error', { fatal: true, type: 'networkError', details: 'fragLoadError' }); });
@@ -398,7 +448,13 @@ describe('LiveHLSPlayer recovery', () => {
       act(() => { handlers.error('error', { fatal: true, type: 'mediaError', details: 'bufferStalledError' }); });
     }
     expect(hlsInstance.recoverMediaError).toHaveBeenCalledTimes(2);
+    // El segundo intento cambia el códec de audio, la causa más común.
+    expect(hlsInstance.swapAudioCodec).toHaveBeenCalledTimes(1);
     expect(onError).toHaveBeenCalledTimes(1);
+    // Ya no se rinde con la imagen congelada: pasa a recargar.
+    hlsInstance.loadSource.mockClear();
+    act(() => { vi.advanceTimersByTime(1_000); });
+    expect(hlsInstance.loadSource).toHaveBeenCalledTimes(1);
   });
 
   // El caso que hls.js NO reporta: quiere reproducir pero currentTime no avanza.
@@ -773,5 +829,327 @@ describe('LiveHLSPlayer recovery', () => {
 
       expect(store.has(KEY)).toBe(false);
     });
+  });
+});
+
+describe('LiveHLSPlayer — fase 1: que no se trabe ni se pause', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    hlsInstance.liveSyncPosition = null;
+    for (const k of Object.keys(handlers)) delete handlers[k];
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('el <video> no tiene arranque automático propio: lo controla el player', () => {
+    const { container } = renderPlayer({ autoPlay: true });
+    const video = container.querySelector('video') as HTMLVideoElement;
+    expect(video.autoplay).toBe(false);
+  });
+
+  it('a los 5 s sin avance reanuda la descarga sin recargar; a los 12 s recarga', () => {
+    const { container } = renderPlayer();
+    driveVideo(container, { paused: false, currentTime: 100 });
+    act(() => { vi.advanceTimersByTime(1_000); });
+    hlsInstance.loadSource.mockClear();
+    hlsInstance.startLoad.mockClear();
+
+    act(() => { vi.advanceTimersByTime(5_000); });
+    expect(hlsInstance.startLoad).toHaveBeenCalledTimes(1);
+    expect(hlsInstance.loadSource).not.toHaveBeenCalled();
+
+    act(() => { vi.advanceTimersByTime(8_000); });
+    expect(hlsInstance.loadSource).toHaveBeenCalledTimes(1);
+  });
+
+  it('a los 5 s, si hay video descargado justo adelante, salta el hueco', () => {
+    const { container } = renderPlayer();
+    const video = driveVideo(container, { paused: false, currentTime: 100 });
+    Object.defineProperty(video, 'buffered', {
+      configurable: true,
+      value: { length: 1, start: () => 100.4, end: () => 110 },
+    });
+    act(() => { vi.advanceTimersByTime(1_000); });
+    hlsInstance.startLoad.mockClear();
+    act(() => { vi.advanceTimersByTime(5_000); });
+    expect(video.currentTime).toBeCloseTo(100.45);
+    expect(hlsInstance.startLoad).not.toHaveBeenCalled();
+  });
+
+  it('modo dvr: tras una recarga completa vuelve a la misma distancia del filo, no al vivo', () => {
+    const { container } = renderPlayer({ latencyMode: 'dvr' });
+    const video = driveVideo(container, { paused: false, currentTime: 700 });
+    mockSeekable(video, [[0, 1000]]);
+    hlsInstance.liveSyncPosition = 994;
+    // Episodio: suave y después la recarga completa.
+    act(() => { handlers.error('error', { fatal: true, type: 'networkError', details: 'fragLoadError' }); });
+    act(() => { vi.advanceTimersByTime(2_000); });
+    act(() => { handlers.error('error', { fatal: true, type: 'networkError', details: 'fragLoadError' }); });
+    act(() => { vi.advanceTimersByTime(1_000); });
+    expect(hlsInstance.loadSource).toHaveBeenCalled();
+
+    // La playlist nueva ya avanzó 10 s: sigue 300 s detrás del filo.
+    mockSeekable(video, [[0, 1010]]);
+    act(() => { handlers.levelUpdated('levelUpdated', {}); });
+    expect(video.currentTime).toBe(710);
+  });
+
+  it('pausado sin que nadie lo pidiera, se reanuda a los 3 s', () => {
+    const { container } = renderPlayer({ autoPlay: true });
+    const video = driveVideo(container, { paused: true, currentTime: 100 });
+    const play = vi.fn(() => Promise.resolve());
+    video.play = play;
+    act(() => { vi.advanceTimersByTime(2_000); });
+    expect(play).not.toHaveBeenCalled();
+    act(() => { vi.advanceTimersByTime(1_000); });
+    expect(play).toHaveBeenCalledTimes(1);
+  });
+
+  it('pausado por el alumno, no se reanuda solo', () => {
+    const { container, ref } = renderPlayerWithRef({ autoPlay: true });
+    const video = driveVideo(container, { paused: true, currentTime: 100 });
+    const play = vi.fn(() => Promise.resolve());
+    video.play = play;
+    act(() => { ref.current?.setUserPaused(true); });
+    act(() => { vi.advanceTimersByTime(10_000); });
+    expect(play).not.toHaveBeenCalled();
+  });
+
+  it('si el navegador no deja reproducir, no insiste', async () => {
+    const { container } = renderPlayer({ autoPlay: true });
+    const video = driveVideo(container, { paused: true, currentTime: 100 });
+    const play = vi.fn(() => Promise.reject(new DOMException('blocked', 'NotAllowedError')));
+    video.play = play;
+    act(() => { vi.advanceTimersByTime(3_000); });
+    await act(async () => { await Promise.resolve(); });
+    act(() => { vi.advanceTimersByTime(10_000); });
+    expect(play).toHaveBeenCalledTimes(1);
+  });
+
+  it('cuando vuelve la conexión, reanuda la descarga en el acto', () => {
+    renderPlayer();
+    hlsInstance.startLoad.mockClear();
+    act(() => { window.dispatchEvent(new Event('online')); });
+    expect(hlsInstance.startLoad).toHaveBeenCalledTimes(1);
+  });
+
+  it('al volver a la pestaña muy atrasado en el vivo normal, va al vivo', () => {
+    const { container } = renderPlayer({ latencyMode: 'smooth' });
+    const video = driveVideo(container, { paused: false, currentTime: 100 });
+    mockSeekable(video, [[0, 200]]);
+    hlsInstance.liveSyncPosition = 192;
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+    act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+    expect(video.currentTime).toBe(192);
+  });
+
+  it('en Clase completa, volver a la pestaña no lo saca de donde estaba', () => {
+    const { container } = renderPlayer({ latencyMode: 'dvr' });
+    const video = driveVideo(container, { paused: false, currentTime: 100 });
+    mockSeekable(video, [[0, 2000]]);
+    hlsInstance.liveSyncPosition = 1994;
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+    act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+    expect(video.currentTime).toBe(100);
+  });
+});
+
+describe('LiveHLSPlayer — fase 3: sonido y Solo audio', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    hlsInstance.liveSyncPosition = null;
+    delete (hlsInstance as Record<string, unknown>).autoLevelCapping;
+    for (const k of Object.keys(handlers)) delete handlers[k];
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('arranca con sonido si el navegador lo deja', async () => {
+    const onAutoplayBlocked = vi.fn();
+    const { container } = renderPlayer({ muted: false, autoPlay: true, onAutoplayBlocked });
+    const video = container.querySelector('video') as HTMLVideoElement;
+    video.play = vi.fn(() => Promise.resolve());
+
+    act(() => { handlers.manifestParsed('manifestParsed', {}); });
+    await act(async () => { await Promise.resolve(); });
+
+    expect(video.muted).toBe(false);
+    expect(onAutoplayBlocked).not.toHaveBeenCalled();
+  });
+
+  it('si el navegador bloquea el sonido, sigue en silencio en vez de quedarse quieto, y avisa', async () => {
+    const onAutoplayBlocked = vi.fn();
+    const { container } = renderPlayer({ muted: false, autoPlay: true, onAutoplayBlocked });
+    const video = container.querySelector('video') as HTMLVideoElement;
+    const play = vi.fn()
+      .mockReturnValueOnce(Promise.reject(new DOMException('sin gesto', 'NotAllowedError')))
+      .mockReturnValue(Promise.resolve());
+    video.play = play;
+
+    act(() => { handlers.manifestParsed('manifestParsed', {}); });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    expect(video.muted).toBe(true);
+    expect(onAutoplayBlocked).toHaveBeenCalledTimes(1);
+    expect(play).toHaveBeenCalledTimes(2);
+  });
+
+  it('otro error de play (no de permiso) no silencia', async () => {
+    const onAutoplayBlocked = vi.fn();
+    const { container } = renderPlayer({ muted: false, autoPlay: true, onAutoplayBlocked });
+    const video = container.querySelector('video') as HTMLVideoElement;
+    video.play = vi.fn(() => Promise.reject(new DOMException('interrumpido', 'AbortError')));
+
+    act(() => { handlers.manifestParsed('manifestParsed', {}); });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    expect(video.muted).toBe(false);
+    expect(onAutoplayBlocked).not.toHaveBeenCalled();
+  });
+
+  it('Solo audio reproduce en un <audio>, sin <video> ni imagen congelada', () => {
+    const { container } = renderPlayer({ audioOnly: true });
+    expect(container.querySelector('audio')).not.toBeNull();
+    expect(container.querySelector('video')).toBeNull();
+    expect(container.querySelector('canvas')).toBeNull();
+    expect(hlsInstance.attachMedia).toHaveBeenCalledWith(container.querySelector('audio'));
+  });
+
+  it('Solo audio con el audio aparte: baja a la calidad mínima (menos datos, mismo sonido)', () => {
+    renderPlayer({ audioOnly: true });
+    act(() => { handlers.manifestParsed('manifestParsed', { audioTracks: [{ id: 0 }] }); });
+    expect((hlsInstance as Record<string, unknown>).autoLevelCapping).toBe(0);
+  });
+
+  it('Solo audio con el audio mezclado en cada calidad: no la toca', () => {
+    renderPlayer({ audioOnly: true });
+    act(() => { handlers.manifestParsed('manifestParsed', { audioTracks: [] }); });
+    expect((hlsInstance as Record<string, unknown>).autoLevelCapping).toBeUndefined();
+  });
+
+  it('con video, la calidad tampoco se toca', () => {
+    renderPlayer();
+    act(() => { handlers.manifestParsed('manifestParsed', { audioTracks: [{ id: 0 }] }); });
+    expect((hlsInstance as Record<string, unknown>).autoLevelCapping).toBeUndefined();
+  });
+
+  it('setVolume ajusta el volumen del elemento, acotado a 0-1', () => {
+    const { container, ref } = renderPlayerWithRef();
+    const video = container.querySelector('video') as HTMLVideoElement;
+    act(() => { ref.current?.setVolume(0.3); });
+    expect(video.volume).toBeCloseTo(0.3);
+    act(() => { ref.current?.setVolume(4); });
+    expect(video.volume).toBe(1);
+  });
+});
+
+describe('LiveHLSPlayer — fase 2: que se vea perfecto', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    localStorage.clear();
+    hlsInstance.liveSyncPosition = null;
+    hlsInstance.levels = [];
+    hlsInstance.currentLevel = -1;
+    for (const k of Object.keys(handlers)) delete handlers[k];
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    localStorage.clear();
+    delete (hlsInstance as Record<string, unknown>).bandwidthEstimate;
+  });
+
+  it('primer vivo (sin medición): hls.js hace su prueba de velocidad, como siempre', () => {
+    renderPlayer();
+    expect(lastHlsConfig?.abrEwmaDefaultEstimate).toBeUndefined();
+    expect(lastHlsConfig?.testBandwidth).toBeUndefined();
+  });
+
+  it('con una velocidad medida antes, arranca con ella y sin la prueba en baja calidad', () => {
+    localStorage.setItem('live-bandwidth', JSON.stringify({ default: { bps: 7_000_000, at: Date.now() } }));
+    renderPlayer();
+    expect(lastHlsConfig?.abrEwmaDefaultEstimate).toBe(7_000_000);
+    expect(lastHlsConfig?.testBandwidth).toBe(false);
+  });
+
+  it('guarda la velocidad medida mientras mira, para la próxima vez', () => {
+    renderPlayer();
+    (hlsInstance as Record<string, unknown>).bandwidthEstimate = 4_500_000;
+    act(() => { handlers.fragLoaded('fragLoaded', {}); handlers.fragLoaded('fragLoaded', {}); });
+    expect(localStorage.getItem('live-bandwidth')).toBeNull();
+    act(() => { handlers.fragLoaded('fragLoaded', {}); });
+    expect(JSON.parse(localStorage.getItem('live-bandwidth')!).default.bps).toBe(4_500_000);
+  });
+
+  it('al pasar a Clase completa, el player nuevo hereda la velocidad del anterior', () => {
+    const { rerender } = render(<LiveHLSPlayer liveInputId="input-1" customerCode="abc" muted autoPlay={false} latencyMode="smooth" />);
+    (hlsInstance as Record<string, unknown>).bandwidthEstimate = 8_000_000;
+    act(() => { for (let i = 0; i < 3; i++) handlers.fragLoaded('fragLoaded', {}); });
+
+    rerender(<LiveHLSPlayer liveInputId="input-1" customerCode="abc" muted autoPlay={false} latencyMode="dvr" />);
+
+    expect(lastHlsConfig?.abrEwmaDefaultEstimate).toBe(8_000_000);
+    expect(lastHlsConfig?.testBandwidth).toBe(false);
+  });
+
+  it('al pasar a Clase completa queda el último cuadro en vez de negro, hasta que hay imagen nueva', () => {
+    const { container, rerender } = render(<LiveHLSPlayer liveInputId="input-1" customerCode="abc" muted autoPlay={false} latencyMode="smooth" />);
+    const video = container.querySelector('video') as HTMLVideoElement;
+    const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+    Object.defineProperty(video, 'readyState', { configurable: true, value: 4 });
+    Object.defineProperty(video, 'videoWidth', { configurable: true, value: 1280 });
+    Object.defineProperty(video, 'videoHeight', { configurable: true, value: 720 });
+    vi.spyOn(canvas, 'getContext').mockReturnValue({ drawImage: vi.fn() } as unknown as CanvasRenderingContext2D);
+
+    rerender(<LiveHLSPlayer liveInputId="input-1" customerCode="abc" muted autoPlay={false} latencyMode="dvr" />);
+    expect(canvas.style.opacity).toBe('1');
+
+    act(() => { video.dispatchEvent(new Event('playing')); });
+    expect(canvas.style.opacity).toBe('0');
+  });
+
+  it('en pausa, el cuadro congelado se va cuando el salto ya tiene imagen', () => {
+    const { container, rerender } = render(<LiveHLSPlayer liveInputId="input-1" customerCode="abc" muted autoPlay={false} latencyMode="smooth" />);
+    const video = container.querySelector('video') as HTMLVideoElement;
+    const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+    Object.defineProperty(video, 'readyState', { configurable: true, value: 4, writable: true });
+    Object.defineProperty(video, 'videoWidth', { configurable: true, value: 1280 });
+    vi.spyOn(canvas, 'getContext').mockReturnValue({ drawImage: vi.fn() } as unknown as CanvasRenderingContext2D);
+    rerender(<LiveHLSPlayer liveInputId="input-1" customerCode="abc" muted autoPlay={false} latencyMode="dvr" />);
+    expect(canvas.style.opacity).toBe('1');
+
+    // Sin datos todavía en el punto nuevo: el cuadro sigue.
+    Object.defineProperty(video, 'readyState', { configurable: true, value: 1 });
+    act(() => { video.dispatchEvent(new Event('seeked')); });
+    expect(canvas.style.opacity).toBe('1');
+
+    Object.defineProperty(video, 'readyState', { configurable: true, value: 2 });
+    act(() => { video.dispatchEvent(new Event('seeked')); });
+    expect(canvas.style.opacity).toBe('0');
+  });
+
+  it('la calidad elegida a mano se vuelve a aplicar al cargar el player', () => {
+    hlsInstance.levels = [{ height: 360 }, { height: 540 }, { height: 720 }] as never;
+    renderPlayer({ preferredLevel: 2 });
+    act(() => { handlers.manifestParsed('manifestParsed', {}); });
+    expect(hlsInstance.currentLevel).toBe(2);
+  });
+
+  it('en Auto, el player decide solo', () => {
+    hlsInstance.levels = [{ height: 360 }, { height: 720 }] as never;
+    renderPlayer({ preferredLevel: -1 });
+    act(() => { handlers.manifestParsed('manifestParsed', {}); });
+    expect(hlsInstance.currentLevel).toBe(-1);
+  });
+
+  it('una calidad que ya no existe en el manifest se ignora', () => {
+    hlsInstance.levels = [{ height: 360 }] as never;
+    renderPlayer({ preferredLevel: 3 });
+    act(() => { handlers.manifestParsed('manifestParsed', {}); });
+    expect(hlsInstance.currentLevel).toBe(-1);
   });
 });

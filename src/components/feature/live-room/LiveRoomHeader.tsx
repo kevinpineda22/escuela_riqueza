@@ -47,7 +47,7 @@ export function LiveRoomHeader({ title, titleSuffix, subtitle, backTo, badge, vi
           onClick={() => navigate(backTo.path)}
           aria-label={backTo.label}
           className={cn(
-            "flex items-center justify-center bg-black/50 backdrop-blur-md border border-line-subtle text-fg-80 hover:text-foreground-strong hover:bg-black/70 transition-colors shrink-0",
+            "flex items-center justify-center bg-black/75 border border-line-subtle text-fg-80 hover:text-foreground-strong hover:bg-black/70 transition-colors shrink-0",
             // En la barra del celular, objetivo táctil de 44 px (F13).
             variant === "bar" ? "w-11 h-11 rounded-xl" : "p-2 sm:p-2.5 rounded-xl sm:rounded-2xl"
           )}
@@ -55,7 +55,7 @@ export function LiveRoomHeader({ title, titleSuffix, subtitle, backTo, badge, vi
           <ArrowLeft size={18} />
         </button>
         {variant === "overlay" && (
-          <div className="p-2 sm:p-2.5 bg-black/40 backdrop-blur-md border border-line-subtle rounded-xl sm:rounded-2xl shrink-0">
+          <div className="p-2 sm:p-2.5 bg-black/65 border border-line-subtle rounded-xl sm:rounded-2xl shrink-0">
             <img src={LIVE_LOGO_URL} alt="Logo" className="h-7 sm:h-10 object-contain" />
           </div>
         )}
@@ -91,7 +91,7 @@ export function LiveRoomHeader({ title, titleSuffix, subtitle, backTo, badge, vi
           <button
             onClick={onOpenViewers}
             aria-label={`${viewersCount} conectados`}
-            className="flex items-center gap-1.5 sm:gap-2 bg-black/50 backdrop-blur-md border border-brand/20 text-fg-85 hover:text-accent hover:border-brand/50 hover:bg-black/70 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl text-[10px] sm:text-xs font-black tracking-wide active:scale-95 transition-all"
+            className="flex items-center gap-1.5 sm:gap-2 bg-black/75 border border-brand/20 text-fg-85 hover:text-accent hover:border-brand/50 hover:bg-black/70 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl text-[10px] sm:text-xs font-black tracking-wide active:scale-95 transition-all"
           >
             <Users size={12} className="text-accent" />
             <span>{viewersCount}</span>

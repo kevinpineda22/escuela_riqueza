@@ -1,7 +1,8 @@
-import type { RefObject } from "react";
+import { useEffect, type RefObject } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { VideoOff, Flag, X } from "lucide-react";
-import { usePreferencesStore } from "@/stores/preferences.store";
+import { VideoOff, Flag, X, Headphones, Video } from "lucide-react";
+import { SCHOOL_LOGO_URL } from "@/lib/media/mediaSession";
+import { liveManifestUrl } from "@/lib/live/dvrWindow";
 import { toast } from "@/components/ui/toaster";
 import { describeMediaFailure } from "@/lib/errors/classifyError";
 import LiveHLSPlayer, { type LiveHLSPlayerHandle } from "@/components/feature/LiveHLSPlayer";
@@ -10,6 +11,7 @@ import { CF_CUSTOMER_CODE } from "./constants";
 import { LiveAudioPrompt } from "./LiveAudioPrompt";
 import { LiveStageMessage } from "./LiveStageMessage";
 import type { LivePlayback } from "./useLivePlayback";
+import { useUnmuteOnFirstGesture } from "./useUnmuteOnFirstGesture";
 
 interface LivePlayerStageProps {
   liveInputId: string;
@@ -22,12 +24,16 @@ interface LivePlayerStageProps {
   onLeaveEnded?: () => void;
   playerRef: RefObject<LiveHLSPlayerHandle | null>;
   playback: LivePlayback;
+  /** Título y portada de la clase: la tarjeta de Solo audio. */
+  title: string;
+  coverUrl?: string | null;
 }
 
 /** Player HLS con sus controles y los overlays de audio, pausa y error. */
-export function LivePlayerStage({ liveInputId, resumeKey, isPaused, streamEnded = false, onLeaveEnded, playerRef, playback }: LivePlayerStageProps) {
-  const latencyMode = usePreferencesStore((s) => s.liveLatencyMode);
-  const setLatencyMode = usePreferencesStore((s) => s.setLiveLatencyMode);
+export function LivePlayerStage({ liveInputId, resumeKey, isPaused, streamEnded = false, onLeaveEnded, playerRef, playback, title, coverUrl }: LivePlayerStageProps) {
+  // El modo lo decide la sala (useLivePlayback): Fluidez y, al retroceder,
+  // Clase completa. El alumno no elige "modos".
+  const latencyMode = playback.latencyMode;
 
   // Modo "dvr": aviso único al retomar una posición guardada. "Ir al vivo" es
   // la misma operación que el botón de la barra (`goLive`): mismo margen
@@ -41,20 +47,35 @@ export function LivePlayerStage({ liveInputId, resumeKey, isPaused, streamEnded 
     });
   };
 
-  // Cambiar de modo recrea el reproductor (otro manifest): se avisa para que
-  // la carga breve no parezca un fallo. La posición de "Clase completa" queda
-  // guardada y se retoma al volver a ese modo.
-  const handleSelectLatencyMode = (mode: typeof latencyMode) => {
-    if (mode === latencyMode) return;
-    setLatencyMode(mode);
-    toast(
-      mode === "dvr"
-        ? "Clase completa: ya puedes retroceder"
-        : mode === "smooth"
-          ? "Clase normal: vuelves al directo"
-          : "Baja latencia: vuelves al directo",
-    );
-  };
+  // Bloqueó el celular (o cambió de app) mirando el video y el sistema lo
+  // pausó: al volver, se ofrece Solo audio, que es lo que sigue sonando.
+  // Una vez por visita a la sala.
+  const { mediaKey, audioOnly, toggleAudioOnly } = playback;
+  useUnmuteOnFirstGesture(playback.awaitingGesture, playback.enableAudio);
+  useEffect(() => {
+    if (audioOnly) return;
+    const media = playerRef.current?.video;
+    if (!media) return;
+    let pausedWhileHidden = false;
+    const handlePause = () => {
+      if (document.visibilityState === "hidden") pausedWhileHidden = true;
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState !== "visible" || !pausedWhileHidden) return;
+      pausedWhileHidden = false;
+      if (sessionStorageFlag(AUDIO_ONLY_HINT_KEY)) return;
+      toast("¿Quieres seguir escuchando con la pantalla apagada?", {
+        description: "Activa Solo audio: la clase sigue sonando aunque bloquees el celular.",
+        action: { label: "Solo audio", onClick: toggleAudioOnly },
+      });
+    };
+    media.addEventListener("pause", handlePause);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      media.removeEventListener("pause", handlePause);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [playerRef, mediaKey, audioOnly, toggleAudioOnly]);
 
   // Durante la continuación, un fallo o el final del medio cierran la clase:
   // no hay nada que recargar (ver `streamEnded` en LiveHLSPlayer).
@@ -81,8 +102,36 @@ export function LivePlayerStage({ liveInputId, resumeKey, isPaused, streamEnded 
         className="absolute inset-0 z-20 bg-black pointer-events-none"
       />
       <div className="w-full h-full absolute inset-0 z-0 bg-black">
+        {/* Solo audio: en lugar de la imagen, la portada de la clase (como
+            un podcast). El botón de volver al video también está en Ajustes. */}
+        {audioOnly && (
+          <div className="absolute inset-0 z-[5] flex flex-col items-center justify-center gap-4 px-6 pb-20 text-center bg-gradient-to-b from-surface-raised to-black">
+            <img
+              src={coverUrl || SCHOOL_LOGO_URL}
+              alt=""
+              className={coverUrl ? "w-40 sm:w-56 aspect-square object-cover rounded-2xl shadow-2xl" : "h-24 sm:h-32 object-contain"}
+            />
+            <div className="max-w-md">
+              <p className="flex items-center justify-center gap-1.5 text-[11px] font-black uppercase tracking-widest text-accent">
+                <Headphones size={14} aria-hidden />
+                Solo audio
+              </p>
+              <p className="mt-1 text-lg sm:text-xl font-black text-foreground-strong line-clamp-2">{title}</p>
+              <p className="mt-1 text-sm text-foreground-muted">Puedes bloquear el celular: la clase sigue sonando.</p>
+            </div>
+            <button
+              type="button"
+              onClick={toggleAudioOnly}
+              className="relative z-[26] inline-flex items-center gap-2 min-h-11 px-5 rounded-full bg-ink/15 hover:bg-ink/25 text-sm font-bold text-foreground-strong transition-colors"
+            >
+              <Video size={16} aria-hidden />
+              Volver al video
+            </button>
+          </div>
+        )}
         <LiveHLSPlayer
-          key={playback.playerKey}
+          // Un elemento nuevo por "Reintentar" y por Solo audio ⇄ video.
+          key={mediaKey}
           ref={playerRef}
           liveInputId={liveInputId}
           customerCode={CF_CUSTOMER_CODE}
@@ -92,7 +141,11 @@ export function LivePlayerStage({ liveInputId, resumeKey, isPaused, streamEnded 
           roomPaused={isPaused}
           streamEnded={streamEnded}
           resumeKey={resumeKey}
+          audioOnly={audioOnly}
+          preferredLevel={playback.currentQualityLevel}
           onResumed={handleDvrResumed}
+          startBehindLive={playback.startBehindLive}
+          onStartBehindApplied={playback.clearStartBehind}
           onEnded={streamEnded ? onLeaveEnded : undefined}
           className="w-full h-full object-contain bg-black"
           {...playerEvents}
@@ -106,17 +159,21 @@ export function LivePlayerStage({ liveInputId, resumeKey, isPaused, streamEnded 
           currentLevel={playback.currentQualityLevel}
           activeLevel={playback.activeQualityLevel}
           latencyMode={latencyMode}
-          mediaKey={playback.playerKey}
+          mediaKey={mediaKey}
+          audioOnly={audioOnly}
+          onToggleAudioOnly={toggleAudioOnly}
+          dvrManifestUrl={liveManifestUrl(CF_CUSTOMER_CODE, liveInputId, "dvr")}
           onTogglePlay={playback.togglePlay}
           onToggleMute={playback.toggleMute}
           onSelectLevel={playback.selectQualityLevel}
-          onSelectLatencyMode={handleSelectLatencyMode}
+          onRewindFromLive={playback.rewindFromLive}
+          onReturnToLive={playback.returnToLive}
         />
 
         {/* Clase finalizada con tramo pendiente: el alumno sabe por qué sigue
             viendo video y puede salir cuando quiera. */}
         {streamEnded && (
-          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 max-w-[calc(100%-1.5rem)] pl-3 pr-1 py-1 rounded-full bg-black/75 backdrop-blur-md border border-ink/15 text-foreground-strong shadow-lg">
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 max-w-[calc(100%-1.5rem)] pl-3 pr-1 py-1 rounded-full bg-black/85 border border-ink/15 text-foreground-strong shadow-lg">
             <Flag size={14} className="text-accent shrink-0" />
             <span className="text-xs font-bold truncate">La clase terminó · Sigues viendo lo que te faltaba</span>
             <button
@@ -179,19 +236,15 @@ export function LivePlayerStage({ liveInputId, resumeKey, isPaused, streamEnded 
                     >
                       Reintentar
                     </button>
-                    {/* Salida operativa si "Clase completa" falla: la clase
-                        normal usa otro manifest y no depende del DVR. */}
+                    {/* Salida operativa si falla mientras retrocedía: el vivo
+                        (Fluidez) usa otro manifest y no depende del DVR. */}
                     {latencyMode === "dvr" && (
                       <button
                         type="button"
-                        onClick={() => {
-                          setLatencyMode("smooth");
-                          playback.retryPlayer();
-                          toast("Cambiamos a Clase normal para recuperar la transmisión");
-                        }}
+                        onClick={playback.recoverInSmooth}
                         className="px-6 py-3 rounded-full bg-ink/15 hover:bg-ink/25 text-foreground-strong font-black tracking-wide transition-colors"
                       >
-                        Ver en Clase normal
+                        Volver al vivo
                       </button>
                     )}
                   </div>
@@ -210,4 +263,15 @@ export function LivePlayerStage({ liveInputId, resumeKey, isPaused, streamEnded 
       </div>
     </>
   );
+}
+
+const AUDIO_ONLY_HINT_KEY = "live-audio-only-hint";
+
+/** true si la marca ya estaba; si no, la deja puesta. Sin almacenamiento, avisa siempre. */
+function sessionStorageFlag(key: string): boolean {
+  try {
+    if (sessionStorage.getItem(key)) return true;
+    sessionStorage.setItem(key, "1");
+  } catch { /* modo privado o datos bloqueados */ }
+  return false;
 }

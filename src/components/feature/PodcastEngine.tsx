@@ -16,14 +16,12 @@ import { useEffect, useRef, useState } from "react";
 import { Stream } from "@cloudflare/stream-react";
 import { usePlayerStore } from "@/stores/player.store";
 import { saveUserProgress, flushLessonProgress } from "@/lib/api/stream/progress";
+import { mediaArtwork } from "@/lib/media/mediaSession";
 
 // Ref global para que LessonPlayer y GlobalPodcastPlayer puedan
 // leer currentTime / duration sin necesitar su propio iframe.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export let podcastStreamRef: { current: any } = { current: null };
-
-const LOGO_URL =
-  "https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/18dc9190-6625-4b89-8f1e-3f221e96b500/public";
 
 function setMediaMetadata(title: string, artist: string) {
   if (!("mediaSession" in navigator)) return;
@@ -31,13 +29,7 @@ function setMediaMetadata(title: string, artist: string) {
     title,
     artist,
     album: "Escuela de la Riqueza",
-    artwork: [
-      { src: LOGO_URL, sizes: "96x96", type: "image/png" },
-      { src: LOGO_URL, sizes: "192x192", type: "image/png" },
-      { src: LOGO_URL, sizes: "256x256", type: "image/png" },
-      { src: LOGO_URL, sizes: "384x384", type: "image/png" },
-      { src: LOGO_URL, sizes: "512x512", type: "image/png" },
-    ],
+    artwork: mediaArtwork(),
   });
 }
 

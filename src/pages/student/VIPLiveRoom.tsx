@@ -5,7 +5,6 @@ import LiveChat from "@/components/feature/LiveChat";
 import { LiveRoom } from "@/components/feature/live-room/LiveRoom";
 import { isSameLive } from "@/components/feature/live-room/liveRoomStatus";
 import { LiveRoomLoading } from "@/components/feature/live-room/LiveRoomLoading";
-import { usePlayerStore } from "@/stores/player.store";
 import { useAuthStore } from "@/stores/auth.store";
 import { supabase } from "@/lib/supabase";
 import { startPagePolling } from "@/lib/pagePolling";
@@ -44,11 +43,9 @@ const VIPLiveRoom = () => {
   // Con Realtime conectado, los cambios de la sala llegan solos: el polling
   // queda como red de seguridad y se espacia.
   const [realtimeConnected, setRealtimeConnected] = useState(false);
-  const { clearPlayer } = usePlayerStore();
 
   const isEnded = live?.status === "ended";
 
-  useEffect(() => { clearPlayer(); }, [clearPlayer]);
 
   // Fetch active live on mount + validate plan access
   useEffect(() => {

@@ -40,7 +40,30 @@ Para que una clase de 3-4 horas no se corte:
 - **Una sola sala por clase.** No finalizar la sala para crear otra durante la clase: cambia el link y los alumnos quedan afuera. Si hubo un problema, usar **Reactivar**.
 - Durante la clase, mirar abajo a la derecha en OBS: el cuadrado de conexión en **verde** y "Cuadros perdidos" cerca de **0 %**. Amarillo o rojo = problema de internet del lugar, no de la plataforma.
 
-**Modo del reproductor de los alumnos:** desde el 2026-10-16 todos arrancan en **"Clase normal · Fluidez"**, el modo más estable para clases largas. "Clase completa" (con retroceso) sigue disponible en el menú, pero Cloudflare advierte que se degrada en transmisiones de más de 3 horas.
+**Modo del reproductor de los alumnos (automático desde el 2026-10-27):** el alumno ya no elige "modo". Todos miran en **Fluidez**, el más estable para clases largas; al retroceder en la barra (o con −10 s / flechas / doble toque) el reproductor pasa solo a **Clase completa** en ese punto, y "● EN VIVO" lo devuelve a Fluidez. Con el keyframe en **2 s** (decisión de Johan) la ventana DVR alcanza ~4 h (7.200 segmentos × 2 s); pasado eso, lo más viejo queda solo en la grabación. Cloudflare advierte degradación de Clase completa después de 3 h: con el modo automático solo la cargan quienes retroceden.
+
+### 1.2 Audio: que se escuche bien (agregado 2026-10-28)
+
+En una clase la voz manda: una imagen algo borrosa se tolera, un audio bajo, con eco o en un solo oído no. Casi todo lo que "se escucha mal" se arregla acá, en OBS, no en la web.
+
+**Micrófono → clic derecho → Filtros**, en este orden (el orden importa: cada filtro recibe lo que deja el anterior):
+
+| Orden | Filtro | Valores de partida | Para qué |
+|---|---|---|---|
+| 1 | Supresión de ruido | Método **RNNoise** | Quita ventilador, aire acondicionado y ruido de fondo. |
+| 2 | Compresor | Relación **4:1** · Umbral **−18 dB** · Ataque **6 ms** · Liberación **60 ms** | Empareja la voz: lo que se dice bajito se oye y lo que se dice fuerte no aturde. |
+| 3 | Limitador | Umbral **−1 dB** · Liberación **60 ms** | Tope de seguridad: un grito o un golpe al micrófono nunca distorsiona. |
+
+Son valores de partida: ajustarlos de oído en el ensayo, con auriculares.
+
+**Ajustes que suelen faltar:**
+
+- **Mono en el micrófono.** Engranaje del mezclador → *Propiedades avanzadas de audio* → marcar **Mono** en el micrófono. Un micrófono es una sola fuente; sin esto, muchas interfaces lo mandan solo por el canal izquierdo y **el alumno con auriculares escucha la clase en un solo oído**.
+- **Nivel.** Hablando normal, la barra del micrófono en el mezclador debe moverse en la **zona amarilla**; nunca tocar el rojo. Si se queda en verde, subir la ganancia en el micrófono o la interfaz (no en la web: allá cada alumno tiene su volumen).
+- **Audio del escritorio silenciado** salvo que se muestre un video con sonido: si no, notificaciones y sonidos de la PC salen al aire.
+- **Monitorear con auriculares**, nunca con parlantes cerca del micrófono: el sonido vuelve a entrar y se oye con eco.
+
+**Del lado de los alumnos (desde el 2026-10-28):** la clase intenta arrancar **con sonido**; si el navegador lo bloquea (pasa en iPhone), arranca en silencio con el aviso "Activar sonido", y el primer toque en cualquier parte de la sala lo activa. El volumen que elige cada alumno se recuerda. En **Ajustes → Solo audio** la clase sigue sonando con el celular bloqueado, con la portada y el título en la pantalla de bloqueo (como Spotify).
 
 En **Ajustes → Emisión**:
 
@@ -84,6 +107,7 @@ Son estimaciones del video, sin audio ni sobrecarga del contenedor; no garantiza
    - La **vista previa** muestra video (no se queda girando).
 4. Panel de la escuela: la sala correcta está **activa** y su **Input ID** coincide con el Live Input al que transmite OBS.
 5. Abrir el link de la sala en otra pestaña y confirmar que se ve.
+6. **Audio:** hablar unos segundos con auriculares puestos en esa pestaña. Se escucha en **los dos oídos**, sin eco, y la barra del micrófono en OBS se mueve en amarillo (sección 1.2).
 
 ---
 
@@ -94,6 +118,8 @@ Son estimaciones del video, sin audio ni sobrecarga del contenedor; no garantiza
 | "Error de reproducción" y Cloudflare dice **Disconnected** | OBS no transmite o usa otra clave/servidor | Revisar el botón "Iniciar transmisión" y la sección **Emisión** de OBS. |
 | Se queda cargando y Cloudflare dice **Connected** pero la vista previa gira | Fragmentos de más de 10 MB | Detener transmisión → aplicar la sección 1 → iniciar de nuevo. |
 | Funciona y de golpe se corta unos segundos | OBS se desconectó y reconectó (red del lugar) | Mirar en OBS los cuadros perdidos y el indicador de conexión. Si está amarillo/rojo, es internet. Los alumnos recargan. |
+| La voz se escucha en un solo oído | El micrófono no está en Mono | Sección 1.2: *Propiedades avanzadas de audio* → **Mono**. Se aplica al instante, sin cortar la transmisión. |
+| La voz se escucha baja, o fuerte y distorsionada | Nivel o filtros del micrófono | Sección 1.2: barra en amarillo, compresor y limitador. |
 | "La repetición es para alumnos" en un link que debería estar en vivo | La sala se **finalizó** | En el panel: Eventos en Vivo → Finalizados → **Reactivar**. No crear una sala nueva: cambia el link y la gente queda afuera. |
 
 Después de cualquier corrección, los alumnos que ya vieron "Error de reproducción" deben tocar **Reintentar** o recargar la página.
