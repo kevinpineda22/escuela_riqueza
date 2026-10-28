@@ -1,4 +1,5 @@
 import type { ReactNode, RefObject } from "react";
+import { liveResumeKey } from "@/lib/live/savedPosition";
 import { motion, AnimatePresence } from "motion/react";
 import { Tv, VideoOff } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -62,12 +63,14 @@ export function LiveStage({ live, status, playerRef, playback, continuingAfterEn
               // Identidad de la emisión, no solo de la sala: reprogramar o
               // reactivar la sala cambia `starts_at` y una posición guardada
               // de la emisión anterior ya no se restaura en la nueva.
-              resumeKey={`${live.id}:${live.starts_at}`}
+              resumeKey={liveResumeKey(live)}
               isPaused={isPaused && !continuingAfterEnd}
               streamEnded={continuingAfterEnd}
               onLeaveEnded={onLeaveEndedContinuation}
               playerRef={playerRef}
               playback={playback}
+              title={live.title || "Sesión de Riqueza"}
+              coverUrl={live.background_image_url}
             />
           </motion.div>
         ) : isEnded && replay ? (

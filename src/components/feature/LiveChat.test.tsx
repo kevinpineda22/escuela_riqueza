@@ -5,6 +5,8 @@ import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/stores/auth.store";
 import { toast } from "@/components/ui/toaster";
 import { deleteLiveMessage } from "@/lib/api/stream/messages";
+import { muteChatUser, unmuteChatUser } from "@/lib/api/stream/chatModeration";
+import type * as ChatModeration from "@/lib/api/stream/chatModeration";
 import type { User } from "@/types/user";
 
 vi.mock("@/components/ui/toaster", () => ({
@@ -13,6 +15,13 @@ vi.mock("@/components/ui/toaster", () => ({
 
 vi.mock("@/lib/api/stream/messages", () => ({
   deleteLiveMessage: vi.fn(),
+}));
+
+// chatRuleMessage es lógica pura y se prueba de verdad; silenciar va a la base.
+vi.mock("@/lib/api/stream/chatModeration", async (importActual) => ({
+  ...(await importActual<typeof ChatModeration>()),
+  muteChatUser: vi.fn(),
+  unmuteChatUser: vi.fn(),
 }));
 
 // LiveChat.tsx se suscribe al canal de mensajes; useLiveReactions (hook
@@ -124,6 +133,65 @@ describe("LiveChat — envío (F22)", () => {
 
     await waitFor(() => expect(input.value).toBe(""));
     expect(insert).toHaveBeenCalledTimes(1);
+  });
+
+  // Fase 4: las reglas del chat viven en la base (sql/migrate-live-chat-safety.sql)
+  // y su mensaje está escrito para el alumno: se muestra tal cual.
+  it("una regla del chat muestra su propio mensaje, no el de conexión", async () => {
+    insert.mockResolvedValue({
+      error: { code: "P0001", hint: "chat_rate", message: "Vas muy rápido: espera un segundo antes de enviar otro mensaje." },
+    });
+    const input = await renderChat();
+
+    send(input, "Hola");
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Vas muy rápido");
+    expect(alert).not.toHaveTextContent("conexión");
+    expect(input.value).toBe("Hola");
+  });
+
+  it("silenciado por un moderador: lo dice", async () => {
+    insert.mockResolvedValue({
+      error: { code: "P0001", hint: "chat_muted", message: "Un moderador te silenció en este chat por un rato." },
+    });
+    const input = await renderChat();
+
+    send(input, "Hola");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Un moderador te silenció");
+  });
+
+  it("un mensaje demasiado largo para la base avisa del máximo", async () => {
+    insert.mockResolvedValue({ error: { code: "23514", message: "violates check constraint" } });
+    const input = await renderChat();
+
+    send(input, "Hola");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("máximo 300 caracteres");
+  });
+
+  it("un error con hint desconocido sigue siendo el genérico", async () => {
+    insert.mockResolvedValue({ error: { code: "P0001", hint: "otra_cosa", message: "detalle interno" } });
+    const input = await renderChat();
+
+    send(input, "Hola");
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("No se pudo enviar tu mensaje");
+    expect(alert).not.toHaveTextContent("detalle interno");
+  });
+
+  it("el campo no deja pasar de 300 caracteres y avisa cuántos quedan cerca del final", async () => {
+    const input = await renderChat();
+    expect(input.maxLength).toBe(300);
+
+    fireEvent.change(input, { target: { value: "a".repeat(249) } });
+    expect(screen.queryByText("51")).not.toBeInTheDocument();
+
+    fireEvent.change(input, { target: { value: "a".repeat(260) } });
+    expect(screen.getByText("40")).toBeInTheDocument();
+    expect(input).toHaveAttribute("aria-describedby", "live-chat-counter");
   });
 
   it("al volver a escribir se retira el aviso de error", async () => {
@@ -794,8 +862,8 @@ describe("LiveChat — moderación y borrado en tiempo real (2026-10-09)", () =>
             in: () =>
               Promise.resolve({
                 data: [
-                  { id: "beto", full_name: "Beto" },
-                  { id: "ana", full_name: "Ana" },
+                  { id: "beto", full_name: "Beto", role: "student" },
+                  { id: "ana", full_name: "Ana", role: "admin" },
                 ],
               }),
             eq: () => ({ maybeSingle: () => Promise.resolve({ data: { full_name: "Beto" } }) }),
@@ -969,6 +1037,73 @@ describe("LiveChat — moderación y borrado en tiempo real (2026-10-09)", () =>
       expect(screen.getAllByText("Hola").length).toBeGreaterThan(0);
       expect(screen.getByRole("button", { name: "Ir al mensaje original" })).toBeInTheDocument();
       expect(screen.queryByText("Mensaje eliminado")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("insignia del equipo (fase 4)", () => {
+    it("los mensajes de un admin llevan la insignia «Equipo»; los de un alumno no", async () => {
+      await renderChat();
+
+      const anaBubble = screen.getByText("Te contesto").closest("[data-message-id]") as HTMLElement;
+      const betoBubble = screen.getAllByText("Hola").map((el) => el.closest("[data-message-id]")).find((el) => el?.getAttribute("data-message-id") === "m1") as HTMLElement;
+      expect(within(anaBubble).getByText("Equipo")).toBeInTheDocument();
+      expect(within(betoBubble).queryByText("Equipo")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("silenciar (fase 4)", () => {
+    const muteMock = muteChatUser as unknown as ReturnType<typeof vi.fn>;
+    const unmuteMock = unmuteChatUser as unknown as ReturnType<typeof vi.fn>;
+
+    it("solo un admin moderando lo ve, y nunca sobre alguien del equipo", async () => {
+      useAuthStore.setState({ user: admin, token: "t" });
+      await renderChat({ canModerate: true });
+
+      // Beto (alumno) sí; Ana (equipo) no.
+      expect(screen.getAllByRole("button", { name: "Silenciar 10 minutos" })).toHaveLength(1);
+    });
+
+    it("un alumno no lo ve", async () => {
+      await renderChat({ canModerate: true });
+
+      expect(screen.queryByRole("button", { name: "Silenciar 10 minutos" })).not.toBeInTheDocument();
+    });
+
+    it("silencia 10 minutos y ofrece deshacer", async () => {
+      muteMock.mockResolvedValue(undefined);
+      unmuteMock.mockResolvedValue(undefined);
+      useAuthStore.setState({ user: admin, token: "t" });
+      await renderChat({ canModerate: true });
+
+      fireEvent.click(screen.getByRole("button", { name: "Silenciar 10 minutos" }));
+
+      await waitFor(() => expect(muteMock).toHaveBeenCalledWith("live-1", "beto"));
+      await waitFor(() => expect(toast.success).toHaveBeenCalled());
+      const [text, options] = (toast.success as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(text).toBe("Silenciaste a Beto por 10 minutos");
+      options.action.onClick();
+      expect(unmuteMock).toHaveBeenCalledWith("live-1", "beto");
+    });
+
+    it("si no se puede silenciar, lo avisa", async () => {
+      muteMock.mockRejectedValue(new Error("RLS"));
+      useAuthStore.setState({ user: admin, token: "t" });
+      await renderChat({ canModerate: true });
+
+      fireEvent.click(screen.getByRole("button", { name: "Silenciar 10 minutos" }));
+
+      await waitFor(() => expect(toast.error).toHaveBeenCalledWith("No se pudo silenciar", expect.anything()));
+      expect(toast.success).not.toHaveBeenCalled();
+    });
+
+    it("en celular está en el menú de la burbuja", async () => {
+      useAuthStore.setState({ user: admin, token: "t" });
+      await renderChat({ canModerate: true });
+
+      fireEvent.click(screen.getAllByText("Hola").find((el) => el.closest("[data-message-id='m1']"))!);
+      const menu = await screen.findByRole("menu");
+
+      expect(within(menu).getByRole("menuitem", { name: "Silenciar 10 minutos" })).toBeInTheDocument();
     });
   });
 });

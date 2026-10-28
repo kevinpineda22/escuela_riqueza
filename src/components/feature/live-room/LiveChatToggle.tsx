@@ -13,7 +13,7 @@ export function LiveChatToggle({ chatVisible, unreadCount, onToggle }: LiveChatT
     <button
       onClick={onToggle}
       aria-label={chatVisible ? "Ocultar chat" : "Mostrar chat"}
-      className="absolute right-0 top-1/2 -translate-y-1/2 z-40 group flex items-center gap-2 pl-3 pr-2.5 py-4 rounded-l-2xl bg-black/60 backdrop-blur-md border border-r-0 border-ink/15 text-fg-80 hover:text-accent hover:bg-black/80 hover:pl-4 transition-all shadow-[-8px_0_25px_-5px_rgba(0,0,0,0.4)]"
+      className="absolute right-0 top-1/2 -translate-y-1/2 z-40 group flex items-center gap-2 pl-3 pr-2.5 py-4 rounded-l-2xl bg-black/80 border border-r-0 border-ink/15 text-fg-80 hover:text-accent hover:bg-black/80 hover:pl-4 transition-all shadow-[-8px_0_25px_-5px_rgba(0,0,0,0.4)]"
     >
       {chatVisible ? <PanelRightClose size={20} /> : <PanelRightOpen size={20} />}
       <AnimatePresence>

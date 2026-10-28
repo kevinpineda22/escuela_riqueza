@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { usePlayerStore } from "@/stores/player.store";
 import { cn } from "@/lib/utils";
 import { useIsDesktop, useIsShortLandscape } from "@/hooks/useMediaQuery";
 import LiveViewersDialog from "@/components/feature/LiveViewersDialog";
@@ -6,8 +7,9 @@ import { getLiveRoomLayout } from "./liveRoomLayout";
 import { getLiveRoomStatus, withEndedContinuation } from "./liveRoomStatus";
 import { useLivePlayback } from "./useLivePlayback";
 import { usePendingClass } from "./usePendingClass";
-import { usePreferencesStore } from "@/stores/preferences.store";
+import { liveResumeKey } from "@/lib/live/savedPosition";
 import { useLivePresence } from "./useLivePresence";
+import { useLiveMediaSession } from "./useLiveMediaSession";
 import { LiveChatPanel } from "./LiveChatPanel";
 import { LiveChatToggle } from "./LiveChatToggle";
 import { LiveIntroOverlay } from "./LiveIntroOverlay";
@@ -55,9 +57,8 @@ export function LiveRoom({
 }: LiveRoomProps) {
   const layout = getLiveRoomLayout(useIsDesktop(), useIsShortLandscape());
   const sideBySide = layout !== "stacked";
-  const [playerRef, playback] = useLivePlayback();
-  const latencyMode = usePreferencesStore((s) => s.liveLatencyMode);
-  const hasPendingClass = usePendingClass(playerRef, latencyMode, playback.playerKey);
+  const [playerRef, playback] = useLivePlayback(liveResumeKey(live));
+  const hasPendingClass = usePendingClass(playerRef, playback.latencyMode, playback.playerKey);
   const baseStatus = getLiveRoomStatus(live, signalConnected);
   // P0: finalizar la sala ya no le quita la clase a quien iba atrasado. La
   // decisión se toma en la transición a "ended" con el último muestreo del
@@ -69,6 +70,19 @@ export function LiveRoom({
     setContinuingAfterEnd(baseStatus.isEnded && hasPendingClass);
   }
   const status = withEndedContinuation(baseStatus, continuingAfterEnd);
+  // Un solo audio a la vez: el podcast de clases se detiene al entrar a
+  // cualquier sala (antes solo lo hacía la VIP; en la pública sonaban los dos).
+  const clearPlayer = usePlayerStore((s) => s.clearPlayer);
+  useEffect(() => { clearPlayer(); }, [clearPlayer]);
+  // La clase en la pantalla de bloqueo, como Spotify.
+  useLiveMediaSession({
+    enabled: status.showPlayer,
+    title: live.title || "Sesión de Riqueza",
+    coverUrl: live.background_image_url,
+    isPlaying: playback.isPlaying,
+    onPlay: playback.play,
+    onPause: playback.pause,
+  });
   // Sin presencia en una sala finalizada: no hay "conectados" a algo que terminó.
   const presence = useLivePresence({ liveId: live.id, user: currentUser, anonId: anonPresenceId, enabled: !status.isEnded });
   const [showViewersList, setShowViewersList] = useState(false);

@@ -1,7 +1,10 @@
-import { useEffect, useRef, forwardRef, useImperativeHandle, useState } from "react";
+import { useEffect, useRef, forwardRef, useImperativeHandle, useState, type RefObject } from "react";
 import Hls from "hls.js";
 import { clampToSeekable } from "@/lib/live/playerTime";
+import { liveManifestUrl } from "@/lib/live/dvrWindow";
+import { livePositionStorageKey, SAVED_POSITION_MAX_AGE_MS } from "@/lib/live/savedPosition";
 import { reportMediaFailure, type ReportResult } from "@/lib/errors/errorReporter";
+import { readBandwidthEstimate, saveBandwidthEstimate } from "@/lib/live/bandwidthMemory";
 
 export interface QualityLevel {
   index: number;
@@ -38,6 +41,8 @@ export interface LiveHLSPlayerHandle {
   // aviso de retomar). Va a la distancia segura del perfil activo y reanuda
   // —es un pedido explícito del alumno— salvo que la sala esté en pausa.
   goLive: () => void;
+  // Volumen del elemento (0-1). En iPhone lo maneja el sistema y no cambia.
+  setVolume: (volume: number) => void;
 }
 
 interface LiveHLSPlayerProps {
@@ -68,6 +73,12 @@ interface LiveHLSPlayerProps {
   resumeKey?: string;
   // Se llama cuando el player retomó una posición guardada (modo "dvr").
   onResumed?: (position: number) => void;
+  // Modo "dvr": arrancar N segundos detrás del filo en vez del vivo. Es el
+  // cambio automático desde Fluidez cuando el alumno retrocede en la barra:
+  // gana sobre la posición guardada y sobre el filo. Se aplica una vez por
+  // carga y se avisa con `onStartBehindApplied` para que la sala lo limpie.
+  startBehindLive?: number | null;
+  onStartBehindApplied?: () => void;
   onPlay?: () => void;
   onPause?: () => void;
   onWaiting?: () => void;
@@ -85,6 +96,31 @@ interface LiveHLSPlayerProps {
   // El medio llegó a su final (playlist cerrada).
   onEnded?: () => void;
   onLevelsChange?: (levels: QualityLevel[], currentLevel: number) => void;
+  /**
+   * Solo audio: reproduce la clase en un <audio>. iPhone y Chrome en Android
+   * pausan cualquier <video> con la pantalla bloqueada o la pestaña oculta;
+   * el audio solo, no. Cambiarlo remonta el player (`key`), no se alterna en vivo.
+   */
+  audioOnly?: boolean;
+  /**
+   * El navegador no dejó arrancar CON sonido (iPhone sin un toque previo): el
+   * player siguió en silencio para no quedarse quieto. La sala debe reflejar
+   * el silencio y ofrecer activar el sonido.
+   */
+  onAutoplayBlocked?: () => void;
+  /**
+   * Calidad elegida a mano en la sala (-1 = Auto). Se vuelve a aplicar en cada
+   * carga del manifest: al pasar a Clase completa o tras una recarga, el player
+   * nuevo arrancaba en Auto mientras el menú seguía diciendo "720p".
+   */
+  preferredLevel?: number;
+}
+
+/** iPhone, iPad o Mac: Safari reproduce HLS por su cuenta (AVFoundation). */
+function isAppleDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  return /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && !/Chrome|Firefox|Edg/.test(ua));
 }
 
 const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
@@ -100,6 +136,8 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       className,
       resumeKey,
       onResumed,
+      startBehindLive = null,
+      onStartBehindApplied,
       onPlay,
       onPause,
       onWaiting,
@@ -109,10 +147,16 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       onRecovered,
       onEnded,
       onLevelsChange,
+      audioOnly = false,
+      onAutoplayBlocked,
+      preferredLevel = -1,
     },
     ref,
   ) {
     const videoRef = useRef<HTMLVideoElement>(null);
+    // Último cuadro congelado mientras se recarga: en vez de pantalla negra, el
+    // alumno ve la imagen donde se quedó hasta que vuelve a reproducir.
+    const freezeFrameRef = useRef<HTMLCanvasElement>(null);
     const hlsRef = useRef<Hls | null>(null);
     // Lock para que la recuperación por evento y el watchdog no recarguen a la vez.
     const reloadingRef = useRef(false);
@@ -131,6 +175,26 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
     resumeKeyRef.current = resumeKey;
     const onResumedRef = useRef(onResumed);
     onResumedRef.current = onResumed;
+    const startBehindRef = useRef(startBehindLive);
+    startBehindRef.current = startBehindLive;
+    const onStartBehindAppliedRef = useRef(onStartBehindApplied);
+    onStartBehindAppliedRef.current = onStartBehindApplied;
+    const onAutoplayBlockedRef = useRef(onAutoplayBlocked);
+    onAutoplayBlockedRef.current = onAutoplayBlocked;
+    const preferredLevelRef = useRef(preferredLevel);
+    preferredLevelRef.current = preferredLevel;
+
+    // Arranca CON sonido. Si el navegador lo bloquea (NotAllowedError: iPhone
+    // sin un toque previo, o una recarga), sigue en silencio en vez de quedarse
+    // quieto, y avisa a la sala para que ofrezca activarlo.
+    const startPlayback = (media: HTMLMediaElement) => {
+      Promise.resolve(media.play()).catch((e: unknown) => {
+        if (!(e instanceof DOMException && e.name === "NotAllowedError") || media.muted) return;
+        media.muted = true;
+        onAutoplayBlockedRef.current?.();
+        Promise.resolve(media.play()).catch(() => { /* ni en silencio: queda el botón de Play */ });
+      });
+    };
     // Pausa de sala, fin de la clase y perfil, legibles desde el efecto
     // principal (que corre también en cada recarga) y desde el handle sin
     // recrear la instancia de Hls.
@@ -255,6 +319,11 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
         try { video.currentTime = target; } catch { /* seekable todavía no listo */ }
       },
       goLive,
+      setVolume: (volume: number) => {
+        const media = videoRef.current;
+        if (!media) return;
+        try { media.volume = Math.min(1, Math.max(0, volume)); } catch { /* iOS: el volumen es del sistema */ }
+      },
     }));
 
     useEffect(() => {
@@ -284,18 +353,14 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       // que "smooth" (lowLatency queda en false). `?protocol=llhls&dvrEnabled=true`
       // da HTTP 500 — DVR y LL-HLS son mutuamente excluyentes, nunca combinar.
       const isDvr = latencyMode === "dvr";
-      const manifestUrl = lowLatency
-        ? `https://customer-${customerCode}.cloudflarestream.com/${liveInputId}/manifest/video.m3u8?protocol=llhls`
-        : isDvr
-        ? `https://customer-${customerCode}.cloudflarestream.com/${liveInputId}/manifest/video.m3u8?dvrEnabled=true`
-        : `https://customer-${customerCode}.cloudflarestream.com/${liveInputId}/manifest/video.m3u8`;
+      const manifestUrl = liveManifestUrl(customerCode, liveInputId, latencyMode);
 
       // Modo "dvr": persiste `video.currentTime` en localStorage cada 5s (y al
       // pausar) para retomar donde quedó el alumno. Wrapped en try/catch —
       // localStorage puede tirar en modo privado estricto de Safari.
       const getPositionStorageKey = () => {
         const key = resumeKeyRef.current;
-        return key ? `live-position:${key}` : null;
+        return key ? livePositionStorageKey(key) : null;
       };
       // Solo tiene sentido "retomar" si el alumno se había quedado ATRÁS a
       // propósito. Guardar siempre (incluso mirando el vivo al filo) hacía que
@@ -400,6 +465,44 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
         onFatalError?.(failure);
       };
       let didSeekToLiveEdge = false;
+      // "dvr": distancia al filo a restaurar después de una recarga completa.
+      let resumeBehindAfterReload: number | null = null;
+      let handleOnline: (() => void) | null = null;
+      let handlePlayUnblock: (() => void) | null = null;
+      let handleNativeLoaded: (() => void) | null = null;
+      let handleNativeError: (() => void) | null = null;
+      const canPlayNativeHls = video.canPlayType("application/vnd.apple.mpegurl") !== "";
+      // Solo audio en Apple: el HLS nativo de Safari es el mismo motor de las
+      // radios web, el que iOS deja sonar con la pantalla bloqueada. hls.js
+      // ahí depende de ManagedMediaSource, que el sistema regula en segundo
+      // plano. (Chrome en Android también dice "maybe" al HLS nativo y falla:
+      // por eso no basta con canPlayType.)
+      const isNative = canPlayNativeHls && (!Hls.isSupported() || (audioOnly && isAppleDevice()));
+      // Congela el último cuadro sobre el video mientras se recarga; se quita
+      // con el primer 'playing'. Si el video no tiene imagen todavía, nada.
+      const showFreezeFrame = () => {
+        const canvas = freezeFrameRef.current;
+        if (!canvas || video.readyState < 2 || !video.videoWidth) return;
+        try {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
+          canvas.style.opacity = "1";
+        } catch { /* sin canvas (o video sin CORS): queda el negro de siempre */ }
+      };
+      const hideFreezeFrame = () => {
+        if (freezeFrameRef.current) freezeFrameRef.current.style.opacity = "0";
+      };
+      // Pausado, la imagen nueva llega con el 'seeked' (no hay 'playing'):
+      // sin esto, retroceder en pausa dejaba el cuadro viejo encima.
+      const hideFreezeFrameWhenSeeked = () => {
+        if (video.readyState >= 2) hideFreezeFrame();
+      };
+      video.addEventListener("playing", hideFreezeFrame);
+      video.addEventListener("seeked", hideFreezeFrameWhenSeeked);
+      // Velocidad medida en el vivo anterior (lib/live/bandwidthMemory).
+      const savedBandwidth = readBandwidthEstimate();
+      let fragsLoaded = 0;
       let stallTimer: number | null = null;
       let pendingReloadTimeout: number | null = null;
       let reloadCooldownTimeout: number | null = null;
@@ -410,11 +513,13 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       let handleWatchdogSeek: ((e?: Event) => void) | null = null;
       let handleWatchdogTimeUpdate: (() => void) | null = null;
 
-      if (Hls.isSupported()) {
+      if (!isNative && Hls.isSupported()) {
         hls = new Hls({
           enableWorker: true,
           lowLatencyMode: lowLatency,
-          backBufferLength: lowLatency ? 6 : 10,
+          // "dvr": 60 s de lo ya visto. Con 10 s, retroceder un poco volvía a
+          // descargar el tramo y el salto tardaba; así es instantáneo.
+          backBufferLength: lowLatency ? 6 : isDvr ? 60 : 10,
           maxBufferLength: lowLatency ? 12 : 20,
           maxMaxBufferLength: lowLatency ? 24 : 40,
           // Solo para "smooth".
@@ -438,17 +543,23 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           //   como antes): 14 s con segmentos de 2 s, ~58 s con los de 8 s.
           //   hls.js prohíbe mezclar las variantes en segundos con las de
           //   cantidad: aquí van SOLO las de cantidad.
+          //   Fase 1 (2026-10-27): 4 segmentos de colchón (~8 s con segmentos de
+          //   2 s) en vez de 3: un segundo y medio más de atraso a cambio de
+          //   aguantar un corte de red sin congelar. El salto forzado al filo
+          //   queda en 9 (~18 s) para que el catch-up suave llegue antes.
           ...(lowLatency || isDvr
             ? {}
             : {
-                liveSyncDurationCount: 3,
-                liveMaxLatencyDurationCount: 7,
+                liveSyncDurationCount: 4,
+                liveMaxLatencyDurationCount: 9,
               }),
           liveDurationInfinity: true,
           startLevel: -1,
-          // Catchup: 10% en low (partes LL-HLS más chicas dan más margen sin
-          // que se note), 0% (sin catchup) en smooth como antes.
-          maxLiveSyncPlaybackRate: lowLatency ? 1.1 : 1.0,
+          // Catch-up: tras una traba el atraso se recupera acelerando apenas,
+          // como YouTube y Twitch. 4% en smooth es imperceptible (ni la voz
+          // cambia de tono); sin esto cada traba sumaba atraso hasta el salto
+          // forzado. 10% en low; en dvr nada: el alumno está donde quiso estar.
+          maxLiveSyncPlaybackRate: lowLatency ? 1.1 : isDvr ? 1.0 : 1.04,
           // NO bajar maxStarvationDelay/maxLoadingDelay en "dvr": se probó en
           // vivo (2026-09-23) y el ABR sí caía a 240p tras cada seek, pero el
           // tiempo hasta ver imagen no mejoró (3.5s vs 3.7s, dentro del ruido).
@@ -459,7 +570,23 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           abrBandWidthUpFactor: lowLatency ? 0.5 : 0.7,
           abrEwmaFastLive: 3.0,
           abrEwmaSlowLive: 9.0,
-          fragLoadingMaxRetry: 6,
+          // Fase 2: con una velocidad ya medida, arrancar con ella y sin la
+          // "prueba" de hls.js (primer pedazo en la calidad más baja = los
+          // primeros segundos borrosos, y lo mismo en cada paso a Clase
+          // completa). Sin medición, la prueba sigue: es lo seguro.
+          ...(savedBandwidth
+            ? { abrEwmaDefaultEstimate: savedBandwidth, testBandwidth: false }
+            : {}),
+          // Una conexión colgada se detecta a los 4 s (por defecto eran 10 s,
+          // con solo ~8 s de video de reserva: la traba clásica del celular).
+          fragLoadPolicy: {
+            default: {
+              maxTimeToFirstByteMs: 4000,
+              maxLoadTimeMs: 20000,
+              timeoutRetry: { maxNumRetry: 4, retryDelayMs: 0, maxRetryDelayMs: 0 },
+              errorRetry: { maxNumRetry: 6, retryDelayMs: 1000, maxRetryDelayMs: 8000 },
+            },
+          },
           manifestLoadingMaxRetry: 4,
           levelLoadingMaxRetry: 4,
         });
@@ -542,11 +669,10 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
             const raw = localStorage.getItem(key);
             if (!raw) return false;
             const saved = JSON.parse(raw) as { position?: number; savedAt?: number };
-            const MAX_AGE_MS = 12 * 60 * 60 * 1000;
             const isFresh =
               Number.isFinite(saved.position) &&
               Number.isFinite(saved.savedAt) &&
-              Date.now() - (saved.savedAt as number) < MAX_AGE_MS;
+              Date.now() - (saved.savedAt as number) < SAVED_POSITION_MAX_AGE_MS;
             if (!isFresh) return false;
             const start = video.seekable.start(0);
             const end = video.seekable.end(video.seekable.length - 1);
@@ -564,15 +690,52 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           }
         };
 
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        // Modo "dvr" pedido desde Fluidez: arrancar donde el alumno soltó la
+        // barra, medido como distancia al filo (igual en las dos playlists).
+        let startBehindApplied = false;
+        const tryStartBehind = (): boolean => {
+          const behind = startBehindRef.current;
+          if (!isDvr || didSeekToLiveEdge || startBehindApplied || behind == null || !video.seekable.length) return false;
+          const start = video.seekable.start(0);
+          const end = video.seekable.end(video.seekable.length - 1);
+          const target = clampToSeekable(video.seekable, Math.max(start, end - behind));
+          if (target === null) return false;
+          try { video.currentTime = target; } catch { return false; }
+          startBehindApplied = true;
+          // Es un retroceso deliberado: se guarda para retomar.
+          deliberateRewind = true;
+          didSeekToLiveEdge = true;
+          onStartBehindAppliedRef.current?.();
+          return true;
+        };
+
+        // Guarda la velocidad medida cada 5 pedazos (desde el 3.º: antes es
+        // la estimación inicial, no una medición) y al cerrar este player.
+        hls.on(Hls.Events.FRAG_LOADED, () => {
+          fragsLoaded += 1;
+          if (fragsLoaded >= 3 && fragsLoaded % 5 === 3) saveBandwidthEstimate(hls?.bandwidthEstimate ?? NaN);
+        });
+
+        hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
           // Este handler corre también tras cada recarga por recuperación
           // (H8). Si el usuario pausó a propósito, no lo reactivamos.
           // Tampoco con la sala en pausa: una recarga durante la pausa
           // arrancaba el video debajo del overlay.
           if (autoPlay && !userPausedRef.current && !roomPausedRef.current) {
-            video.play().catch(() => {
-              // Autoplay con sonido bloqueado por el browser — el overlay "Activar sonido" lo resuelve
-            });
+            startPlayback(video);
+          }
+          // Solo audio: si el audio viaja aparte del video (un grupo AUDIO en
+          // el manifest), basta la calidad más baja: el sonido es el mismo y
+          // gasta muchos menos datos. Si viaja mezclado con cada calidad, no
+          // se toca: bajar la imagen podría bajar también el sonido.
+          if (audioOnly && (data.audioTracks?.length ?? 0) > 0) {
+            hls!.autoLevelCapping = 0;
+          }
+          // La calidad elegida a mano sobrevive a recargas y cambios de modo.
+          // Al arrancar no hay nada en pantalla: el cambio inmediato no se nota.
+          const preferred = preferredLevelRef.current;
+          if (!audioOnly && preferred >= 0 && preferred < hls!.levels.length) {
+            hls!.currentLevel = preferred;
           }
           const parsed = computeLevels(hls!);
           setLevels(parsed);
@@ -589,7 +752,7 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           // punto (puede pasar, MANIFEST_PARSED dispara antes de cargar
           // fragmentos) simplemente no restauramos — el seek al filo del vivo
           // de siempre (LEVEL_UPDATED, más abajo) sigue su curso normal.
-          if (isDvr) tryRestoreSavedPosition();
+          if (isDvr && !tryStartBehind()) tryRestoreSavedPosition();
         });
 
         // Diagnóstico LL-HLS — TEMPORAL. Loggea una vez si el manifest expone los
@@ -624,9 +787,22 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
         // perfil de latencia elegido (smooth 3 segmentos / low ~2-3s del edge).
         hls.on(Hls.Events.LEVEL_UPDATED, () => {
           if (didSeekToLiveEdge || !hls) return;
-          // En "dvr" la posición guardada gana sobre el filo del vivo. Acá
-          // `video.seekable` ya tiene datos, a diferencia de MANIFEST_PARSED.
-          if (tryRestoreSavedPosition()) return;
+          // Tras una recarga en "dvr", el alumno vuelve a la misma distancia del
+          // filo: antes la recuperación lo tiraba al vivo.
+          if (resumeBehindAfterReload != null && video.seekable.length) {
+            const end = video.seekable.end(video.seekable.length - 1);
+            const target = clampToSeekable(video.seekable, end - resumeBehindAfterReload);
+            resumeBehindAfterReload = null;
+            if (target !== null) {
+              try { video.currentTime = target; } catch { /* seekable todavía no listo */ }
+              didSeekToLiveEdge = true;
+              return;
+            }
+          }
+          // En "dvr" el punto pedido y la posición guardada ganan sobre el filo
+          // del vivo. Acá `video.seekable` ya tiene datos, a diferencia de
+          // MANIFEST_PARSED.
+          if (tryStartBehind() || tryRestoreSavedPosition()) return;
           const edge = hls.liveSyncPosition;
           if (edge != null && Number.isFinite(edge)) {
             try { video.currentTime = edge; } catch { /* seekable todavía no listo */ }
@@ -643,12 +819,37 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
         // Backoff exponencial + tope total de recargas. Antes se reintentaba
         // sin límite (con solo una ventana de 4s anti-cascada): un fallo
         // persistente entraba en loop de recargas infinito.
+        //
+        // Fase 1 (2026-10-27): la recarga completa es el ÚLTIMO paso, no el
+        // primero. `loadSource` con la misma URL desconecta y reconecta el
+        // <video> (hls.js: detachMedia/attachMedia): pantalla negra, buffer
+        // perdido y salto al filo. Ahora, por episodio:
+        //   1. reanudar la descarga (`startLoad`) sin tocar el video;
+        //   2. si vuelve a fallar, recarga completa con backoff, mostrando el
+        //      último cuadro y volviendo a la misma posición en "dvr".
         const MAX_RELOAD_ATTEMPTS = 6;
         let reloadAttempts = 0;
+        // Ya se intentó la recuperación suave en este episodio (se limpia con
+        // reproducción estable). El 413 sostenido de Cloudflare necesita la
+        // recarga completa: por eso la suave se intenta una sola vez.
+        let softRecoveryTried = false;
+
+        const softRecover = (reason: string) => {
+          if (!hls) return;
+          console.warn(`[LiveHLSPlayer] reanudando la descarga sin recargar (${reason})`);
+          softRecoveryTried = true;
+          try { hls.startLoad(); } catch { /* sin medios: la recarga completa lo resuelve */ }
+        };
 
         const executeReload = (reason: string) => {
           if (!hls) return;
           console.warn(`[LiveHLSPlayer] recargando el manifest (${reason})`);
+          showFreezeFrame();
+          // En "dvr" se vuelve a la misma distancia del filo, no al vivo.
+          if (isDvr && video.seekable.length) {
+            const end = video.seekable.end(video.seekable.length - 1);
+            if (Number.isFinite(end)) resumeBehindAfterReload = Math.max(0, end - video.currentTime);
+          }
           didSeekToLiveEdge = false;
           try {
             hls.stopLoad();
@@ -677,6 +878,19 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           if (reloadAttempts >= MAX_RELOAD_ATTEMPTS) {
             console.error(`[LiveHLSPlayer] se alcanzó el máximo de ${MAX_RELOAD_ATTEMPTS} reintentos, abandonando`);
             giveUp(reason);
+            return;
+          }
+          if (!softRecoveryTried) {
+            // Primer paso del episodio: reanudar sin cortar el video.
+            reloadingRef.current = true;
+            pendingReloadTimeout = window.setTimeout(() => {
+              pendingReloadTimeout = null;
+              softRecover(reason);
+              reloadCooldownTimeout = window.setTimeout(() => {
+                reloadCooldownTimeout = null;
+                reloadingRef.current = false;
+              }, 1000);
+            }, 1000);
             return;
           }
           reloadingRef.current = true;
@@ -713,6 +927,7 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
             reloadAttempts = 0;
             mediaErrorRetries = 0;
             lastHlsFailure = null;
+            softRecoveryTried = false;
           }, STABLE_PLAYBACK_MS);
         };
         video.addEventListener("playing", handlePlaybackRecovered);
@@ -743,12 +958,19 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
             mediaErrorRetries++;
             if (mediaErrorRetries > 2) {
+              // Antes se rendía acá y dejaba una imagen congelada y muda hasta
+              // que el watchdog recargaba. Ahora pasa directo a recargar.
               console.error("[LiveHLSPlayer] media error, unrecoverable", data.details);
               onError?.(`Error de reproducción: ${data.details}`);
               if (!fatalReported) reportMediaFailure("live", { message: String(data.details), hlsType: "media", detail: { mode: latencyModeRef.current } });
+              softRecoveryTried = true;
+              reloadFromScratch(`media: ${data.details}`);
               return;
             }
             console.warn("[LiveHLSPlayer] media error, recovering...", data.details);
+            // Segundo intento: el códec de audio es la causa más común de un
+            // error de media que `recoverMediaError` solo no arregla.
+            if (mediaErrorRetries === 2) hls!.swapAudioCodec();
             hls!.recoverMediaError();
           } else {
             console.error("[LiveHLSPlayer] fatal error", data);
@@ -761,6 +983,38 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
         // no avanza. Si pasa STALL_SECONDS así, recargamos el manifest. Es la red de
         // seguridad detrás de la recuperación por evento — el "F5 automático".
         const STALL_SECONDS = 12;
+        // Antes de recargar, a los 5 s se intenta lo barato: saltar un hueco del
+        // buffer (empujón) o reanudar la descarga, sin cortar el video.
+        const STALL_SOFT_SECONDS = 5;
+        // Pausado sin que nadie lo pidiera (red que vuelve, una llamada, la
+        // tecla de pausa del sistema): se reanuda a los 3 s.
+        const UNEXPECTED_PAUSE_SECONDS = 3;
+        let pausedFor = 0;
+        let playBlocked = false;
+        const resumeIfUnexpectedlyPaused = () => {
+          const shouldPlay =
+            autoPlay &&
+            !userPausedRef.current &&
+            !roomPausedRef.current &&
+            !streamEndedRef.current &&
+            !video.ended &&
+            document.visibilityState === "visible";
+          if (!video.paused || !shouldPlay || playBlocked) {
+            pausedFor = 0;
+            return;
+          }
+          pausedFor += 1;
+          if (pausedFor < UNEXPECTED_PAUSE_SECONDS) return;
+          pausedFor = 0;
+          try {
+            Promise.resolve(video.play()).catch((e: unknown) => {
+              // El navegador no deja reproducir (sonido sin gesto): no insistir.
+              if (e instanceof DOMException && e.name === "NotAllowedError") playBlocked = true;
+            });
+          } catch { /* sin soporte de media */ }
+        };
+        handlePlayUnblock = () => { playBlocked = false; };
+        video.addEventListener("play", handlePlayUnblock);
         // Segundos seguidos avanzando para dar por superado un `onFatalError`.
         const RECOVERED_SECONDS = 5;
         let lastTime = video.currentTime;
@@ -794,7 +1048,14 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
         video.addEventListener("seeked", handleWatchdogSeek);
         stallTimer = window.setInterval(() => {
           if (!video.seeking) preSeekTime = video.currentTime;
-          if (!hls || video.paused || video.ended) { stalledFor = 0; advancingFor = 0; lastTime = video.currentTime; return; }
+          if (!hls || video.paused || video.ended) {
+            stalledFor = 0;
+            advancingFor = 0;
+            lastTime = video.currentTime;
+            resumeIfUnexpectedlyPaused();
+            return;
+          }
+          pausedFor = 0;
           // Avance = `currentTime` cambió, hacia adelante O hacia atrás. Con
           // `>` solo se contaba hacia adelante: tras retroceder 10 min quedaba
           // por debajo de `lastTime`, cada tick contaba como "sin avance" y a
@@ -814,25 +1075,71 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           }
           advancingFor = 0;
           stalledFor += 1;
+          if (stalledFor === STALL_SOFT_SECONDS && !softRecoveryTried) {
+            const buffered = video.buffered;
+            let nudged = false;
+            for (let i = 0; buffered && i < buffered.length; i++) {
+              // Hay video descargado justo adelante: es un hueco, se salta.
+              if (buffered.start(i) > video.currentTime && buffered.start(i) - video.currentTime < 1) {
+                try { video.currentTime = buffered.start(i) + 0.05; nudged = true; } catch { /* sin seekable */ }
+                break;
+              }
+            }
+            if (nudged) console.warn("[LiveHLSPlayer] empujón sobre un hueco del buffer");
+            else softRecover(`sin avance durante ${STALL_SOFT_SECONDS}s`);
+          }
           if (stalledFor >= STALL_SECONDS) {
             stalledFor = 0;
             reloadFromScratch(`sin avance durante ${STALL_SECONDS}s`);
           }
         }, 1000);
-      } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-        // iOS Safari y desktop Safari: HLS nativo (no necesita hls.js)
+
+        // La red volvió: reanudar la descarga ya, sin esperar al watchdog.
+        handleOnline = () => {
+          if (!hls) return;
+          console.info("[LiveHLSPlayer] la conexión volvió: reanudando la descarga");
+          try { hls.startLoad(); } catch { /* sin medios */ }
+        };
+        window.addEventListener("online", handleOnline);
+      } else if (isNative) {
+        // HLS nativo: solo iPhone con iOS anterior a 17.1 (desde 17.1 hls.js
+        // usa ManagedMediaSource). Antes no tenía ningún manejo: un error dejaba
+        // la imagen congelada y retroceder llevaba al vivo. Ahora lo mínimo:
+        // arrancar atrás del filo si se pidió, y reintentar ante un error.
+        const MAX_NATIVE_RETRIES = 5;
+        let nativeRetries = 0;
         video.src = manifestUrl;
-        if (autoPlay) {
-          video.addEventListener(
-            "loadedmetadata",
-            () => {
-              if (!userPausedRef.current && !roomPausedRef.current) {
-                video.play().catch(() => {});
-              }
-            },
-            { once: true },
-          );
-        }
+        handleNativeLoaded = () => {
+          const behind = startBehindRef.current;
+          if (isDvr && behind != null && video.seekable.length) {
+            const end = video.seekable.end(video.seekable.length - 1);
+            const target = clampToSeekable(video.seekable, end - behind);
+            if (target !== null) {
+              try { video.currentTime = target; } catch { /* seekable todavía no listo */ }
+              onStartBehindAppliedRef.current?.();
+            }
+          }
+          if (autoPlay && !userPausedRef.current && !roomPausedRef.current) {
+            startPlayback(video);
+          }
+        };
+        handleNativeError = () => {
+          if (nativeRetries >= MAX_NATIVE_RETRIES) {
+            giveUp("error del reproductor nativo");
+            return;
+          }
+          const delay = Math.min(8000, 1000 * 2 ** nativeRetries);
+          nativeRetries++;
+          showFreezeFrame();
+          if (pendingReloadTimeout !== null) window.clearTimeout(pendingReloadTimeout);
+          pendingReloadTimeout = window.setTimeout(() => {
+            pendingReloadTimeout = null;
+            video.src = manifestUrl;
+            video.load();
+          }, delay);
+        };
+        video.addEventListener("loadedmetadata", handleNativeLoaded);
+        video.addEventListener("error", handleNativeError);
       } else {
         onError?.("HLS no soportado en este navegador");
       }
@@ -860,6 +1167,21 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
           video.removeEventListener("waiting", clearStableTimer);
           video.removeEventListener("stalled", clearStableTimer);
         }
+        if (handleOnline) window.removeEventListener("online", handleOnline);
+        if (handlePlayUnblock) video.removeEventListener("play", handlePlayUnblock);
+        video.removeEventListener("playing", hideFreezeFrame);
+        video.removeEventListener("seeked", hideFreezeFrameWhenSeeked);
+        // Cambio de modo (Fluidez ⇄ Clase completa): el player se rearma sobre
+        // el mismo <video> y quedaba ~3,5 s en negro. Queda el último cuadro
+        // hasta que el nuevo tenga imagen. Si se desmonta, el canvas se va con él.
+        showFreezeFrame();
+        if (hls && fragsLoaded >= 3) saveBandwidthEstimate(hls.bandwidthEstimate);
+        if (handleNativeLoaded) video.removeEventListener("loadedmetadata", handleNativeLoaded);
+        if (handleNativeError) video.removeEventListener("error", handleNativeError);
+        if (isNative) {
+          video.removeAttribute("src");
+          video.load();
+        }
         reloadingRef.current = false;
         if (hls) {
           hls.destroy();
@@ -876,6 +1198,8 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
     // inicial (donde `roomPaused` arranca en `false` y el <video> arranca
     // pausado por defecto) — ese arranque ya lo maneja MANIFEST_PARSED/autoPlay.
     const isFirstRoomPausedRunRef = useRef(true);
+    // Atraso a partir del cual volver a la pestaña lleva al vivo (en vivo normal).
+    const FAR_BEHIND_ON_RETURN_S = 30;
     useEffect(() => {
       const video = videoRef.current;
       if (!video) return;
@@ -887,43 +1211,61 @@ const LiveHLSPlayer = forwardRef<LiveHLSPlayerHandle, LiveHLSPlayerProps>(
       } else if (roomPaused) {
         if (!video.paused) video.pause();
       } else if (!userPausedRef.current && video.paused) {
-        video.play().catch(() => {});
+        startPlayback(video);
       }
 
       // La pestaña backgrounded en mobile Safari/Chrome pausa el <video>
       // "solo": ni pausa de sala ni pausa del usuario. Al volver a foco,
       // reintentamos play() si nada legítimo lo tiene pausado.
       const handleVisibility = () => {
-        if (
-          document.visibilityState === "visible" &&
-          video.paused &&
-          !userPausedRef.current &&
-          !roomPaused
-        ) {
-          video.play().catch(() => {});
+        if (document.visibilityState !== "visible") return;
+        // Volvió muy atrasado (el navegador frena las pestañas ocultas): en el
+        // vivo normal, ir al vivo. En "dvr" no: ahí el atraso es elegido.
+        if (latencyModeRef.current !== "dvr" && !roomPaused && video.seekable.length) {
+          const target = clampToSeekable(video.seekable, getLiveSyncTarget(video));
+          if (target !== null && target - video.currentTime > FAR_BEHIND_ON_RETURN_S) {
+            try { video.currentTime = target; } catch { /* seekable todavía no listo */ }
+          }
+        }
+        if (video.paused && !userPausedRef.current && !roomPaused) {
+          startPlayback(video);
         }
       };
       document.addEventListener("visibilitychange", handleVisibility);
       return () => document.removeEventListener("visibilitychange", handleVisibility);
     }, [roomPaused]);
 
+    // Sin el atributo `autoPlay`: el navegador lo reaplica tras cada recarga
+    // del <video> y arrancaba solo, saltándose la pausa del alumno y la de la
+    // sala. El arranque lo hace el player, con esos chequeos (MANIFEST_PARSED).
+    const mediaProps = {
+      muted,
+      preload: "auto",
+      className,
+      onPlay: () => {
+        userPausedRef.current = false;
+        onPlay?.();
+      },
+      onPause,
+      onWaiting,
+      onPlaying,
+      onEnded,
+    } as const;
+    // Solo audio usa el mismo player (recuperación, trabas, vivo y clase
+    // completa) sobre un <audio>; todo lo que toca es API común de
+    // HTMLMediaElement. La imagen congelada no aplica: no hay imagen.
+    if (audioOnly) {
+      return <audio ref={videoRef as unknown as RefObject<HTMLAudioElement>} {...mediaProps} />;
+    }
     return (
-      <video
-        ref={videoRef}
-        muted={muted}
-        playsInline
-        autoPlay={autoPlay}
-        preload="auto"
-        className={className}
-        onPlay={() => {
-          userPausedRef.current = false;
-          onPlay?.();
-        }}
-        onPause={onPause}
-        onWaiting={onWaiting}
-        onPlaying={onPlaying}
-        onEnded={onEnded}
-      />
+      <>
+        <video ref={videoRef} playsInline {...mediaProps} />
+        <canvas
+          ref={freezeFrameRef}
+          aria-hidden
+          className="pointer-events-none absolute inset-0 h-full w-full object-contain opacity-0 transition-opacity duration-300"
+        />
+      </>
     );
   },
 );

@@ -20,6 +20,7 @@ export function LiveAudioPrompt({ visible, retryHint, onEnable, onDismiss }: Liv
       {visible && (
         <motion.div
           key="audio-prompt"
+          data-audio-control
           role="group"
           aria-label="Sonido del en vivo"
           initial={{ opacity: 0, y: 8 }}
@@ -28,7 +29,7 @@ export function LiveAudioPrompt({ visible, retryHint, onEnable, onDismiss }: Liv
           transition={{ duration: 0.2 }}
           className="absolute left-3 sm:left-5 bottom-16 sm:bottom-20 z-[33] flex flex-col items-start gap-1.5 max-w-[calc(100%-7rem)]"
         >
-          <div className="flex items-center gap-1 p-1 rounded-full bg-black/75 backdrop-blur-md border border-brand/40 shadow-lg">
+          <div className="flex items-center gap-1 p-1 rounded-full bg-black/85 border border-brand/40 shadow-lg">
             <button
               type="button"
               onClick={onEnable}
