@@ -14,6 +14,18 @@ export function liveResumeKey(live: { id: string; starts_at?: string | null }): 
   return `${live.id}:${live.starts_at}`;
 }
 
+/**
+ * Olvida la posición guardada de una sala. Se usa al volver al vivo: el alumno
+ * ya no está atrasado, así que al reingresar debe entrar al directo y no al
+ * punto viejo (el borrado del player solo corre en Clase completa, y "EN VIVO"
+ * cambia a Fluidez antes de que ocurra).
+ */
+export function clearSavedLivePosition(resumeKey: string): void {
+  try {
+    localStorage.removeItem(livePositionStorageKey(resumeKey));
+  } catch { /* localStorage no disponible (modo privado) */ }
+}
+
 /** ¿Hay una posición fresca guardada para esta sala? localStorage puede fallar: entonces no. */
 export function hasSavedLivePosition(resumeKey: string, now = Date.now()): boolean {
   try {
