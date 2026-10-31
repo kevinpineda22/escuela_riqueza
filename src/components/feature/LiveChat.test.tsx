@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, act, within } from "@testing-library/react";
 import LiveChat from "./LiveChat";
 import { supabase } from "@/lib/supabase";
@@ -1301,5 +1301,70 @@ describe("LiveChat — borrados concurrentes y reconexión (2026-10-09)", () => 
 
     expect(screen.queryByText("se borra")).not.toBeInTheDocument();
     expect(screen.getByText("Hola")).toBeInTheDocument();
+  });
+});
+
+describe("LiveChat — vigilante de reconexión (2026-10-31)", () => {
+  const messagesChannelOpens = () =>
+    (supabase.channel as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(([n]) => String(n).startsWith("live_messages_")).length;
+  const lastStatusCallback = () => {
+    const calls = messagesChannel.subscribe.mock.calls;
+    return calls[calls.length - 1][0] as (status: string) => void;
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupChannelChaining();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    (supabase.auth.getSession as ReturnType<typeof vi.fn>).mockResolvedValue({ data: { session: null } });
+    from.mockImplementation((table: string) => {
+      if (table === "live_message_reactions") {
+        return { select: () => ({ eq: () => ({ in: () => Promise.resolve({ data: [], error: null }) }) }) };
+      }
+      return {
+        select: () => ({
+          eq: () => ({ order: () => ({ limit: () => Promise.resolve({ data: [], error: null }) }) }),
+          in: () => Promise.resolve({ data: [] }),
+        }),
+        insert,
+      };
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("si el canal queda sin conectar más de 15 s, lo cierra y abre uno nuevo", async () => {
+    await renderChat();
+    act(() => lastStatusCallback()("SUBSCRIBED"));
+    act(() => lastStatusCallback()("CHANNEL_ERROR"));
+    expect(messagesChannelOpens()).toBe(1);
+
+    act(() => { vi.advanceTimersByTime(15_000); });
+
+    expect(supabase.removeChannel).toHaveBeenCalled();
+    expect(messagesChannelOpens()).toBe(2);
+  });
+
+  it("si vuelve a conectar antes de los 15 s, no reabre", async () => {
+    await renderChat();
+    act(() => lastStatusCallback()("SUBSCRIBED"));
+    act(() => lastStatusCallback()("CHANNEL_ERROR"));
+    act(() => lastStatusCallback()("SUBSCRIBED"));
+
+    act(() => { vi.advanceTimersByTime(20_000); });
+
+    expect(messagesChannelOpens()).toBe(1);
+  });
+
+  it("al recuperar internet sin conexión, reabre al instante", async () => {
+    await renderChat();
+    act(() => lastStatusCallback()("SUBSCRIBED"));
+    act(() => lastStatusCallback()("TIMED_OUT"));
+
+    act(() => { window.dispatchEvent(new Event("online")); });
+
+    expect(messagesChannelOpens()).toBe(2);
   });
 });
