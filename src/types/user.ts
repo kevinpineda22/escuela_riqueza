@@ -25,4 +25,9 @@ export interface User {
    *  guardadas antes de este campo quedan `undefined` y el guard NO las bloquea
    *  (solo bloquea cuando es explícitamente `false`). */
   emailConfirmed?: boolean;
+  /** Entró con una contraseña temporal (alta masiva): debe crear la suya antes
+   *  de usar la plataforma. Sale de `app_metadata`, que el alumno no puede
+   *  editar, y la base la borra sola al cambiar la contraseña
+   *  (sql/migrate-must-change-password.sql). */
+  mustChangePassword?: boolean;
 }

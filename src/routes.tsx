@@ -10,6 +10,7 @@ import RequireAuth from "@/components/layout/RequireAuth";
 // subidor de videos) se bajaba aunque el visitante solo mirara la portada.
 const AuthPage = lazy(() => import("@/pages/public/AuthPage"));
 const ResetPassword = lazy(() => import("@/pages/public/ResetPassword"));
+const CreatePassword = lazy(() => import("@/pages/public/CreatePassword"));
 const EmailConfirmed = lazy(() => import("@/pages/public/EmailConfirmed"));
 const Plans = lazy(() => import("@/pages/public/Plans"));
 const NotFound = lazy(() => import("@/pages/public/NotFound"));
@@ -109,6 +110,16 @@ const AppRoutes = () => {
 
         {/* Link público de live — sin login, gateado por share_token en la RPC */}
         <Route path="/live/:token" element={<PageTransition><PublicLiveRoom /></PageTransition>} />
+
+        {/* Primer ingreso con contraseña temporal: RequireAuth manda acá. */}
+        <Route
+          path="/crear-contrasena"
+          element={
+            <RequireAuth>
+              <PageTransition><CreatePassword /></PageTransition>
+            </RequireAuth>
+          }
+        />
 
         {/* Estudiantes (cualquier plan logueado) */}
         <Route

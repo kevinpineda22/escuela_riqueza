@@ -26,6 +26,7 @@ const mapProfileToUser = (profileData: any, authUser: any, plan: string): User =
   plan: (plan as any) || PLANS.FREE,
   createdAt: profileData.created_at,
   emailConfirmed: Boolean(authUser?.email_confirmed_at),
+  mustChangePassword: authUser?.app_metadata?.must_change_password === true,
 });
 
 export async function signIn(input: LoginInput): Promise<AuthResult> {
@@ -162,6 +163,12 @@ export async function updatePassword(newPassword: string): Promise<void> {
   const { error } = await supabase.auth.updateUser({ password: newPassword });
 
   if (error) {
+    if (error.code === "same_password") {
+      throw new ApiError("same_password", "La nueva contraseña debe ser distinta a la anterior.", 422);
+    }
+    if (error.code === "weak_password") {
+      throw new ApiError("weak_password", "Esa contraseña es muy fácil de adivinar. Prueba con una más larga o con números y símbolos.", 422);
+    }
     if (error.message.toLowerCase().includes("session")) {
       throw new ApiError(
         "no_recovery_session",
@@ -170,6 +177,32 @@ export async function updatePassword(newPassword: string): Promise<void> {
       );
     }
     throw new ApiError("update_password_error", error.message, 400);
+  }
+}
+
+/**
+ * Primer ingreso con contraseña temporal: guarda la nueva y trae una sesión
+ * fresca. La marca `must_change_password` la borra la base al cambiar la
+ * contraseña, pero la sesión anterior todavía la tiene adentro: sin refrescar,
+ * la app seguiría pidiendo el cambio.
+ */
+export async function completeRequiredPasswordChange(newPassword: string): Promise<User | null> {
+  await updatePassword(newPassword);
+  await supabase.auth.refreshSession();
+  return getCurrentUser();
+}
+
+/**
+ * Link de un correo de Supabase con `token_hash` (plantillas en
+ * docs/supabase-templates/). El enlace se gasta recién acá, cuando la persona
+ * toca el botón: Outlook y Hotmail abren los links del correo antes que el
+ * alumno para revisarlos, y con un link que se gasta al abrirlo le llegaba
+ * "enlace vencido".
+ */
+export async function verifyEmailLink(tokenHash: string, type: "recovery" | "email"): Promise<void> {
+  const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
+  if (error) {
+    throw new ApiError("link_invalid", "Este enlace expiró o ya fue utilizado.", 401);
   }
 }
 
