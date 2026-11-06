@@ -10,24 +10,28 @@ import {
   ShieldAlert,
   Trash2,
   Edit,
-  Loader2,
   CheckCircle2,
   XCircle,
   CreditCard,
   Clock,
+  KeyRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   fetchAdminUsers,
   updateUserStatus,
-  updateUserPlan,
   fetchUserSubscription,
   deleteUser,
+  resendAccess,
+  type AccessDelivery,
   type AdminUser,
   type SubscriptionInfo,
 } from "@/lib/api/admin/users";
 import { toast } from "@/components/ui/toaster";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from "@/hooks/useAuth";
+import { EditUserForm } from "@/components/feature/admin/users/EditUserForm";
+import { AccessDeliveryNotice } from "@/components/feature/admin/users/AccessDeliveryNotice";
 import type { Plan } from "@/types/user";
 
 const planColors: Record<Plan, string> = {
@@ -64,12 +68,13 @@ const formatDateTime = (dateStr: string) => {
 const AdminUserDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user: currentUser } = useAuth();
   const [user, setUser] = useState<AdminUser | null>(null);
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
-  const [showPlanEditor, setShowPlanEditor] = useState(false);
-  const [newPlan, setNewPlan] = useState<Plan>("free");
+  const [isEditing, setIsEditing] = useState(false);
+  const [delivery, setDelivery] = useState<AccessDelivery | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -84,7 +89,6 @@ const AdminUserDetail = () => {
           return;
         }
         setUser(found);
-        setNewPlan(found.plan);
         const sub = await fetchUserSubscription(id);
         setSubscription(sub);
       } catch (err) {
@@ -115,20 +119,26 @@ const AdminUserDetail = () => {
     }
   };
 
-  const handleSavePlan = async () => {
+  const handleSaved = async (updated: AdminUser) => {
+    setUser(updated);
+    setIsEditing(false);
+    toast.success("Usuario actualizado");
+    // El plan puede haber cambiado la vigencia.
+    try {
+      setSubscription(await fetchUserSubscription(updated.id));
+    } catch {
+      // La edición ya se guardó; la vigencia se ve al recargar.
+    }
+  };
+
+  const handleResendAccess = async () => {
     if (!user) return;
+    if (!window.confirm(`¿Generar una contraseña temporal nueva para ${user.full_name} y enviarle el correo de acceso? La contraseña actual deja de funcionar.`)) return;
     try {
       setIsMutating(true);
-      await updateUserPlan(user.id, newPlan);
-      const refreshed = await fetchAdminUsers();
-      const found = refreshed.find((u) => u.id === user.id);
-      if (found) setUser(found);
-      const sub = await fetchUserSubscription(user.id);
-      setSubscription(sub);
-      setShowPlanEditor(false);
-      toast.success("Plan actualizado");
+      setDelivery(await resendAccess(user.id));
     } catch (err) {
-      toast.error("Error cambiando plan", { description: (err as Error).message });
+      toast.error("Error reenviando el acceso", { description: (err as Error).message });
     } finally {
       setIsMutating(false);
     }
@@ -271,15 +281,15 @@ const AdminUserDetail = () => {
                   {subscription.status}
                 </p>
               </div>
-              {subscription.current_period_end && (
-                <div className="space-y-1 sm:col-span-2">
-                  <p className="text-xs text-foreground-muted uppercase tracking-wider">Período actual hasta</p>
-                  <p className="text-fg-85 text-sm flex items-center gap-1.5">
-                    <Clock size={14} className="text-accent" />
-                    {formatDateTime(subscription.current_period_end)}
-                  </p>
-                </div>
-              )}
+              <div className="space-y-1 sm:col-span-2">
+                <p className="text-xs text-foreground-muted uppercase tracking-wider">Vigencia</p>
+                <p className="text-fg-85 text-sm flex items-center gap-1.5">
+                  <Clock size={14} className="text-accent" />
+                  {subscription.plan === "vip" || !subscription.current_period_end
+                    ? "Sin vencimiento"
+                    : `Hasta el ${formatDateTime(subscription.current_period_end)}`}
+                </p>
+              </div>
             </div>
           ) : (
             <div className="text-center py-6 text-foreground-muted">
@@ -317,63 +327,46 @@ const AdminUserDetail = () => {
           <Shield size={18} className="text-accent" /> Acciones administrativas
         </h2>
 
-        {showPlanEditor ? (
-          <div className="space-y-4">
-            <p className="text-sm text-foreground-muted">Selecciona el nuevo plan:</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {(["free", "individual", "vip"] as Plan[]).map((p) => (
-                <label
-                  key={p}
-                  className={cn(
-                    "flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all",
-                    newPlan === p ? "border-accent bg-brand/10" : "border-line-subtle bg-black/30 hover:border-ink/30 light:bg-surface-panel"
-                  )}
-                >
-                  <input
-                    type="radio"
-                    name="plan"
-                    value={p}
-                    checked={newPlan === p}
-                    onChange={() => setNewPlan(p)}
-                    className="accent-gold"
-                  />
-                  <div>
-                    <p className="text-foreground-strong font-bold capitalize text-sm">{p}</p>
-                    <p className="text-foreground-muted text-[11px]">
-                      {p === "free" && "Acceso básico con publicidad"}
-                      {p === "individual" && "Catálogo completo sin anuncios"}
-                      {p === "vip" && "Todo + lives + mentoría"}
-                    </p>
-                  </div>
-                </label>
-              ))}
-            </div>
-            <div className="flex flex-col sm:flex-row gap-2 justify-end">
+        {delivery && user.email && (
+          <div className="mb-5 rounded-2xl border border-brand/30 bg-brand/5 p-4 sm:p-5">
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <p className="font-bold text-foreground-strong flex items-center gap-2">
+                <KeyRound size={16} className="text-accent" /> Acceso reenviado
+              </p>
               <button
-                onClick={() => setShowPlanEditor(false)}
-                disabled={isMutating}
-                className="px-4 py-2.5 text-sm text-fg-70 hover:text-foreground-strong transition-colors"
+                type="button"
+                onClick={() => setDelivery(null)}
+                className="text-xs text-fg-60 hover:text-foreground-strong"
               >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSavePlan}
-                disabled={isMutating}
-                className="px-5 py-2.5 bg-brand hover:bg-brand-hover text-on-brand font-bold rounded-xl text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {isMutating && <Loader2 size={14} className="animate-spin" />}
-                Guardar cambios
+                Cerrar
               </button>
             </div>
+            <AccessDeliveryNotice email={user.email} delivery={delivery} />
           </div>
+        )}
+
+        {isEditing ? (
+          <EditUserForm
+            user={user}
+            currentUserId={currentUser?.id}
+            onSaved={handleSaved}
+            onCancel={() => setIsEditing(false)}
+          />
         ) : (
           <div className="flex flex-wrap gap-2">
             <button
-              onClick={() => setShowPlanEditor(true)}
+              onClick={() => setIsEditing(true)}
               disabled={isMutating}
               className="flex items-center gap-2 px-4 py-2.5 bg-ink/[0.04] hover:bg-ink/[0.08] border border-line-subtle hover:border-brand/30 text-foreground-strong rounded-xl text-sm font-semibold transition-all disabled:opacity-50 light:bg-surface-panel light:shadow-sm light:hover:bg-surface-subtle"
             >
-              <Edit size={16} /> Modificar plan
+              <Edit size={16} /> Editar usuario
+            </button>
+            <button
+              onClick={handleResendAccess}
+              disabled={isMutating || !user.email}
+              className="flex items-center gap-2 px-4 py-2.5 bg-ink/[0.04] hover:bg-ink/[0.08] border border-line-subtle hover:border-brand/30 text-foreground-strong rounded-xl text-sm font-semibold transition-all disabled:opacity-50 light:bg-surface-panel light:shadow-sm light:hover:bg-surface-subtle"
+            >
+              <KeyRound size={16} /> Reenviar acceso
             </button>
             <button
               onClick={handleToggleSuspend}

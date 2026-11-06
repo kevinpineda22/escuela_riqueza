@@ -1,7 +1,11 @@
-// Correo de bienvenida de una cohorte (alta masiva): acceso con contraseña
-// temporal. Misma paleta y estructura que api/notifications/_welcome-template.ts
-// (la bienvenida de quien se registra solo). Si cambia el diseño de una, revisar
-// la otra.
+// Correo de acceso con contraseña temporal: lo usan el alta masiva de cohortes
+// (scripts/onboard-cohort.mjs) y el alta / "reenviar acceso" de /admin/users
+// (api/admin/users.ts). Misma paleta y estructura que
+// api/notifications/_welcome-template.ts (la bienvenida de quien se registra
+// solo). Si cambia el diseño de una, revisar la otra.
+//
+// Sin imports a propósito: el script de Node lo importa directo (.ts con
+// type stripping de Node 24).
 
 const C = {
   dark: "#121212",
@@ -13,7 +17,7 @@ const C = {
 };
 
 // Nombre, correo y contraseña van dentro del HTML: escapar siempre.
-function escapeHtml(value) {
+function escapeHtml(value: string): string {
   return String(value)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -22,12 +26,18 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
-export const COHORT_WELCOME_SUBJECT = "Tu acceso a la Escuela de la Riqueza";
+export const ACCESS_EMAIL_SUBJECT = "Tu acceso a la Escuela de la Riqueza";
 
-/**
- * @param {{ firstName?: string, email: string, tempPassword: string, loginUrl: string, cohortLabel?: string }} args
- */
-export function cohortWelcomeEmail({ firstName = "", email, tempPassword, loginUrl, cohortLabel = "" }) {
+export interface AccessEmailInput {
+  firstName?: string;
+  email: string;
+  tempPassword: string;
+  loginUrl: string;
+  /** Línea opcional bajo el saludo (ej. "Presencial 2026 · Cohorte 29"). */
+  cohortLabel?: string;
+}
+
+export function accessEmail({ firstName = "", email, tempPassword, loginUrl, cohortLabel = "" }: AccessEmailInput) {
   const name = escapeHtml(firstName.trim());
   // Saludo neutro: la cohorte es mixta.
   const greeting = name ? `¡Hola, ${name}!` : "¡Hola!";
@@ -44,7 +54,7 @@ export function cohortWelcomeEmail({ firstName = "", email, tempPassword, loginU
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="dark">
-<title>${COHORT_WELCOME_SUBJECT}</title>
+<title>${ACCESS_EMAIL_SUBJECT}</title>
 </head>
 <body style="margin:0;padding:24px 12px;background-color:${C.darker};font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:${C.darker};">
@@ -104,5 +114,5 @@ export function cohortWelcomeEmail({ firstName = "", email, tempPassword, loginU
     .filter((line, i, all) => line !== "" || all[i - 1] !== "")
     .join("\n");
 
-  return { subject: COHORT_WELCOME_SUBJECT, html, text };
+  return { subject: ACCESS_EMAIL_SUBJECT, html, text };
 }

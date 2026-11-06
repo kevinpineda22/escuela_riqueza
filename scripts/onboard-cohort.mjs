@@ -17,9 +17,14 @@
  *   --cohort    Clave de la cohorte (ej. cohorte-29): evita mandar dos veces la
  *               bienvenida a la misma persona por la misma cohorte.
  *   --label     Línea opcional en el correo (ej. "Presencial 2026 · Cohorte 29").
- *   --until     Fecha AAAA-MM-DD hasta la que dura el plan. Sin esto queda lo
- *               que pone el alta automática (30 días).
+ *   --until     Fecha AAAA-MM-DD hasta la que dura el plan. Sin esto, 30 días.
+ *               NO aplica a VIP: el VIP (formación presencial) no tiene
+ *               vigencia, su suscripción queda con current_period_end NULL.
  *   --only      Procesar solo este correo.
+ *   --upgrade-existing
+ *               A quien YA tenía cuenta con un plan menor, subirlo al de la
+ *               cohorte (con su vigencia). Sin correo ni cambio de
+ *               contraseña: entra como siempre. Nunca baja un plan.
  *   --send      Escribir de verdad.
  *
  * Qué hace con cada persona:
@@ -27,7 +32,7 @@
  *     marca `must_change_password` (la app obliga a cambiarla: ver
  *     sql/migrate-must-change-password.sql, que hay que correr ANTES), plan y
  *     correo de bienvenida.
- *   - YA EXISTÍA: no la toca. Se informa con su plan actual.
+ *   - YA EXISTÍA: no la toca (se informa su plan), salvo --upgrade-existing.
  *   - Creada pero sin bienvenida (falló el envío en una corrida anterior):
  *     genera otra contraseña temporal y reenvía. Rerun-safe.
  *
@@ -35,10 +40,12 @@
  */
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
-import { randomInt } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { cohortWelcomeEmail } from "./lib/cohortWelcomeEmail.mjs";
+// .ts importados directo (type stripping de Node 24): la misma plantilla y las
+// mismas reglas que el alta desde /admin/users.
+import { accessEmail } from "../api/_lib/accessEmail.ts";
+import { PLAN_RANK, periodEndFor, tempPassword } from "../api/_lib/userAccess.ts";
 
 // ── Argumentos ────────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -53,6 +60,7 @@ const COHORT = arg("cohort");
 const LABEL = arg("label") ?? "";
 const UNTIL = arg("until");
 const ONLY = arg("only")?.trim().toLowerCase() ?? null;
+const UPGRADE_EXISTING = args.includes("--upgrade-existing");
 
 const PLANS = ["free", "individual", "vip"];
 const fail = (msg) => {
@@ -63,6 +71,7 @@ if (!FILE) fail("Falta --file <personas.csv>");
 if (!PLAN || !PLANS.includes(PLAN)) fail(`Falta --plan (${PLANS.join(" | ")})`);
 if (!COHORT || !/^[a-z0-9-]+$/.test(COHORT)) fail("Falta --cohort (minúsculas, números y guiones, ej. cohorte-29)");
 if (UNTIL && (!/^\d{4}-\d{2}-\d{2}$/.test(UNTIL) || Number.isNaN(Date.parse(UNTIL)))) fail("--until debe ser AAAA-MM-DD");
+if (UNTIL && PLAN === "vip") fail("--until no aplica al plan VIP: el VIP no tiene vigencia");
 
 const SUPABASE_URL = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -119,20 +128,6 @@ const people = dataRows
 if (ONLY && people.length === 0) fail(`${ONLY} no está en el CSV`);
 
 // ── Utilidades ────────────────────────────────────────────────────────────
-/** 12 caracteres sin confundibles (sin 0/O, 1/l/I), con mayúscula, minúscula y número. */
-function tempPassword() {
-  const sets = ["ABCDEFGHJKLMNPQRSTUVWXYZ", "abcdefghijkmnpqrstuvwxyz", "23456789"];
-  const all = sets.join("");
-  const chars = sets.map((s) => s[randomInt(s.length)]);
-  while (chars.length < 12) chars.push(all[randomInt(all.length)]);
-  for (let i = chars.length - 1; i > 0; i--) {
-    const j = randomInt(i + 1);
-    [chars[i], chars[j]] = [chars[j], chars[i]];
-  }
-  const s = chars.join("");
-  return `${s.slice(0, 4)}-${s.slice(4, 8)}-${s.slice(8)}`;
-}
-
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function loadUsersByEmail() {
@@ -168,28 +163,31 @@ async function alreadyWelcomed(userId) {
   return Boolean(data);
 }
 
-/** Plan en la suscripción y en el perfil (el alta automática puede no haberlo puesto). */
-async function applyPlan(userId, fullName, email) {
-  const periodEnd = UNTIL ? new Date(`${UNTIL}T23:59:59-05:00`).toISOString() : null;
+/**
+ * Plan en la suscripción y en el perfil (el alta automática puede no haberlo
+ * puesto). `keepProfile`: cuenta que ya existía, solo se toca el plan (su
+ * nombre es el que eligió la persona, no el del Excel).
+ */
+async function applyPlan(userId, fullName, email, { keepProfile = false } = {}) {
+  // VIP: sin vigencia (null). Otro plan: --until o, si no, 30 días.
+  const periodEnd = UNTIL ? new Date(`${UNTIL}T23:59:59-05:00`).toISOString() : periodEndFor(PLAN, null);
   const { data: sub } = await supabase
     .from("subscriptions")
     .select("user_id")
     .eq("user_id", userId)
     .limit(1)
     .maybeSingle();
-  const subFields = { plan: PLAN, status: "active", ...(periodEnd ? { current_period_end: periodEnd } : {}) };
+  const subFields = { plan: PLAN, status: "active", current_period_end: periodEnd };
   const subResult = sub
     ? await supabase.from("subscriptions").update(subFields).eq("user_id", userId)
-    : await supabase.from("subscriptions").insert({
-        user_id: userId,
-        ...subFields,
-        current_period_end: periodEnd ?? new Date(Date.now() + 30 * 86_400_000).toISOString(),
-      });
+    : await supabase.from("subscriptions").insert({ user_id: userId, ...subFields });
   if (subResult.error) throw new Error(`suscripción: ${subResult.error.message}`);
 
-  const { error: profileError } = await supabase
-    .from("profiles")
-    .upsert({ id: userId, full_name: fullName || null, email, plan: PLAN }, { onConflict: "id" });
+  const { error: profileError } = keepProfile
+    ? await supabase.from("profiles").update({ plan: PLAN }).eq("id", userId)
+    : await supabase
+        .from("profiles")
+        .upsert({ id: userId, full_name: fullName || null, email, plan: PLAN }, { onConflict: "id" });
   if (profileError) throw new Error(`perfil: ${profileError.message}`);
 }
 
@@ -205,7 +203,7 @@ async function sendWelcome(user, person, password) {
   if (logError) throw new Error(`registro de envío: ${logError.message}`);
   if (!reserved?.length) return "ya enviado";
 
-  const { subject, html, text } = cohortWelcomeEmail({
+  const { subject, html, text } = accessEmail({
     firstName: person.name.split(" ")[0],
     email: person.email,
     tempPassword: password,
@@ -223,7 +221,7 @@ async function sendWelcome(user, person, password) {
 }
 
 // ── Proceso ───────────────────────────────────────────────────────────────
-console.log(`\n${SEND ? "▶ ALTA REAL" : "◇ PRUEBA (sin --send no se escribe nada)"} · ${people.length} personas · plan ${PLAN} · ${COHORT}${UNTIL ? ` · hasta ${UNTIL}` : ""}\n`);
+console.log(`\n${SEND ? "▶ ALTA REAL" : "◇ PRUEBA (sin --send no se escribe nada)"} · ${people.length} personas · plan ${PLAN} · ${COHORT}${PLAN === "vip" ? " · sin vigencia" : UNTIL ? ` · hasta ${UNTIL}` : " · 30 días"}${UPGRADE_EXISTING ? " · subiendo planes existentes" : ""}\n`);
 
 const usersByEmail = await loadUsersByEmail();
 const report = [];
@@ -243,8 +241,16 @@ for (const person of people) {
       const pending = existing.app_metadata?.must_change_password === true && !(await alreadyWelcomed(existing.id));
       if (!pending) {
         const sub = await currentPlan(existing.id);
+        const before = sub ? `plan ${sub.plan} (${sub.status})` : "sin plan";
+        const lower = !sub || sub.status !== "active" || (PLAN_RANK[sub.plan] ?? 0) < PLAN_RANK[PLAN];
+        if (UPGRADE_EXISTING && lower) {
+          row.resultado = SEND ? "PLAN SUBIDO" : "SE SUBIRÍA EL PLAN";
+          row.detalle = `${before} → ${PLAN}`;
+          if (SEND) await applyPlan(existing.id, person.name, person.email, { keepProfile: true });
+          continue;
+        }
         row.resultado = "YA EXISTÍA";
-        row.detalle = sub ? `plan ${sub.plan} (${sub.status})` : "sin plan";
+        row.detalle = before;
         continue;
       }
       // Quedó creada sin bienvenida en una corrida anterior: contraseña nueva y reenvío.
