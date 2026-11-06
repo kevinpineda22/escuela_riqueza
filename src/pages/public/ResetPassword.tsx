@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -16,7 +16,7 @@ import {
   resetPasswordSchema,
   type ResetPasswordInput,
 } from "@/schemas/auth.schema";
-import { updatePassword } from "@/lib/api/auth";
+import { updatePassword, verifyEmailLink } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
 import { supabase } from "@/lib/supabase";
 
@@ -28,6 +28,26 @@ const ResetPassword = () => {
   const [hasRecoverySession, setHasRecoverySession] = useState<boolean | null>(
     null
   );
+  // Link nuevo (plantilla con token_hash): se gasta recién al tocar
+  // "Continuar", no al abrir la página. Ver verifyEmailLink.
+  const [searchParams] = useSearchParams();
+  const tokenHash = searchParams.get("token_hash");
+  const [linkStep, setLinkStep] = useState<"pending" | "verifying" | "done" | "failed">(
+    tokenHash ? "pending" : "done"
+  );
+
+  const continueWithLink = async () => {
+    if (!tokenHash) return;
+    setLinkStep("verifying");
+    try {
+      await verifyEmailLink(tokenHash, "recovery");
+      setHasRecoverySession(true);
+      setLinkStep("done");
+    } catch {
+      setHasRecoverySession(false);
+      setLinkStep("failed");
+    }
+  };
 
   // Supabase deja una sesión "recovery" en la URL al volver del email.
   // detectSessionInUrl viene activado por defecto, así que solo escuchamos
@@ -115,6 +135,28 @@ const ResetPassword = () => {
                 Te llevamos al inicio de sesión...
               </p>
             </motion.div>
+          ) : linkStep === "pending" || linkStep === "verifying" ? (
+            <div className="space-y-4">
+              <p className="text-sm text-foreground-muted">
+                Toca el botón para continuar y crear tu nueva contraseña.
+              </p>
+              <button
+                type="button"
+                onClick={continueWithLink}
+                disabled={linkStep === "verifying"}
+                className="w-full py-3.5 bg-brand hover:bg-brand-hover text-on-brand font-bold rounded-2xl transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(204,164,59,0.3)] disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {linkStep === "verifying" ? (
+                  <>
+                    <Loader2 size={18} className="animate-spin" /> Verificando...
+                  </>
+                ) : (
+                  <>
+                    Continuar <ArrowRight size={18} />
+                  </>
+                )}
+              </button>
+            </div>
           ) : hasRecoverySession === false ? (
             <div className="space-y-4">
               <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-2 text-danger">

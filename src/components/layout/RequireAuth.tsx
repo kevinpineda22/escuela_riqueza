@@ -9,6 +9,9 @@ interface RequireAuthProps {
   minPlan?: Plan;
 }
 
+/** Pantalla donde se crea la contraseña propia tras entrar con una temporal. */
+export const CREATE_PASSWORD_PATH = "/crear-contrasena";
+
 const PLAN_RANK: Record<Plan, number> = {
   free: 0,
   individual: 1,
@@ -31,6 +34,13 @@ const RequireAuth = ({ children, role, minPlan }: RequireAuthProps) => {
   // sesión sin confirmar), pero blinda el caso si algún día se apaga en Supabase.
   if (user.emailConfirmed === false) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Contraseña temporal (alta masiva): antes de cualquier pantalla, crear la
+  // propia. Vuelve después a donde iba.
+  if (user.mustChangePassword && location.pathname !== CREATE_PASSWORD_PATH) {
+    const returnTo = `${location.pathname}${location.search}${location.hash}`;
+    return <Navigate to={`${CREATE_PASSWORD_PATH}?returnTo=${encodeURIComponent(returnTo)}`} replace />;
   }
 
   if (role && user.role !== role) {
