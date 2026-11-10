@@ -52,6 +52,8 @@ export const bodySchema = z.discriminatedUnion('action', [
   }),
   z.object({ action: z.literal('resend_access'), user_id: userId }),
   z.object({ action: z.literal('delete'), user_id: userId }),
+  z.object({ action: z.literal('email_block'), user_id: userId }),
+  z.object({ action: z.literal('remove_email_block'), user_id: userId }),
 ]);
 
 type Body = z.infer<typeof bodySchema>;
@@ -228,6 +230,33 @@ async function deleteUser(supabase: SupabaseClient, callerId: string, id: string
   return { ok: true };
 }
 
+/**
+ * ¿Resend tiene bloqueada esta dirección? `blocked: null` = no se pudo saber
+ * (por ejemplo, la API key solo tiene permiso de envío): el panel no lo inventa.
+ * El correo sale del perfil, nunca del cliente.
+ */
+async function emailBlock(supabase: SupabaseClient, id: string) {
+  const { email } = await readProfile(supabase, id);
+  if (!email) return { email: null, blocked: false };
+  if (!RESEND_API_KEY) return { email, blocked: null };
+  const { error } = await new Resend(RESEND_API_KEY).suppressions.get(email);
+  if (!error) return { email, blocked: true };
+  if (error.statusCode === 404 || error.name === 'not_found') return { email, blocked: false };
+  console.warn('[admin/users] no se pudo consultar el bloqueo', error.name, error.statusCode);
+  return { email, blocked: null };
+}
+
+async function removeEmailBlock(supabase: SupabaseClient, id: string) {
+  const { email } = await readProfile(supabase, id);
+  if (!email) throw new HttpError(400, 'La cuenta no tiene correo');
+  if (!RESEND_API_KEY) throw new HttpError(503, 'El envío de correos no está configurado');
+  const { error } = await new Resend(RESEND_API_KEY).suppressions.remove(email);
+  if (error && error.statusCode !== 404 && error.name !== 'not_found') {
+    throw new HttpError(502, `No se pudo quitar el bloqueo: ${error.message}`);
+  }
+  return { ok: true };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
@@ -260,6 +289,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json(await resendAccess(supabase, body.user_id));
       case 'delete':
         return res.status(200).json(await deleteUser(supabase, caller.id, body.user_id));
+      case 'email_block':
+        return res.status(200).json(await emailBlock(supabase, body.user_id));
+      case 'remove_email_block':
+        return res.status(200).json(await removeEmailBlock(supabase, body.user_id));
     }
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });

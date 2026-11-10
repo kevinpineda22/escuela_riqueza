@@ -32,6 +32,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { EditUserForm } from "@/components/feature/admin/users/EditUserForm";
 import { AccessDeliveryNotice } from "@/components/feature/admin/users/AccessDeliveryNotice";
+import { EmailHistoryPanel } from "@/components/feature/admin/users/EmailHistoryPanel";
 import type { Plan } from "@/types/user";
 
 const planColors: Record<Plan, string> = {
@@ -75,6 +76,7 @@ const AdminUserDetail = () => {
   const [isMutating, setIsMutating] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [delivery, setDelivery] = useState<AccessDelivery | null>(null);
+  const [emailsVersion, setEmailsVersion] = useState(0);
 
   useEffect(() => {
     if (!id) return;
@@ -122,6 +124,7 @@ const AdminUserDetail = () => {
   const handleSaved = async (updated: AdminUser) => {
     setUser(updated);
     setIsEditing(false);
+    setEmailsVersion((v) => v + 1);
     toast.success("Usuario actualizado");
     // El plan puede haber cambiado la vigencia.
     try {
@@ -137,6 +140,7 @@ const AdminUserDetail = () => {
     try {
       setIsMutating(true);
       setDelivery(await resendAccess(user.id));
+      setEmailsVersion((v) => v + 1);
     } catch (err) {
       toast.error("Error reenviando el acceso", { description: (err as Error).message });
     } finally {
@@ -320,6 +324,8 @@ const AdminUserDetail = () => {
           </div>
         </div>
       </div>
+
+      <EmailHistoryPanel userId={user.id} email={user.email} reloadKey={emailsVersion} />
 
       {/* Acciones */}
       <div className="bg-black/30 border border-line-subtle rounded-2xl p-5 sm:p-6 light:bg-surface-panel light:shadow-panel">
