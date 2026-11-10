@@ -124,7 +124,7 @@ export async function updateUserStatus(userId: string, isSuspended: boolean): Pr
 // Crear, editar el correo de login o borrar la cuenta de Auth necesita la clave
 // de servicio: pasa por la Vercel Function (solo admins), no por RPC.
 
-async function adminUsersRequest<T>(body: Record<string, unknown>): Promise<T> {
+export async function adminUsersRequest<T>(body: Record<string, unknown>): Promise<T> {
   const res = await authedFetch("/api/admin/users", { method: "POST", body: JSON.stringify(body) });
   const data = (await res.json().catch(() => null)) as ({ error?: string } & T) | null;
   if (!res.ok) {

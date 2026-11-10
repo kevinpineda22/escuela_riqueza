@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => {
     },
     from: vi.fn(),
     send: vi.fn(),
+    suppressionGet: vi.fn(),
+    suppressionRemove: vi.fn(),
     requireAdmin: vi.fn(),
   };
 });
@@ -24,6 +26,7 @@ vi.mock('@supabase/supabase-js', () => ({
 vi.mock('resend', () => ({
   Resend: class {
     emails = { send: mocks.send };
+    suppressions = { get: mocks.suppressionGet, remove: mocks.suppressionRemove };
   },
 }));
 vi.mock('../_lib/auth.js', () => ({
@@ -185,6 +188,56 @@ describe('POST /api/admin/users', () => {
     expect(first![1]).toHaveProperty('password');
     // El trigger borra la marca al cambiar la contraseña: va en una segunda escritura.
     expect(second![1]).toEqual({ app_metadata: { provider: 'email', must_change_password: true } });
+  });
+
+  describe('bloqueo de Resend', () => {
+    beforeEach(() => {
+      mocks.from.mockImplementation((table: string) =>
+        table === 'profiles' ? query({ data: profileRow, error: null }) : query(),
+      );
+    });
+
+    it('consulta el correo del perfil, no uno que mande el cliente', async () => {
+      mocks.suppressionGet.mockResolvedValue({ data: { id: 's1' }, error: null });
+
+      const res = await call({ action: 'email_block', user_id: USER_ID, email: 'otro@correo.com' });
+
+      expect(mocks.suppressionGet).toHaveBeenCalledWith('andres_1612@outlook.com');
+      expect(res.body).toEqual({ email: 'andres_1612@outlook.com', blocked: true });
+    });
+
+    it('un 404 significa que no está bloqueado', async () => {
+      mocks.suppressionGet.mockResolvedValue({
+        data: null,
+        error: { name: 'not_found', statusCode: 404, message: 'Not found' },
+      });
+
+      const res = await call({ action: 'email_block', user_id: USER_ID });
+
+      expect(res.body).toMatchObject({ blocked: false });
+    });
+
+    it('sin permiso de lectura dice "no se sabe", no "no está bloqueado"', async () => {
+      mocks.suppressionGet.mockResolvedValue({
+        data: null,
+        error: { name: 'restricted_api_key', statusCode: 401, message: 'Restricted' },
+      });
+
+      const res = await call({ action: 'email_block', user_id: USER_ID });
+
+      expect(res.body).toMatchObject({ blocked: null });
+    });
+
+    it('quitar el bloqueo informa si Resend lo rechaza', async () => {
+      mocks.suppressionRemove.mockResolvedValue({
+        data: null,
+        error: { name: 'restricted_api_key', statusCode: 401, message: 'Restricted' },
+      });
+
+      const res = await call({ action: 'remove_email_block', user_id: USER_ID });
+
+      expect(res.statusCode).toBe(502);
+    });
   });
 
   it('rechaza un body inválido con el mensaje del campo', async () => {

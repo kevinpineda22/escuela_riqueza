@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Users, Search, Filter, MoreVertical, Shield, Crown, Mail,
-  ShieldAlert, Trash2, Edit, X, Loader2, UserPlus
+  ShieldAlert, Trash2, Edit, X, Loader2, UserPlus, MailWarning
 } from "lucide-react";
 import { 
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
@@ -17,6 +17,8 @@ import {
 } from "@/lib/api/admin/users";
 import { CreateUserDialog } from "@/components/feature/admin/users/CreateUserDialog";
 import { PlanPicker } from "@/components/feature/admin/users/UserFields";
+import { EmailProblemBadge } from "@/components/feature/admin/users/EmailProblemBadge";
+import { fetchEmailIssues, type EmailIssue } from "@/lib/api/admin/emails";
 
 type Plan = "free" | "individual" | "vip";
 type Role = "admin" | "student";
@@ -41,6 +43,8 @@ const AdminUsers = () => {
   const [userSubscriptions, setUserSubscriptions] = useState<Record<string, ActiveSubscription>>({});
   const [showCreate, setShowCreate] = useState(false);
   const [savingPlan, setSavingPlan] = useState(false);
+  const [emailIssues, setEmailIssues] = useState<Record<string, EmailIssue>>({});
+  const [onlyEmailIssues, setOnlyEmailIssues] = useState(false);
 
   // Modal para cambiar plan
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
@@ -51,9 +55,18 @@ const AdminUsers = () => {
   const loadUsers = async () => {
     try {
       setLoading(true);
-      const [data, subs] = await Promise.all([fetchAdminUsers(), fetchActiveSubscriptions()]);
+      const [data, subs, issues] = await Promise.all([
+        fetchAdminUsers(),
+        fetchActiveSubscriptions(),
+        // Un fallo acá no puede dejar al admin sin la lista de usuarios.
+        fetchEmailIssues().catch((err) => {
+          console.error("Error cargando los problemas de correo:", err);
+          return {} as Record<string, EmailIssue>;
+        }),
+      ]);
       setUsers(data);
       setUserSubscriptions(subs);
+      setEmailIssues(issues);
     } catch (err) {
       console.error("Error cargando usuarios:", err);
     } finally {
@@ -73,9 +86,12 @@ const AdminUsers = () => {
       const userPlan = userSubscriptions[u.id]?.plan || u.plan;
       const matchesPlan = planFilter === "all" || userPlan === planFilter;
       const matchesRole = roleFilter === "all" || u.role === roleFilter;
-      return matchesSearch && matchesPlan && matchesRole;
+      const matchesEmail = !onlyEmailIssues || Boolean(emailIssues[u.id]);
+      return matchesSearch && matchesPlan && matchesRole && matchesEmail;
     });
-  }, [users, searchTerm, planFilter, roleFilter, userSubscriptions]);
+  }, [users, searchTerm, planFilter, roleFilter, userSubscriptions, onlyEmailIssues, emailIssues]);
+
+  const emailIssueCount = users.filter((u) => emailIssues[u.id]).length;
 
   const getPlan = (u: AdminUser): Plan => {
     return (userSubscriptions[u.id]?.plan || u.plan) as Plan;
@@ -197,6 +213,23 @@ const AdminUsers = () => {
         </div>
       </div>
 
+      {(emailIssueCount > 0 || onlyEmailIssues) && (
+        <button
+          type="button"
+          aria-pressed={onlyEmailIssues}
+          onClick={() => setOnlyEmailIssues((v) => !v)}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-semibold transition-colors",
+            onlyEmailIssues
+              ? "border-red-500/40 bg-red-500/10 text-danger"
+              : "border-line-subtle text-fg-80 hover:text-foreground-strong hover:border-red-500/30"
+          )}
+        >
+          <MailWarning size={16} className="shrink-0" />
+          {onlyEmailIssues ? "Ver todos los usuarios" : `Correos con problemas (${emailIssueCount})`}
+        </button>
+      )}
+
       {/* Table */}
       <div className="bg-black/30 border border-line-subtle rounded-2xl overflow-hidden light:bg-surface-panel light:shadow-panel">
         {loading ? (
@@ -265,6 +298,7 @@ const AdminUsers = () => {
                       {u.status === "active" ? "Activo" : "Suspendido"}
                     </span>
                   </div>
+                  {emailIssues[u.id] && <EmailProblemBadge outcome={emailIssues[u.id]} />}
                   <div className="flex items-center justify-between text-[11px] text-foreground-muted pt-1 border-t border-ink/5">
                     <span>Registrado: <span className="text-fg-70 font-medium">{formatDate(u.created_at)}</span></span>
                     {subInfo && <span>Vigencia: <span className="text-fg-70 font-medium">{formatValidity(u)}</span></span>}
@@ -310,6 +344,7 @@ const AdminUsers = () => {
                           <div>
                             <div className="text-foreground-strong font-semibold text-sm">{u.full_name}</div>
                             <div className="text-foreground-muted text-xs flex items-center gap-1 mt-0.5"><Mail size={10} /> {u.email || "Sin email"}</div>
+                            {emailIssues[u.id] && <div className="mt-1"><EmailProblemBadge outcome={emailIssues[u.id]} /></div>}
                           </div>
                         </div>
                       </td>
