@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => {
   process.env.SUPABASE_URL = 'https://test.supabase.co';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-key';
   process.env.RESEND_API_KEY = 're_test';
+  process.env.RESEND_API_KEY_VER_EMAILS = 're_read_test';
   return {
     admin: {
       createUser: vi.fn(),

@@ -24,6 +24,9 @@ import { applyPlan, tempPassword } from '../_lib/userAccess.js';
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
+// Key de Resend con permiso de LECTURA (Full access), separada de la de envío:
+// solo la usan la consulta y el retiro de bloqueos. La de envío no puede.
+const RESEND_READ_KEY = process.env.RESEND_API_KEY_VER_EMAILS || '';
 const APP_URL = (process.env.APP_URL || 'https://www.escueladelariqueza.com').replace(/\/$/, '');
 const EMAIL_FROM = process.env.EMAIL_FROM || 'Escuela de la Riqueza <hola@escueladelariqueza.com>';
 
@@ -238,8 +241,8 @@ async function deleteUser(supabase: SupabaseClient, callerId: string, id: string
 async function emailBlock(supabase: SupabaseClient, id: string) {
   const { email } = await readProfile(supabase, id);
   if (!email) return { email: null, blocked: false };
-  if (!RESEND_API_KEY) return { email, blocked: null };
-  const { error } = await new Resend(RESEND_API_KEY).suppressions.get(email);
+  if (!RESEND_READ_KEY) return { email, blocked: null };
+  const { error } = await new Resend(RESEND_READ_KEY).suppressions.get(email);
   if (!error) return { email, blocked: true };
   if (error.statusCode === 404 || error.name === 'not_found') return { email, blocked: false };
   console.warn('[admin/users] no se pudo consultar el bloqueo', error.name, error.statusCode);
@@ -249,8 +252,8 @@ async function emailBlock(supabase: SupabaseClient, id: string) {
 async function removeEmailBlock(supabase: SupabaseClient, id: string) {
   const { email } = await readProfile(supabase, id);
   if (!email) throw new HttpError(400, 'La cuenta no tiene correo');
-  if (!RESEND_API_KEY) throw new HttpError(503, 'El envío de correos no está configurado');
-  const { error } = await new Resend(RESEND_API_KEY).suppressions.remove(email);
+  if (!RESEND_READ_KEY) throw new HttpError(503, 'La consulta de correos no está configurada');
+  const { error } = await new Resend(RESEND_READ_KEY).suppressions.remove(email);
   if (error && error.statusCode !== 404 && error.name !== 'not_found') {
     throw new HttpError(502, `No se pudo quitar el bloqueo: ${error.message}`);
   }

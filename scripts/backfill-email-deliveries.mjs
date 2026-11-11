@@ -2,8 +2,8 @@
  * Carga en `email_deliveries` los correos que Resend ya tiene, para que el panel
  * no arranque vacío. El webhook solo ve lo que pasa desde que se activa.
  *
- * Uso (desde la raíz del repo; la RESEND_API_KEY tiene que poder LEER, no solo
- * enviar):
+ * Uso (desde la raíz del repo, con RESEND_API_KEY_VER_EMAILS en .env: una key
+ * Full access, porque la de envío no puede listar):
  *
  *   node --env-file=.env scripts/backfill-email-deliveries.mjs           # prueba
  *   node --env-file=.env scripts/backfill-email-deliveries.mjs --write   # guarda
@@ -22,9 +22,9 @@ const fail = (msg) => {
 
 const SUPABASE_URL = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const RESEND_API_KEY = process.env.RESEND_API_KEY_VER_EMAILS;
 if (!SUPABASE_URL || !SERVICE_KEY) fail("Faltan VITE_SUPABASE_URL y/o SUPABASE_SERVICE_ROLE_KEY en .env");
-if (!RESEND_API_KEY) fail("Falta RESEND_API_KEY en .env");
+if (!RESEND_API_KEY) fail("Falta RESEND_API_KEY_VER_EMAILS (key Full access de Resend) en .env");
 
 const supabase = createClient(SUPABASE_URL, SERVICE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
@@ -57,7 +57,7 @@ for (;;) {
   if (error) {
     fail(
       `Resend rechazó el listado (${error.statusCode ?? "?"}): ${error.message}\n` +
-        "  Si la API key es de tipo Sending access, crea una con Full access.",
+        "  RESEND_API_KEY_VER_EMAILS tiene que ser una key Full access, no Sending access.",
     );
   }
 
