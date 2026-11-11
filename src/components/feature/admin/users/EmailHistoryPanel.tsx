@@ -88,8 +88,9 @@ export function EmailHistoryPanel({ userId, email, reloadKey }: EmailHistoryPane
 
   const latest = history?.emails[0];
   const isCurrentAddress = latest && latest.recipient === email?.trim().toLowerCase();
-  const problem = latest && isCurrentAddress ? describeEmailProblem(latest) : null;
+  const problem = latest && isCurrentAddress ? describeEmailProblem(latest, history?.block.blocked) : null;
   const blocked = history?.block.blocked === true;
+  const temporary = problem?.temporary && !blocked;
 
   return (
     <div className="bg-black/30 border border-line-subtle rounded-2xl p-5 sm:p-6 light:bg-surface-panel light:shadow-panel">
@@ -107,9 +108,14 @@ export function EmailHistoryPanel({ userId, email, reloadKey }: EmailHistoryPane
       </div>
 
       {(problem || blocked) && (
-        <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/5 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div
+          className={cn(
+            "mb-4 rounded-xl border p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3",
+            temporary ? "border-amber-500/25 bg-amber-500/5" : "border-red-500/20 bg-red-500/5",
+          )}
+        >
           <div className="flex items-start gap-2 min-w-0">
-            <MailWarning size={18} className="text-danger shrink-0 mt-0.5" />
+            <MailWarning size={18} className={cn("shrink-0 mt-0.5", temporary ? "text-amber-400 light:text-amber-700" : "text-danger")} />
             <div className="min-w-0">
               <p className="font-bold text-foreground-strong text-sm">{problem?.title ?? "Correo bloqueado"}</p>
               <p className="text-sm text-foreground-muted">
