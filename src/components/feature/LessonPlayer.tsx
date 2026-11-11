@@ -271,12 +271,13 @@ const LessonPlayer = ({ videoSrc, isPremium, lesson, moduleTitle }: LessonPlayer
       const ACtx = (window.AudioContext || (window as any).webkitAudioContext);
       if (ACtx) {
         const ctx = new ACtx();
-        if (ctx.state === "suspended") ctx.resume();
+        // Se cierra a los 200 ms: si el resume() sigue pendiente, su rechazo no es un error.
+        if (ctx.state === "suspended") ctx.resume().catch(() => {});
         const osc = ctx.createOscillator();
         osc.connect(ctx.destination);
         osc.start(0);
         osc.stop(0.001);
-        setTimeout(() => ctx.close(), 200);
+        setTimeout(() => { ctx.close().catch(() => {}); }, 200);
       }
     } catch { /* fallback silencioso */ }
 
