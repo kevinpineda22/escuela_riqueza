@@ -42,6 +42,19 @@ describe("describeEmailProblem", () => {
     expect(describeEmailProblem(outcome({ bounce_type: null, bounce_subtype: null }))?.kind).toBe("unknown_reason");
   });
 
+  it("sin motivo, el bloqueo de Resend dice si es permanente o pasajero", () => {
+    const sinMotivo = outcome({ bounce_type: null, bounce_subtype: null });
+    expect(describeEmailProblem(sinMotivo, true)?.kind).toBe("blocked");
+    expect(describeEmailProblem(sinMotivo, false)?.kind).toBe("bounced_not_blocked");
+    expect(describeEmailProblem(sinMotivo, false)?.temporary).toBe(true);
+    expect(describeEmailProblem(sinMotivo, null)?.kind).toBe("unknown_reason");
+  });
+
+  it("con motivo, el bloqueo no lo pisa", () => {
+    const noExiste = outcome({ detail: "550 5.1.1 does not exist" });
+    expect(describeEmailProblem(noExiste, false)?.kind).toBe("not_found");
+  });
+
   it("un rebote con motivo desconocido no se inventa una causa", () => {
     expect(describeEmailProblem(outcome({ detail: "554 policy rejection" }))?.kind).toBe("bounced");
   });

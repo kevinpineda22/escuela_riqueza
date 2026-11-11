@@ -33,6 +33,7 @@ export type EmailProblemKind =
   | "spam"
   | "failed"
   | "bounced"
+  | "bounced_not_blocked"
   | "unknown_reason";
 
 export interface EmailProblem {
@@ -60,7 +61,7 @@ const PROBLEMS: Record<EmailProblemKind, Omit<EmailProblem, "kind">> = {
   },
   blocked: {
     title: "Correo bloqueado",
-    action: "No se le envía nada a esta dirección por un rebote anterior. Si el correo es correcto, quita el bloqueo.",
+    action: "Ya no se le envía nada a esta dirección por un rebote anterior. Corrige el correo en su ficha; si la persona confirma que está bien escrito, quita el bloqueo.",
     temporary: false,
   },
   spam: {
@@ -78,6 +79,11 @@ const PROBLEMS: Record<EmailProblemKind, Omit<EmailProblem, "kind">> = {
     action: "Confirma con la persona que el correo esté bien escrito.",
     temporary: false,
   },
+  bounced_not_blocked: {
+    title: "Rebotó, pero no quedó bloqueado",
+    action: "Suele ser algo pasajero, como la bandeja llena. Reenvía el acceso; si vuelve a rebotar, confirma el correo con la persona.",
+    temporary: true,
+  },
   unknown_reason: {
     title: "El correo rebotó",
     action: "Este envío no tiene motivo registrado. Confirma con la persona que el correo esté bien escrito.",
@@ -85,8 +91,15 @@ const PROBLEMS: Record<EmailProblemKind, Omit<EmailProblem, "kind">> = {
   },
 };
 
-/** `null` si el correo no tiene ningún problema que atender. */
-export function describeEmailProblem(outcome: EmailOutcome): EmailProblem | null {
+/**
+ * `null` si el correo no tiene ningún problema que atender.
+ *
+ * `blocked` (si se sabe) desempata los rebotes sin motivo, que son todos los
+ * cargados del historial: la API de Resend no devuelve el motivo, pero sí si
+ * dejó la dirección bloqueada. Bloqueada = rebote permanente; no bloqueada =
+ * casi siempre algo pasajero.
+ */
+export function describeEmailProblem(outcome: EmailOutcome, blocked?: boolean | null): EmailProblem | null {
   const problem = (kind: EmailProblemKind): EmailProblem => ({ kind, ...PROBLEMS[kind] });
 
   switch (outcome.status) {
@@ -102,7 +115,11 @@ export function describeEmailProblem(outcome: EmailOutcome): EmailProblem | null
       if (MAILBOX_FULL.test(text)) return problem("mailbox_full");
       if (NOT_FOUND.test(text)) return problem("not_found");
       if (outcome.bounce_subtype && BLOCKED.test(outcome.bounce_subtype)) return problem("blocked");
-      if (!outcome.bounce_type && !outcome.detail) return problem("unknown_reason");
+      if (!outcome.bounce_type && !outcome.detail) {
+        if (blocked === true) return problem("blocked");
+        if (blocked === false) return problem("bounced_not_blocked");
+        return problem("unknown_reason");
+      }
       return problem("bounced");
     }
     default:

@@ -74,6 +74,22 @@ describe("EmailHistoryPanel", () => {
     await waitFor(() => expect(emails).toHaveBeenCalledTimes(2));
   });
 
+  it("sin motivo y sin bloqueo, sugiere reenviar en vez de corregir", async () => {
+    emails.mockResolvedValue([delivery({ bounce_type: null, bounce_subtype: null, detail: null })]);
+    renderPanel();
+
+    expect(await screen.findByText("Rebotó, pero no quedó bloqueado")).toBeInTheDocument();
+  });
+
+  it("sin motivo pero bloqueado, lo dice y ofrece quitar el bloqueo", async () => {
+    emails.mockResolvedValue([delivery({ bounce_type: null, bounce_subtype: null, detail: null })]);
+    block.mockResolvedValue({ email: EMAIL, blocked: true });
+    renderPanel();
+
+    expect(await screen.findByText("Correo bloqueado")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Quitar bloqueo/ })).toBeInTheDocument();
+  });
+
   it("si no se puede saber el bloqueo, el historial igual aparece", async () => {
     emails.mockResolvedValue([delivery()]);
     block.mockRejectedValue(new Error("403"));

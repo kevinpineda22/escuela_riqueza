@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -18,6 +18,8 @@ import {
 import { CreateUserDialog } from "@/components/feature/admin/users/CreateUserDialog";
 import { PlanPicker } from "@/components/feature/admin/users/UserFields";
 import { EmailProblemBadge } from "@/components/feature/admin/users/EmailProblemBadge";
+import { UsersPagination } from "@/components/feature/admin/users/UsersPagination";
+import { pageSlice } from "@/components/feature/admin/users/pagination";
 import { fetchEmailIssues, type EmailIssue } from "@/lib/api/admin/emails";
 
 type Plan = "free" | "individual" | "vip";
@@ -45,6 +47,8 @@ const AdminUsers = () => {
   const [savingPlan, setSavingPlan] = useState(false);
   const [emailIssues, setEmailIssues] = useState<Record<string, EmailIssue>>({});
   const [onlyEmailIssues, setOnlyEmailIssues] = useState(false);
+  const [pageState, setPageState] = useState({ key: "", page: 1 });
+  const tableRef = useRef<HTMLDivElement>(null);
 
   // Modal para cambiar plan
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
@@ -90,6 +94,17 @@ const AdminUsers = () => {
       return matchesSearch && matchesPlan && matchesRole && matchesEmail;
     });
   }, [users, searchTerm, planFilter, roleFilter, userSubscriptions, onlyEmailIssues, emailIssues]);
+
+  // Cambiar búsqueda o filtros vuelve a la página 1: la página guardada solo
+  // vale para la combinación de filtros con la que se eligió.
+  const filterKey = [searchTerm, planFilter, roleFilter, onlyEmailIssues].join("|");
+  const slice = pageSlice(filteredUsers.length, pageState.key === filterKey ? pageState.page : 1);
+  const pageUsers = filteredUsers.slice(slice.start, slice.end);
+
+  const goToPage = (page: number) => {
+    setPageState({ key: filterKey, page });
+    tableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   const emailIssueCount = users.filter((u) => emailIssues[u.id]).length;
 
@@ -231,7 +246,7 @@ const AdminUsers = () => {
       )}
 
       {/* Table */}
-      <div className="bg-black/30 border border-line-subtle rounded-2xl overflow-hidden light:bg-surface-panel light:shadow-panel">
+      <div ref={tableRef} className="scroll-mt-6 bg-black/30 border border-line-subtle rounded-2xl overflow-hidden light:bg-surface-panel light:shadow-panel">
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="text-accent animate-spin" size={36} />
@@ -241,7 +256,7 @@ const AdminUsers = () => {
         {/* Cards (mobile) */}
         <div className="md:hidden divide-y divide-ink/5">
           {filteredUsers.length > 0 ? (
-            filteredUsers.map((u) => {
+            pageUsers.map((u) => {
               const plan = getPlan(u);
               const subInfo = userSubscriptions[u.id];
               return (
@@ -331,7 +346,7 @@ const AdminUsers = () => {
             </thead>
             <tbody className="divide-y divide-ink/5">
               {filteredUsers.length > 0 ? (
-                filteredUsers.map((u) => {
+                pageUsers.map((u) => {
                   const plan = getPlan(u);
                   const subInfo = userSubscriptions[u.id];
                   return (
@@ -412,9 +427,7 @@ const AdminUsers = () => {
             </tbody>
           </table>
         </div>
-        <div className="bg-ink/5 border-t border-line-subtle px-6 py-4 flex items-center justify-between">
-          <div className="text-sm text-foreground-muted">Mostrando <span className="font-bold text-foreground-strong">{filteredUsers.length}</span> usuarios</div>
-        </div>
+        <UsersPagination slice={slice} total={filteredUsers.length} onPageChange={goToPage} />
         </>
         )}
       </div>
