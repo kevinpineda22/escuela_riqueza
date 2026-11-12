@@ -63,3 +63,34 @@ describe("useLivePlayback — fase 3: sonido y Solo audio", () => {
     expect(result.current[1].mediaKey).not.toBe(before);
   });
 });
+
+describe("useLivePlayback — volver al vivo olvida la posición guardada", () => {
+  const KEY = "live-1:2026-11-01T14:00:00Z";
+  const storageKey = `live-position:${KEY}`;
+  const save = () => localStorage.setItem(storageKey, JSON.stringify({ position: 700, savedAt: Date.now() }));
+
+  it("con posición guardada arranca en Clase completa (retomar)", () => {
+    save();
+    const { result } = renderHook(() => useLivePlayback(KEY));
+    expect(result.current[1].latencyMode).toBe("dvr");
+    localStorage.clear();
+  });
+
+  it("al tocar EN VIVO la posición se borra y el reingreso entra al directo", () => {
+    save();
+    const first = renderHook(() => useLivePlayback(KEY));
+    act(() => { first.result.current[1].returnToLive(); });
+    expect(localStorage.getItem(storageKey)).toBeNull();
+    first.unmount();
+
+    const again = renderHook(() => useLivePlayback(KEY));
+    expect(again.result.current[1].latencyMode).toBe("smooth");
+  });
+
+  it("salir de un error a Fluidez también olvida la posición", () => {
+    save();
+    const { result } = renderHook(() => useLivePlayback(KEY));
+    act(() => { result.current[1].recoverInSmooth(); });
+    expect(localStorage.getItem(storageKey)).toBeNull();
+  });
+});

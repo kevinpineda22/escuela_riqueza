@@ -455,6 +455,24 @@ export async function requestSignedRecordingUrl(liveId: string): Promise<SignedR
   }
 }
 
+/**
+ * Pide una URL firmada que fuerza la descarga (Content-Disposition: attachment)
+ * de la grabación en R2. `null` = no se pudo (403, 409, 429, red).
+ */
+export async function requestRecordingDownloadUrl(liveId: string): Promise<string | null> {
+  try {
+    const res = await authedFetch("/api/stream/recording-url", {
+      method: "POST",
+      body: JSON.stringify({ live_id: liveId, download: true }),
+    });
+    if (!res.ok) return null;
+    return parseSignedRecordingUrl(await res.json())?.url ?? null;
+  } catch (err) {
+    console.error("Error fetching recording download URL:", err);
+    return null;
+  }
+}
+
 /** Pide una URL firmada de vida corta (con su `expiresIn`) para reproducir una grabación en R2. */
 export async function fetchSignedRecordingUrl(liveId: string): Promise<SignedRecordingUrl | null> {
   try {

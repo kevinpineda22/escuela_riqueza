@@ -5,12 +5,15 @@ import { AwsClient } from 'aws4fetch';
 import { applyCors, requireAuth } from '../_lib/auth.js';
 import { applyRateLimit } from '../_lib/ratelimit.js';
 import { canWatchSchoolReplay } from '../_lib/replayVisibility.js';
+import { buildRecordingDownloadFilename } from '../_lib/downloadFilename.js';
 
 // Rama autenticada (dashboard / admin, y repetición del link público con
 // sesión iniciada): identifica el live por `live_id` y autoriza con la regla
 // unificada `replay_visibility` (ver canWatchSchoolReplay).
 const AuthedBodySchema = z.object({
   live_id: z.string().uuid(),
+  // true = URL de descarga (Content-Disposition: attachment) en vez de reproducción.
+  download: z.boolean().optional(),
 });
 
 // Rama pública (`/live/:token`, sin sesión): identifica el live por
@@ -59,6 +62,7 @@ export async function signR2RecordingUrl(
   creds: R2Credentials,
   key: string,
   ttlSeconds: number = URL_TTL_SECONDS,
+  downloadFilename?: string,
 ): Promise<string> {
   const aws = new AwsClient({
     accessKeyId: creds.accessKeyId,
@@ -71,8 +75,16 @@ export async function signR2RecordingUrl(
     `https://${creds.accountId}.r2.cloudflarestorage.com/${creds.bucket}/` +
     key.split('/').map(encodeURIComponent).join('/');
 
+  // Los overrides de respuesta tienen que ir en la query ANTES de firmar: R2 los
+  // valida como parte de la firma SigV4.
+  const query = new URLSearchParams({ 'X-Amz-Expires': String(ttlSeconds) });
+  if (downloadFilename) {
+    query.set('response-content-disposition', `attachment; filename="${downloadFilename}"`);
+    query.set('response-content-type', 'video/mp4');
+  }
+
   const signed = await aws.sign(
-    new Request(`${objectUrl}?X-Amz-Expires=${ttlSeconds}`, { method: 'GET' }),
+    new Request(`${objectUrl}?${query.toString()}`, { method: 'GET' }),
     { aws: { signQuery: true } },
   );
 
@@ -161,14 +173,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const user = await requireAuth(req, res);
   if (!user) return;
 
-  const ok = await applyRateLimit(req, res, user.id, {
-    requests: 30,
-    window: '1 m',
-    prefix: 'recording-url',
-  });
-  if (!ok) return;
+  const { live_id, download } = parsed.data;
 
-  const { live_id } = parsed.data;
+  // Las descargas tienen su propio bucket (más estricto) para no gastar el de reproducción.
+  const ok = await applyRateLimit(
+    req,
+    res,
+    user.id,
+    download
+      ? { requests: 10, window: '1 h', prefix: 'recording-download' }
+      : { requests: 30, window: '1 m', prefix: 'recording-url' },
+  );
+  if (!ok) return;
 
   // Cliente con service role: leemos el live y autorizamos nosotros
   // (comparando el plan del usuario contra replay_visibility).
@@ -178,7 +194,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { data: live, error } = await supabase
     .from('lives')
-    .select('recording_r2_key, recording_storage, replay_visibility, status')
+    .select('recording_r2_key, recording_storage, replay_visibility, status, title, starts_at')
     .eq('id', live_id)
     .maybeSingle();
 
@@ -206,7 +222,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const url = await signR2RecordingUrl(r2Creds, live.recording_r2_key);
+    const filename = download ? buildRecordingDownloadFilename(live.title, live.starts_at) : undefined;
+    const url = await signR2RecordingUrl(r2Creds, live.recording_r2_key, URL_TTL_SECONDS, filename);
     return res.status(200).json({ url, expiresIn: URL_TTL_SECONDS });
   } catch (err) {
     console.error('Error firmando URL R2:', err);

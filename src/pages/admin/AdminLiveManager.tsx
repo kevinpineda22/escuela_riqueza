@@ -11,6 +11,7 @@ import RecordingPlayer from "@/components/feature/RecordingPlayer";
 import { AdminBroadcastPanel } from "@/components/feature/admin-live/AdminBroadcastPanel";
 import { RecordingReviewControl } from "@/components/feature/admin-live/RecordingReviewControl";
 import { reviewDeadlineFrom } from "@/lib/recordingReview";
+import { reactivateWarning } from "@/lib/live/reactivateWarning";
 
 const CF_SUBDOMAIN = import.meta.env.VITE_CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN || "";
 const PRESET_INPUT_IDS = [
@@ -1226,6 +1227,8 @@ const AdminLiveManager = () => {
                     ) : null}
                     <button onClick={async e => {
                       e.stopPropagation();
+                      const warning = reactivateWarning(live);
+                      if (warning && !window.confirm(warning)) return;
                       try {
                         await updateLive(live.id, { status: "scheduled" });
                         const fresh = await apiSetActiveLive(live.id);

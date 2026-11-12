@@ -343,9 +343,33 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
 
     // 2. Suscribirse a nuevos mensajes (Realtime) desde el inicio, sin esperar
     // el historial, para no perder mensajes concurrentes.
-    const channel = supabase.channel(`live_messages_${liveId}`);
     let hasSubscribedOnce = false;
+    let channel: ReturnType<typeof supabase.channel>;
+    // Vigilante de reconexión: si el canal queda fuera de SUBSCRIBED más de
+    // STUCK_MS, se cierra y se abre uno nuevo. El reintento propio de Supabase a
+    // veces no vuelve (visto en producción el 2026-10-31: el chat quedó en
+    // "Reconectando…" hasta recargar la página). Espera progresiva hasta 60 s.
+    const STUCK_MS = 15_000;
+    let stuckTimer: number | null = null;
+    let reopenAttempts = 0;
+    let isSubscribed = false;
+    const clearStuckTimer = () => {
+      if (stuckTimer !== null) window.clearTimeout(stuckTimer);
+      stuckTimer = null;
+    };
+    const armStuckTimer = () => {
+      if (stuckTimer !== null || !isActive) return;
+      const delay = Math.min(60_000, STUCK_MS * 2 ** reopenAttempts);
+      stuckTimer = window.setTimeout(() => {
+        stuckTimer = null;
+        if (!isActive || isSubscribed) return;
+        reopenAttempts++;
+        reopenChannel();
+      }, delay);
+    };
 
+    const openChannel = () => {
+    channel = supabase.channel(`live_messages_${liveId}`);
     channel.on(
       "postgres_changes",
       { event: "INSERT", schema: "public", table: "live_messages", filter: `live_id=eq.${liveId}` },
@@ -396,19 +420,49 @@ const LiveChat = ({ liveId = "00000000-0000-0000-0000-000000000000", onIncomingM
       }
     ).subscribe((status) => {
       if (!isActive) return;
+      isSubscribed = status === "SUBSCRIBED";
       // F23: el indicador refleja la suscripción real, no es decorativo.
-      setConnection(status === "SUBSCRIBED" ? "connected" : "reconnecting");
+      setConnection(isSubscribed ? "connected" : "reconnecting");
       // La primera suscripción no resincroniza (el historial ya se está
       // cargando); un SUBSCRIBED posterior es una reconexión real.
-      if (status === "SUBSCRIBED") {
+      if (isSubscribed) {
+        clearStuckTimer();
+        reopenAttempts = 0;
         if (hasSubscribedOnce) resync();
         hasSubscribedOnce = true;
+      } else {
+        armStuckTimer();
       }
     });
+    };
+
+    const reopenChannel = () => {
+      if (!isActive) return;
+      clearStuckTimer();
+      supabase.removeChannel(channel);
+      isSubscribed = false;
+      openChannel();
+      armStuckTimer();
+    };
+
+    openChannel();
+    // El primer SUBSCRIBED también tiene que llegar: si no llega, el vigilante reabre.
+    armStuckTimer();
+
+    // Al volver a la pestaña o recuperar internet, si el chat no está conectado
+    // se reabre ya, sin esperar al vigilante.
+    const reopenIfDisconnected = () => {
+      if (isActive && !isSubscribed && document.visibilityState === "visible") reopenChannel();
+    };
+    window.addEventListener("online", reopenIfDisconnected);
+    document.addEventListener("visibilitychange", reopenIfDisconnected);
 
     // Cleanup de la suscripción al desmontar
     return () => {
       isActive = false;
+      clearStuckTimer();
+      window.removeEventListener("online", reopenIfDisconnected);
+      document.removeEventListener("visibilitychange", reopenIfDisconnected);
       supabase.removeChannel(channel);
     };
   }, [liveId, tombstonesRef, markDeleted]);

@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import type { LiveHLSPlayerHandle, QualityLevel } from "@/components/feature/LiveHLSPlayer";
 import type { ReportResult } from "@/lib/errors/errorReporter";
-import { hasSavedLivePosition } from "@/lib/live/savedPosition";
+import { clearSavedLivePosition, hasSavedLivePosition } from "@/lib/live/savedPosition";
 import { readLiveVolume } from "@/lib/live/volumePreference";
 
 /** Modos que decide la sala sola. "low" (LL-HLS) ya no se ofrece al alumno. */
@@ -195,6 +195,7 @@ export function useLivePlayback(resumeKey?: string) {
   /** "EN VIVO": desde Clase completa vuelve a Fluidez; en Fluidez, al filo. */
   const returnToLive = () => {
     setStartBehindLive(null);
+    if (resumeKey) clearSavedLivePosition(resumeKey);
     if (latencyMode === "dvr") setLatencyMode("smooth");
     else playerRef.current?.goLive();
   };
@@ -202,6 +203,7 @@ export function useLivePlayback(resumeKey?: string) {
   /** Salida de un error en Clase completa: Fluidez no depende del DVR. */
   const recoverInSmooth = () => {
     setStartBehindLive(null);
+    if (resumeKey) clearSavedLivePosition(resumeKey);
     setLatencyMode("smooth");
     retryPlayer();
   };
