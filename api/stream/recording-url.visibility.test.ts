@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { applyRateLimit } from '../_lib/ratelimit.js';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 // Authed branch (live_id): authorization by school replay visibility.
@@ -32,15 +33,15 @@ function makeRes(): VercelResponse & { _status?: number; _json?: unknown } {
   return res;
 }
 
-async function call(user: { role: string; plan: string | null }, live: Record<string, unknown>) {
+async function call(user: { role: string; plan: string | null }, live: Record<string, unknown>, extraBody: Record<string, unknown> = {}) {
   authState.user = { id: 'u1', ...user };
   liveRow.mockResolvedValue({
-    data: { recording_r2_key: 'rec/x.mp4', recording_storage: 'r2', allowed_plans: [], status: 'ended', replay_visibility: 'hidden', ...live },
+    data: { recording_r2_key: 'rec/x.mp4', recording_storage: 'r2', allowed_plans: [], status: 'ended', replay_visibility: 'hidden', title: 'Clase de Ahorro', starts_at: '2026-10-31T15:00:00Z', ...live },
     error: null,
   });
   const { default: handler } = await import('./recording-url');
   const res = makeRes();
-  await handler({ method: 'POST', headers: {}, body: { live_id: LIVE_ID }, socket: {} } as unknown as VercelRequest, res);
+  await handler({ method: 'POST', headers: {}, body: { live_id: LIVE_ID, ...extraBody }, socket: {} } as unknown as VercelRequest, res);
   return res;
 }
 
@@ -97,5 +98,39 @@ describe('POST /api/stream/recording-url — school replay visibility (authed)',
   it('visibility does not apply while the live is not ended', async () => {
     const res = await call({ role: 'student', plan: 'vip' }, { replay_visibility: 'all', status: 'live' });
     expect(res.status).toHaveBeenCalledWith(403);
+  });
+
+  it('playback URL has no content-disposition override', async () => {
+    const res = await call({ role: 'student', plan: 'vip' }, { replay_visibility: 'paid' });
+    const url = (res._json as { url: string }).url;
+    expect(url).not.toContain('response-content-disposition');
+    expect(applyRateLimit).toHaveBeenCalledWith(
+      expect.anything(), expect.anything(), 'u1', expect.objectContaining({ prefix: 'recording-url' }),
+    );
+  });
+
+  it('download=true signs an attachment URL with a sanitized filename and its own rate limit', async () => {
+    const res = await call({ role: 'student', plan: 'vip' }, { replay_visibility: 'paid' }, { download: true });
+    expect(res.status).toHaveBeenCalledWith(200);
+    const url = new URL((res._json as { url: string }).url);
+    expect(url.searchParams.get('response-content-disposition')).toBe(
+      'attachment; filename="Clase-2026-10-31-Clase-de-Ahorro.mp4"',
+    );
+    expect(url.searchParams.get('response-content-type')).toBe('video/mp4');
+    expect(url.searchParams.get('X-Amz-Signature')).toBeTruthy();
+    expect(applyRateLimit).toHaveBeenCalledWith(
+      expect.anything(), expect.anything(), 'u1',
+      expect.objectContaining({ prefix: 'recording-download', requests: 10, window: '1 h' }),
+    );
+  });
+
+  it('download does not bypass authorization', async () => {
+    const res = await call({ role: 'student', plan: 'free' }, { replay_visibility: 'paid' }, { download: true });
+    expect(res.status).toHaveBeenCalledWith(403);
+  });
+
+  it('download of a non-R2 recording gets 409', async () => {
+    const res = await call({ role: 'student', plan: 'vip' }, { replay_visibility: 'paid', recording_storage: 'stream' }, { download: true });
+    expect(res.status).toHaveBeenCalledWith(409);
   });
 });

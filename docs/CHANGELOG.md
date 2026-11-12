@@ -5,6 +5,15 @@
 
 ---
 
+## 2026-11-12
+
+### Grabaciones — botón «Descargar clase» para alumnos
+- **Qué**: en `/grabaciones/:liveId` (`ReplayViewer`) los alumnos que pueden ver la repetición y cuya grabación está archivada en R2 ven el botón «Descargar clase» con el aviso «Archivo grande: te recomendamos descargarlo con WiFi.». Las grabaciones que siguen en Stream no lo muestran (no hay archivo en R2; el endpoint además responde 409).
+- **Endpoint**: `POST /api/stream/recording-url` (rama autenticada) acepta `download: true`. Se firma la URL de R2 con `response-content-disposition=attachment; filename="Clase-AAAA-MM-DD-<slug>.mp4"` y `response-content-type=video/mp4` dentro de la query firmada (SigV4). La autorización es la misma que la de reproducción. Rate limit propio: 10 por hora por usuario (prefijo `recording-download`), sin tocar el de reproducción (30/min). La rama pública (`share_token`) NO ofrece descarga.
+- **Nombre de archivo**: `api/_lib/downloadFilename.ts` (ASCII, sin acentos, máx. 60 caracteres de título, fecha en hora de Colombia).
+- **Cliente**: `requestRecordingDownloadUrl` (`src/lib/api/stream/lives.ts`) y `DownloadRecordingButton`, que dispara la descarga con un `<a>` temporal (sin fetch/blob: los archivos pesan GB). Sin tamaño del archivo: `get_school_replay` no devuelve `recording_bytes`.
+- **Pendiente de verificar en producción**: que R2 respete `response-content-disposition` en URLs presignadas (debería, es parte de la API S3). Cuando exista la versión 720p solo cambia la key que se firma.
+
 ## 2026-10-16
 
 ### Lives — Fluidez vuelve a ser el modo por defecto (el más estable para clases largas)

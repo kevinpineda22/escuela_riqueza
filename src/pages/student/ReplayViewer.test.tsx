@@ -13,6 +13,10 @@ vi.mock("@/components/feature/RecordingPlayer", () => ({
   ),
 }));
 
+vi.mock("@/components/feature/replays/DownloadRecordingButton", () => ({
+  default: ({ liveId }: { liveId: string }) => <button data-testid="download" data-id={liveId} />,
+}));
+
 const get = vi.mocked(getSchoolReplay);
 
 const base: SchoolReplay = {
@@ -48,6 +52,24 @@ describe("ReplayViewer", () => {
     expect(screen.getByRole("heading", { name: "Clase de ahorro" })).toBeInTheDocument();
     expect(screen.getByText("Descripción de la clase")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Volver a grabaciones/ })).toHaveAttribute("href", "/dashboard?tab=grabaciones");
+  });
+
+  it("offers the download for R2 recordings only", async () => {
+    get.mockResolvedValue(base);
+    const { unmount } = renderViewer();
+    expect(await screen.findByTestId("download")).toHaveAttribute("data-id", "r1");
+    unmount();
+    get.mockResolvedValue({ ...base, recording_storage: "stream" });
+    renderViewer();
+    await screen.findByTestId("player");
+    expect(screen.queryByTestId("download")).not.toBeInTheDocument();
+  });
+
+  it("does not offer the download when locked", async () => {
+    get.mockResolvedValue({ ...base, can_watch: false });
+    renderViewer();
+    await screen.findByText(/disponible en los planes/);
+    expect(screen.queryByTestId("download")).not.toBeInTheDocument();
   });
 
   it("shows the locked state without a player when can_watch is false", async () => {

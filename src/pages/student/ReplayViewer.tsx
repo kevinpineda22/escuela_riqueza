@@ -4,6 +4,7 @@ import { ArrowLeft, Loader2, Lock, SearchX } from "lucide-react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import RecordingPlayer from "@/components/feature/RecordingPlayer";
+import DownloadRecordingButton from "@/components/feature/replays/DownloadRecordingButton";
 import { formatReplayDate, formatReplayDuration } from "@/components/feature/replays/format";
 import { getSchoolReplay, type SchoolReplay } from "@/lib/api/stream/replays";
 
@@ -111,6 +112,8 @@ const ReplayViewer = () => {
         {state.kind === "ready" && (
           <article className="space-y-4">
             <RecordingPlayer live={state.replay} trackProgress />
+            {/* Solo las grabaciones archivadas en R2 tienen archivo descargable (las de Stream no). */}
+            {state.replay.recording_storage === "r2" && <DownloadRecordingButton liveId={state.replay.id} />}
             <div className="space-y-2">
               <h1 className="text-xl font-bold text-foreground-strong sm:text-2xl">{state.replay.title}</h1>
               <p className="text-xs text-foreground-muted">
