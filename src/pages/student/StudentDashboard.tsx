@@ -289,9 +289,10 @@ const StudentDashboard = () => {
   const [subscriptionEndDate, setSubscriptionEndDate] = useState<string | null>(null);
   const [isBillingModalOpen, setIsBillingModalOpen] = useState(false);
 
-  // Cargar fecha de expiracin si el plan es de pago
+  // Cargar fecha de cobro si el plan es de pago. El VIP (formación presencial)
+  // no paga la plataforma: no tiene vigencia ni cobro.
   useEffect(() => {
-    if (!user || user.plan === PLANS.FREE) return;
+    if (!user || user.plan === PLANS.FREE || user.plan === PLANS.VIP) return;
     const loadSubscriptionEnd = async () => {
       try {
         const { data } = await supabase
@@ -1418,15 +1419,26 @@ const StudentDashboard = () => {
                           {user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : "Hoy"}
                         </span>
                       </div>
-                      {user?.plan !== PLANS.FREE && subscriptionEndDate && (
-                        <div className="flex justify-between items-center">
-                          <span className="text-foreground-muted font-medium">Próximo cobro</span>
-                          <span className="text-fg-90 font-medium">{subscriptionEndDate}</span>
+                      {user?.plan === PLANS.VIP ? (
+                        <div className="flex justify-between items-center gap-4">
+                          <span className="text-foreground-muted font-medium">Vigencia</span>
+                          <span className="text-fg-90 font-medium text-right">Sin vencimiento</span>
                         </div>
+                      ) : (
+                        user?.plan !== PLANS.FREE && subscriptionEndDate && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-foreground-muted font-medium">Próximo cobro</span>
+                            <span className="text-fg-90 font-medium">{subscriptionEndDate}</span>
+                          </div>
+                        )
                       )}
                     </div>
                     
-                    {user?.plan === PLANS.FREE ? (
+                    {user?.plan === PLANS.VIP ? (
+                      <p className="mt-8 text-sm text-foreground-muted text-center relative z-10">
+                        Tu acceso está incluido en tu formación presencial. No tienes pagos pendientes en la plataforma.
+                      </p>
+                    ) : user?.plan === PLANS.FREE ? (
                       <button className="w-full mt-8 py-3.5 bg-ink/10 hover:bg-ink/20 text-foreground-strong font-bold rounded-xl transition-all border border-ink/20 relative z-10 hover:border-brand/30 hover:text-accent light:bg-surface-panel light:border-brand/40 light:text-accent light:hover:bg-brand/10 light:hover:border-brand/60">
                         Mejorar mi Plan
                       </button>

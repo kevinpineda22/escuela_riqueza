@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { ApiError, authedFetch } from "@/lib/api/client";
 import type { Plan } from "@/types/user";
 import type { UserRole } from "@/types/user";
 
@@ -57,6 +58,30 @@ export async function fetchAdminUsers(): Promise<AdminUser[]> {
   return ((data as AdminProfileRow[] | null) || []).map(mapAdminProfile);
 }
 
+export interface ActiveSubscription {
+  plan: Plan;
+  /** null = sin vigencia (VIP: formación presencial, no paga la plataforma). */
+  endDate: string | null;
+}
+
+/** Suscripción activa de cada usuario, en UNA consulta (antes era una por fila). */
+export async function fetchActiveSubscriptions(): Promise<Record<string, ActiveSubscription>> {
+  const { data, error } = await supabase
+    .from("subscriptions")
+    .select("user_id, plan, current_period_end, updated_at")
+    .eq("status", "active")
+    .order("updated_at", { ascending: false });
+
+  if (error) throw error;
+
+  const map: Record<string, ActiveSubscription> = {};
+  for (const row of (data ?? []) as { user_id: string; plan: Plan; current_period_end: string | null }[]) {
+    // Orden descendente: la primera de cada usuario es la más reciente.
+    if (!map[row.user_id]) map[row.user_id] = { plan: row.plan, endDate: row.current_period_end };
+  }
+  return map;
+}
+
 export async function fetchUserSubscription(userId: string): Promise<SubscriptionInfo | null> {
   const { data, error } = await supabase
     .from("subscriptions")
@@ -95,27 +120,88 @@ export async function updateUserStatus(userId: string, isSuspended: boolean): Pr
   return { ...mapAdminProfile(row), status: isSuspended ? "suspended" : "active" };
 }
 
-export async function updateUserPlan(userId: string, plan: Plan): Promise<void> {
-  // Llama al RPC (Stored Procedure) que tiene permisos SECURITY DEFINER
-  // para evitar problemas de RLS (403 Forbidden o 406 Not Acceptable)
-  const { error } = await supabase.rpc("admin_update_user_plan", {
-    target_user_id: userId,
-    new_plan: plan,
-  });
+// ── Endpoint /api/admin/users ─────────────────────────────────────────────
+// Crear, editar el correo de login o borrar la cuenta de Auth necesita la clave
+// de servicio: pasa por la Vercel Function (solo admins), no por RPC.
 
-  if (error) {
-    console.error("Error from admin_update_user_plan:", error);
-    throw error;
+export async function adminUsersRequest<T>(body: Record<string, unknown>): Promise<T> {
+  const res = await authedFetch("/api/admin/users", { method: "POST", body: JSON.stringify(body) });
+  const data = (await res.json().catch(() => null)) as ({ error?: string } & T) | null;
+  if (!res.ok) {
+    throw new ApiError("admin_users", data?.error || "No se pudo completar la operación", res.status);
   }
+  return data as T;
 }
 
-export async function deleteUser(userId: string): Promise<void> {
-  const { error } = await supabase.rpc("admin_delete_user", {
-    target_user_id: userId
+export interface AccessDelivery {
+  /** Contraseña temporal: mostrarla UNA vez para que el admin la pueda pasar a mano. */
+  tempPassword: string;
+  emailSent: boolean;
+  emailError?: string;
+}
+
+interface AccessDeliveryResponse {
+  temp_password: string;
+  email_sent: boolean;
+  email_error?: string;
+}
+
+const toDelivery = (r: AccessDeliveryResponse): AccessDelivery => ({
+  tempPassword: r.temp_password,
+  emailSent: r.email_sent,
+  ...(r.email_error ? { emailError: r.email_error } : {}),
+});
+
+export interface NewUserInput {
+  fullName: string;
+  email: string;
+  plan: Plan;
+  role: UserRole;
+  /** Manda el correo con la contraseña temporal. */
+  sendEmail: boolean;
+}
+
+export async function createAdminUser(input: NewUserInput): Promise<{ user: AdminUser } & AccessDelivery> {
+  const r = await adminUsersRequest<{ user: AdminProfileRow } & AccessDeliveryResponse>({
+    action: "create",
+    full_name: input.fullName,
+    email: input.email,
+    plan: input.plan,
+    role: input.role,
+    send_email: input.sendEmail,
   });
-  
-  if (error) {
-    console.error("Error from admin_delete_user:", error);
-    throw error;
-  }
+  return { user: mapAdminProfile(r.user), ...toDelivery(r) };
+}
+
+export interface UserPatch {
+  fullName?: string;
+  email?: string;
+  role?: UserRole;
+  plan?: Plan;
+}
+
+export async function updateAdminUser(userId: string, patch: UserPatch): Promise<AdminUser> {
+  const r = await adminUsersRequest<{ user: AdminProfileRow }>({
+    action: "update",
+    user_id: userId,
+    ...(patch.fullName !== undefined ? { full_name: patch.fullName } : {}),
+    ...(patch.email !== undefined ? { email: patch.email } : {}),
+    ...(patch.role !== undefined ? { role: patch.role } : {}),
+    ...(patch.plan !== undefined ? { plan: patch.plan } : {}),
+  });
+  return mapAdminProfile(r.user);
+}
+
+export async function updateUserPlan(userId: string, plan: Plan): Promise<void> {
+  await updateAdminUser(userId, { plan });
+}
+
+/** Contraseña temporal nueva + correo de acceso. Obliga a cambiarla al entrar. */
+export async function resendAccess(userId: string): Promise<AccessDelivery> {
+  return toDelivery(await adminUsersRequest<AccessDeliveryResponse>({ action: "resend_access", user_id: userId }));
+}
+
+/** Borra la cuenta de Auth (y con ella el perfil): el correo queda libre. */
+export async function deleteUser(userId: string): Promise<void> {
+  await adminUsersRequest<{ ok: true }>({ action: "delete", user_id: userId });
 }

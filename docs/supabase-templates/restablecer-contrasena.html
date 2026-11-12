@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>Restablece tu contraseña</title>
+</head>
+<body style="margin:0;padding:24px 12px;background-color:#0a0a0a;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#0a0a0a;">
+<tr><td align="center">
+  <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background-color:#121212;border:1px solid #2a2a2a;border-radius:16px;overflow:hidden;">
+    <tr><td style="padding:32px 40px 24px;text-align:center;border-bottom:1px solid #2a2a2a;">
+      <p style="margin:0;font-size:17px;font-weight:700;letter-spacing:3px;color:#CCA43B;text-transform:uppercase;">Escuela de la Riqueza</p>
+    </td></tr>
+    <tr><td style="padding:40px;">
+      <h1 style="margin:0 0 20px;font-size:26px;line-height:34px;font-weight:700;color:#E5E5E5;">Restablece tu contraseña</h1>
+      <p style="margin:0 0 16px;font-size:16px;line-height:26px;color:#E5E5E5;">Recibimos una solicitud para cambiar la contraseña de tu cuenta <strong style="color:#E5E5E5;">{{ .Email }}</strong>.</p>
+      <p style="margin:0 0 8px;font-size:15px;line-height:24px;color:#A3A3A3;">Toca el botón y elige una contraseña nueva:</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:28px 0 32px;"><tr><td align="center">
+        <table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border-radius:10px;background-color:#CCA43B;">
+          <a href="{{ .SiteURL }}/restablecer-contrasena?token_hash={{ .TokenHash }}&type=recovery" style="display:inline-block;padding:14px 34px;font-size:15px;font-weight:700;color:#0a0a0a;text-decoration:none;">Crear contraseña nueva</a>
+        </td></tr></table>
+      </td></tr></table>
+      <p style="margin:0 0 12px;font-size:14px;line-height:22px;color:#A3A3A3;">El enlace vence en una hora y sirve una sola vez. Si se venció, pide otro desde "¿Olvidaste tu contraseña?".</p>
+      <p style="margin:0;font-size:14px;line-height:22px;color:#A3A3A3;">Si no fuiste tú, ignora este correo: tu contraseña actual sigue funcionando.</p>
+    </td></tr>
+    <tr><td style="border-top:1px solid #2a2a2a;padding:24px 40px;text-align:center;">
+      <p style="margin:0;font-size:12px;line-height:20px;color:#A3A3A3;">Escuela de la Riqueza &middot; Iván Mazo</p>
+      <p style="margin:6px 0 0;font-size:12px;line-height:18px;color:#A3A3A3;">Recibiste este correo porque se pidió restablecer la contraseña de tu cuenta.</p>
+    </td></tr>
+  </table>
+</td></tr>
+</table>
+</body>
+</html>

@@ -31,6 +31,7 @@ import { useIsDesktop } from "@/hooks/useMediaQuery";
 import ParticleNetwork from "@/components/feature/ParticleNetwork";
 import { requestPasswordReset } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
+import { isSafeReturnPath } from "@/lib/safeReturnPath";
 import { USER_ROLES } from "@/types/user";
 import { cn } from "@/lib/utils";
 import BrandLogo from "@/components/layout/BrandLogo";
@@ -767,10 +768,6 @@ const AuthBackground = () => {
 /* Página principal                                              */
 /* ============================================================ */
 
-const isSafeReturnPath = (path: string): boolean => {
-  // Solo permitir paths internos (deben empezar con "/" pero no "//" ni "/\")
-  return /^\/[^/\\]/.test(path);
-};
 
 const AuthPage = ({ initialMode = "signin" }: AuthPageProps) => {
   const navigate = useNavigate();

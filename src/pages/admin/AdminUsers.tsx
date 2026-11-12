@@ -1,16 +1,26 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Users, Search, Filter, MoreVertical, Shield, Crown, Mail,
-  ShieldAlert, Trash2, Edit, X, Loader2
+  ShieldAlert, Trash2, Edit, X, Loader2, UserPlus, MailWarning
 } from "lucide-react";
 import { 
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuLabel
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { fetchAdminUsers, updateUserStatus, updateUserPlan, fetchUserSubscription, deleteUser, type AdminUser } from "@/lib/api/admin/users";
+import { toast } from "@/components/ui/toaster";
+import {
+  fetchAdminUsers, fetchActiveSubscriptions, updateUserStatus, updateUserPlan, deleteUser,
+  type ActiveSubscription, type AdminUser,
+} from "@/lib/api/admin/users";
+import { CreateUserDialog } from "@/components/feature/admin/users/CreateUserDialog";
+import { PlanPicker } from "@/components/feature/admin/users/UserFields";
+import { EmailProblemBadge } from "@/components/feature/admin/users/EmailProblemBadge";
+import { UsersPagination } from "@/components/feature/admin/users/UsersPagination";
+import { pageSlice } from "@/components/feature/admin/users/pagination";
+import { fetchEmailIssues, type EmailIssue } from "@/lib/api/admin/emails";
 
 type Plan = "free" | "individual" | "vip";
 type Role = "admin" | "student";
@@ -32,7 +42,13 @@ const AdminUsers = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [planFilter, setPlanFilter] = useState<Plan | "all">("all");
   const [roleFilter, setRoleFilter] = useState<Role | "all">("all");
-  const [userSubscriptions, setUserSubscriptions] = useState<Record<string, { plan: string; endDate: string }>>({});
+  const [userSubscriptions, setUserSubscriptions] = useState<Record<string, ActiveSubscription>>({});
+  const [showCreate, setShowCreate] = useState(false);
+  const [savingPlan, setSavingPlan] = useState(false);
+  const [emailIssues, setEmailIssues] = useState<Record<string, EmailIssue>>({});
+  const [onlyEmailIssues, setOnlyEmailIssues] = useState(false);
+  const [pageState, setPageState] = useState({ key: "", page: 1 });
+  const tableRef = useRef<HTMLDivElement>(null);
 
   // Modal para cambiar plan
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
@@ -43,19 +59,18 @@ const AdminUsers = () => {
   const loadUsers = async () => {
     try {
       setLoading(true);
-      const data = await fetchAdminUsers();
+      const [data, subs, issues] = await Promise.all([
+        fetchAdminUsers(),
+        fetchActiveSubscriptions(),
+        // Un fallo acá no puede dejar al admin sin la lista de usuarios.
+        fetchEmailIssues().catch((err) => {
+          console.error("Error cargando los problemas de correo:", err);
+          return {} as Record<string, EmailIssue>;
+        }),
+      ]);
       setUsers(data);
-      // Cargar suscripciones en paralelo
-      const subMap: Record<string, { plan: string; endDate: string }> = {};
-      await Promise.all(
-        data.map(async (u) => {
-          const sub = await fetchUserSubscription(u.id);
-          if (sub) {
-            subMap[u.id] = { plan: sub.plan, endDate: sub.current_period_end || "" };
-          }
-        })
-      );
-      setUserSubscriptions(subMap);
+      setUserSubscriptions(subs);
+      setEmailIssues(issues);
     } catch (err) {
       console.error("Error cargando usuarios:", err);
     } finally {
@@ -75,9 +90,23 @@ const AdminUsers = () => {
       const userPlan = userSubscriptions[u.id]?.plan || u.plan;
       const matchesPlan = planFilter === "all" || userPlan === planFilter;
       const matchesRole = roleFilter === "all" || u.role === roleFilter;
-      return matchesSearch && matchesPlan && matchesRole;
+      const matchesEmail = !onlyEmailIssues || Boolean(emailIssues[u.id]);
+      return matchesSearch && matchesPlan && matchesRole && matchesEmail;
     });
-  }, [users, searchTerm, planFilter, roleFilter, userSubscriptions]);
+  }, [users, searchTerm, planFilter, roleFilter, userSubscriptions, onlyEmailIssues, emailIssues]);
+
+  // Cambiar búsqueda o filtros vuelve a la página 1: la página guardada solo
+  // vale para la combinación de filtros con la que se eligió.
+  const filterKey = [searchTerm, planFilter, roleFilter, onlyEmailIssues].join("|");
+  const slice = pageSlice(filteredUsers.length, pageState.key === filterKey ? pageState.page : 1);
+  const pageUsers = filteredUsers.slice(slice.start, slice.end);
+
+  const goToPage = (page: number) => {
+    setPageState({ key: filterKey, page });
+    tableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const emailIssueCount = users.filter((u) => emailIssues[u.id]).length;
 
   const getPlan = (u: AdminUser): Plan => {
     return (userSubscriptions[u.id]?.plan || u.plan) as Plan;
@@ -93,21 +122,23 @@ const AdminUsers = () => {
       const updated = await updateUserStatus(u.id, isSuspending);
       setUsers(prev => prev.map(p => p.id === updated.id ? updated : p));
     } catch (err) {
-      console.error(err);
-      alert("Error actualizando estado");
+      toast.error("Error actualizando estado", { description: (err as Error).message });
     }
   };
 
   const handleChangePlan = async () => {
     if (!selectedUser) return;
     try {
+      setSavingPlan(true);
       await updateUserPlan(selectedUser.id, newPlan);
       await loadUsers(); // Recargar para traer la sub actualizada
       setShowPlanModal(false);
       setSelectedUser(null);
+      toast.success("Plan actualizado");
     } catch (err) {
-      console.error(err);
-      alert("Error cambiando plan");
+      toast.error("Error cambiando plan", { description: (err as Error).message });
+    } finally {
+      setSavingPlan(false);
     }
   };
 
@@ -116,10 +147,18 @@ const AdminUsers = () => {
     try {
       await deleteUser(u.id);
       setUsers(prev => prev.filter(p => p.id !== u.id));
+      toast.success("Usuario eliminado");
     } catch (err) {
-      console.error(err);
-      alert("Error eliminando usuario");
+      toast.error("Error eliminando usuario", { description: (err as Error).message });
     }
+  };
+
+  /** VIP = formación presencial: sin vigencia. Una fecha nula también es "sin vencimiento". */
+  const formatValidity = (u: AdminUser) => {
+    const sub = userSubscriptions[u.id];
+    if (!sub) return null;
+    if (getPlan(u) === "vip" || !sub.endDate) return "Sin vencimiento";
+    return formatDate(sub.endDate);
   };
 
   const formatDate = (dateStr: string) => {
@@ -141,6 +180,13 @@ const AdminUsers = () => {
           </h1>
           <p className="text-foreground-muted mt-1">Visualiza y administra todos los alumnos registrados en la plataforma.</p>
         </div>
+        <button
+          type="button"
+          onClick={() => setShowCreate(true)}
+          className="flex items-center gap-2 px-5 py-3 bg-brand hover:bg-brand-hover text-on-brand font-bold rounded-xl text-sm transition-colors shrink-0"
+        >
+          <UserPlus size={18} /> Nuevo usuario
+        </button>
       </div>
 
       {/* Toolbar */}
@@ -182,8 +228,25 @@ const AdminUsers = () => {
         </div>
       </div>
 
+      {(emailIssueCount > 0 || onlyEmailIssues) && (
+        <button
+          type="button"
+          aria-pressed={onlyEmailIssues}
+          onClick={() => setOnlyEmailIssues((v) => !v)}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-semibold transition-colors",
+            onlyEmailIssues
+              ? "border-red-500/40 bg-red-500/10 text-danger"
+              : "border-line-subtle text-fg-80 hover:text-foreground-strong hover:border-red-500/30"
+          )}
+        >
+          <MailWarning size={16} className="shrink-0" />
+          {onlyEmailIssues ? "Ver todos los usuarios" : `Correos con problemas (${emailIssueCount})`}
+        </button>
+      )}
+
       {/* Table */}
-      <div className="bg-black/30 border border-line-subtle rounded-2xl overflow-hidden light:bg-surface-panel light:shadow-panel">
+      <div ref={tableRef} className="scroll-mt-6 bg-black/30 border border-line-subtle rounded-2xl overflow-hidden light:bg-surface-panel light:shadow-panel">
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="text-accent animate-spin" size={36} />
@@ -193,7 +256,7 @@ const AdminUsers = () => {
         {/* Cards (mobile) */}
         <div className="md:hidden divide-y divide-ink/5">
           {filteredUsers.length > 0 ? (
-            filteredUsers.map((u) => {
+            pageUsers.map((u) => {
               const plan = getPlan(u);
               const subInfo = userSubscriptions[u.id];
               return (
@@ -250,9 +313,10 @@ const AdminUsers = () => {
                       {u.status === "active" ? "Activo" : "Suspendido"}
                     </span>
                   </div>
+                  {emailIssues[u.id] && <EmailProblemBadge outcome={emailIssues[u.id]} />}
                   <div className="flex items-center justify-between text-[11px] text-foreground-muted pt-1 border-t border-ink/5">
                     <span>Registrado: <span className="text-fg-70 font-medium">{formatDate(u.created_at)}</span></span>
-                    {subInfo && <span>Hasta: <span className="text-fg-70 font-medium">{formatDate(subInfo.endDate)}</span></span>}
+                    {subInfo && <span>Vigencia: <span className="text-fg-70 font-medium">{formatValidity(u)}</span></span>}
                   </div>
                 </div>
               );
@@ -275,14 +339,14 @@ const AdminUsers = () => {
                 <th className="px-6 py-4">Plan</th>
                 <th className="px-6 py-4">Rol</th>
                 <th className="px-6 py-4 hidden md:table-cell">Registrado</th>
-                <th className="px-6 py-4 hidden lg:table-cell">Suscripción hasta</th>
+                <th className="px-6 py-4 hidden lg:table-cell">Vigencia</th>
                 <th className="px-6 py-4">Estado</th>
                 <th className="px-6 py-4 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-ink/5">
               {filteredUsers.length > 0 ? (
-                filteredUsers.map((u) => {
+                pageUsers.map((u) => {
                   const plan = getPlan(u);
                   const subInfo = userSubscriptions[u.id];
                   return (
@@ -295,6 +359,7 @@ const AdminUsers = () => {
                           <div>
                             <div className="text-foreground-strong font-semibold text-sm">{u.full_name}</div>
                             <div className="text-foreground-muted text-xs flex items-center gap-1 mt-0.5"><Mail size={10} /> {u.email || "Sin email"}</div>
+                            {emailIssues[u.id] && <div className="mt-1"><EmailProblemBadge outcome={emailIssues[u.id]} /></div>}
                           </div>
                         </div>
                       </td>
@@ -306,7 +371,7 @@ const AdminUsers = () => {
                       </td>
                       <td className="px-6 py-4 hidden md:table-cell text-foreground-muted text-sm">{formatDate(u.created_at)}</td>
                       <td className="px-6 py-4 hidden lg:table-cell text-foreground-muted text-sm">
-                        {subInfo ? formatDate(subInfo.endDate) : <span className="text-fg-30">—</span>}
+                        {subInfo ? formatValidity(u) : <span className="text-fg-30">—</span>}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2 text-sm">
@@ -362,9 +427,7 @@ const AdminUsers = () => {
             </tbody>
           </table>
         </div>
-        <div className="bg-ink/5 border-t border-line-subtle px-6 py-4 flex items-center justify-between">
-          <div className="text-sm text-foreground-muted">Mostrando <span className="font-bold text-foreground-strong">{filteredUsers.length}</span> usuarios</div>
-        </div>
+        <UsersPagination slice={slice} total={filteredUsers.length} onPageChange={goToPage} />
         </>
         )}
       </div>
@@ -387,32 +450,25 @@ const AdminUsers = () => {
               <button onClick={() => setShowPlanModal(false)} className="text-fg-40 hover:text-foreground-strong"><X size={20} /></button>
             </div>
             <p className="text-foreground-muted text-sm mb-4">Usuario: <span className="text-foreground-strong font-semibold">{selectedUser.full_name}</span></p>
-            <div className="space-y-3">
-              {(["free", "individual", "vip"] as Plan[]).map((p) => (
-                <label key={p} className={cn(
-                  "flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all",
-                  newPlan === p ? "border-accent bg-brand/10" : "border-line-subtle bg-black/30 hover:border-ink/30 light:bg-surface-panel"
-                )}>
-                  <input type="radio" name="plan" value={p} checked={newPlan === p} onChange={() => setNewPlan(p)} className="accent-gold" />
-                  <div>
-                    <p className="text-foreground-strong font-bold capitalize">{p}</p>
-                    {p === "free" && <p className="text-foreground-muted text-xs">Acceso básico, publicidad incluida</p>}
-                    {p === "individual" && <p className="text-foreground-muted text-xs">Catálogo completo sin publicidad</p>}
-                    {p === "vip" && <p className="text-foreground-muted text-xs">Todo el contenido + lives exclusivos</p>}
-                  </div>
-                </label>
-              ))}
-            </div>
+            <PlanPicker name="plan" value={newPlan} onChange={setNewPlan} disabled={savingPlan} stacked />
             <button 
               onClick={handleChangePlan}
-              className="w-full mt-5 bg-brand hover:bg-brand-hover text-on-brand font-bold py-2.5 rounded-xl transition-colors"
+              disabled={savingPlan}
+              className="w-full mt-5 bg-brand hover:bg-brand-hover text-on-brand font-bold py-2.5 rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
             >
+              {savingPlan && <Loader2 size={14} className="animate-spin" />}
               Guardar Cambios
             </button>
           </motion.div>
         </motion.div>
       )}
       </AnimatePresence>
+
+      <CreateUserDialog
+        open={showCreate}
+        onOpenChange={setShowCreate}
+        onCreated={() => { void loadUsers(); }}
+      />
     </motion.div>
   );
 };

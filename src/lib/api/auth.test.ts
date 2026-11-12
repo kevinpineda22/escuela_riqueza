@@ -1,11 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { signIn, getCurrentUser, PROFILE_COLUMNS } from './auth';
+import { signIn, getCurrentUser, PROFILE_COLUMNS, updatePassword, completeRequiredPasswordChange, verifyEmailLink } from './auth';
 import { supabase } from '@/lib/supabase';
 import { ApiError } from './client';
 
 vi.mock('@/lib/supabase', () => ({
   supabase: {
-    auth: { signInWithPassword: vi.fn(), signOut: vi.fn(), getSession: vi.fn() },
+    auth: {
+      signInWithPassword: vi.fn(),
+      signOut: vi.fn(),
+      getSession: vi.fn(),
+      updateUser: vi.fn(),
+      refreshSession: vi.fn(),
+      verifyOtp: vi.fn(),
+    },
     from: vi.fn(),
   },
 }));
@@ -126,5 +133,72 @@ describe('getCurrentUser', () => {
 
     expect(selected).toEqual([PROFILE_COLUMNS]);
     expect(user?.email).toBe('alumno@escuela.com');
+  });
+});
+
+describe('contraseña temporal (alta de cohortes)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const sessionWith = (appMetadata: Record<string, unknown>) =>
+    (supabase.auth.getSession as any).mockResolvedValue({
+      data: { session: { user: { ...authSuccess.data.user, app_metadata: appMetadata } } },
+    });
+
+  it('la marca must_change_password de app_metadata llega al usuario', async () => {
+    sessionWith({ must_change_password: true });
+    profilesSelectSpy({ id: 'user-1', role: 'student', full_name: 'Alumno', plan: 'vip' });
+
+    expect((await getCurrentUser())?.mustChangePassword).toBe(true);
+  });
+
+  it('sin la marca, no pide el cambio', async () => {
+    sessionWith({});
+    profilesSelectSpy({ id: 'user-1', role: 'student', full_name: 'Alumno', plan: 'vip' });
+
+    expect((await getCurrentUser())?.mustChangePassword).toBe(false);
+  });
+
+  it('tras cambiarla trae una sesión nueva (la vieja todavía tiene la marca)', async () => {
+    (supabase.auth.updateUser as any).mockResolvedValue({ error: null });
+    (supabase.auth.refreshSession as any).mockResolvedValue({ data: {}, error: null });
+    sessionWith({});
+    profilesSelectSpy({ id: 'user-1', role: 'student', full_name: 'Alumno', plan: 'vip' });
+
+    const user = await completeRequiredPasswordChange('MiClaveNueva2026');
+
+    expect(supabase.auth.updateUser).toHaveBeenCalledWith({ password: 'MiClaveNueva2026' });
+    expect(supabase.auth.refreshSession).toHaveBeenCalled();
+    expect(user?.mustChangePassword).toBe(false);
+  });
+
+  it('repetir la contraseña temporal se explica en español', async () => {
+    (supabase.auth.updateUser as any).mockResolvedValue({
+      error: { code: 'same_password', message: 'New password should be different from the old password.' },
+    });
+
+    await expect(updatePassword('igual')).rejects.toMatchObject({
+      message: 'La nueva contraseña debe ser distinta a la anterior.',
+    });
+  });
+});
+
+describe('verifyEmailLink (links a prueba del escáner de Outlook)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('gasta el token recién cuando se llama', async () => {
+    (supabase.auth.verifyOtp as any).mockResolvedValue({ error: null });
+
+    await verifyEmailLink('hash-123', 'recovery');
+
+    expect(supabase.auth.verifyOtp).toHaveBeenCalledWith({ token_hash: 'hash-123', type: 'recovery' });
+  });
+
+  it('un token vencido o usado da un error claro', async () => {
+    (supabase.auth.verifyOtp as any).mockResolvedValue({ error: { message: 'Token has expired or is invalid' } });
+
+    await expect(verifyEmailLink('viejo', 'email')).rejects.toBeInstanceOf(ApiError);
+    await expect(verifyEmailLink('viejo', 'email')).rejects.toMatchObject({
+      message: 'Este enlace expiró o ya fue utilizado.',
+    });
   });
 });

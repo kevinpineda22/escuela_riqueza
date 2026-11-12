@@ -1,19 +1,23 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { motion } from "motion/react";
-import { ArrowRight, CheckCircle2, AlertCircle, Loader2, Home, LogIn } from "lucide-react";
+import { ArrowRight, CheckCircle2, AlertCircle, Loader2, Home, LogIn, MailCheck } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { verifyEmailLink } from "@/lib/api/auth";
 import { usePlatformSettings } from "@/hooks/usePlatformSettings";
 import BrandLogo from "@/components/layout/BrandLogo";
 
 const LOGO_FALLBACK =
   "https://imagedelivery.net/HGkLNfdVjFNAti8ZHHgxtQ/18dc9190-6625-4b89-8f1e-3f221e96b500/public";
 
-type Status = "checking" | "success" | "error";
+// "confirm": llegó un link con token_hash (plantilla nueva) y espera el toque
+// del alumno. Ver verifyEmailLink: el escáner de Outlook no debe gastarlo.
+type Status = "confirm" | "checking" | "success" | "error";
 
 const EmailConfirmed = () => {
   const [searchParams] = useSearchParams();
-  const [status, setStatus] = useState<Status>("checking");
+  const tokenHash = searchParams.get("token_hash");
+  const [status, setStatus] = useState<Status>(() => (tokenHash ? "confirm" : "checking"));
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [hasSession, setHasSession] = useState(false);
   const { data: settings } = usePlatformSettings();
@@ -22,6 +26,9 @@ const EmailConfirmed = () => {
 
   useEffect(() => {
     let mounted = true;
+
+    // Link nuevo: lo resuelve el botón, no la carga de la página.
+    if (tokenHash) return;
 
     const checkSession = async () => {
       const { data, error } = await supabase.auth.getSession();
@@ -57,7 +64,20 @@ const EmailConfirmed = () => {
     return () => {
       mounted = false;
     };
-  }, [searchParams]);
+  }, [searchParams, tokenHash]);
+
+  const confirmEmail = async () => {
+    if (!tokenHash) return;
+    setStatus("checking");
+    try {
+      await verifyEmailLink(tokenHash, "email");
+      setHasSession(true);
+      setStatus("success");
+    } catch {
+      setErrorMessage("Este enlace expiró o ya fue utilizado. Inicia sesión: si tu correo ya quedó confirmado, entrarás normal.");
+      setStatus("error");
+    }
+  };
 
   return (
     <div className="min-h-[100dvh] w-full bg-[#050505] light:bg-surface-page flex flex-col items-center justify-center relative overflow-hidden font-sans px-5 sm:px-6 py-12 selection:bg-brand/30">
@@ -90,6 +110,31 @@ const EmailConfirmed = () => {
             className="h-14 sm:h-16 w-auto object-contain drop-shadow-[0_0_22px_rgba(204,164,59,0.4)]"
           />
         </Link>
+
+        {status === "confirm" && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex flex-col items-center gap-5"
+          >
+            <div className="relative w-16 h-16 rounded-full bg-gradient-to-br from-brand/20 to-amber-500/10 border border-brand/30 flex items-center justify-center">
+              <MailCheck className="text-accent" size={28} strokeWidth={1.8} />
+            </div>
+            <h1 className="text-xl sm:text-2xl font-extrabold text-foreground-strong tracking-tight">
+              Confirma tu correo
+            </h1>
+            <p className="text-sm text-foreground-muted leading-relaxed max-w-sm">
+              Un último paso para activar tu cuenta en {platformName}.
+            </p>
+            <button
+              type="button"
+              onClick={confirmEmail}
+              className="inline-flex items-center gap-2 px-7 py-3.5 rounded-2xl bg-brand hover:bg-brand-hover text-on-brand font-bold transition-all shadow-[0_0_20px_rgba(204,164,59,0.3)]"
+            >
+              Confirmar mi correo <ArrowRight size={18} />
+            </button>
+          </motion.div>
+        )}
 
         {status === "checking" && (
           <motion.div
